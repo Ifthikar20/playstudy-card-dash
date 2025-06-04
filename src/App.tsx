@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
 import QuizPage from "./pages/QuizPage";
+import SpeedRunPage from "./pages/SpeedRunPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,6 +22,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/folders" element={<StudyFolders />} />
           <Route path="/quiz/:topic" element={<QuizPage />} />
+          <Route path="/speedrun" element={<SpeedRunPage />} />
+          <Route path="/speedrun/:topic" element={<SpeedRunPage />} />
           <Route path="/achievements" element={<Index />} />
           <Route path="/analytics" element={<Index />} />
           <Route path="/timer" element={<Index />} />

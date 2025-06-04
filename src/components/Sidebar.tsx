@@ -10,13 +10,15 @@ import {
   Menu,
   X,
   LogIn,
-  Share2
+  Share2,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BookOpen },
   { name: "Study Folders", href: "/folders", icon: FolderPlus },
+  { name: "Speed Run", href: "/speedrun", icon: Zap },
   { name: "Achievements", href: "/achievements", icon: Trophy },
   { name: "Profile", href: "/profile", icon: User },
   { name: "Settings", href: "/settings", icon: Settings },
