@@ -29,7 +29,7 @@ export function Sidebar() {
 
   return (
     <div className={cn(
-      "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col",
+      "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col h-full",
       isCollapsed ? "w-16" : "w-64"
     )}>
       <div className="p-4 border-b border-gray-200">
@@ -66,8 +66,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom section with login and share */}
-      <div className="p-4 border-t border-gray-200 space-y-2">
+      {/* Bottom section with login and share - Fixed position */}
+      <div className="mt-auto p-4 border-t border-gray-200 space-y-2">
         <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
           <LogIn size={20} className="flex-shrink-0" />
           {!isCollapsed && <span className="ml-3">Login</span>}
@@ -75,7 +75,7 @@ export function Sidebar() {
         
         <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors">
           <Share2 size={20} className="flex-shrink-0" />
-          {!isCollapsed && <span className="ml-3">Share for Credits</span>}
+          {!isCollapsed && <span className="ml-3">Share for Free Credits</span>}
         </button>
       </div>
     </div>

@@ -1,9 +1,8 @@
-
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { AccuracyMeter } from "@/components/AccuracyMeter";
-import { Upload, FileText, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight } from "lucide-react";
 
 const sampleCards = [
   {
@@ -25,7 +24,7 @@ export default function SpeedRunPage() {
   const [studyMaterial, setStudyMaterial] = useState("");
   const [currentCard, setCurrentCard] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [accuracy, setAccuracy] = useState(100);
+  const [accuracy, setAccuracy] = useState(85);
   const [speedRunStarted, setSpeedRunStarted] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
 
@@ -54,20 +53,29 @@ export default function SpeedRunPage() {
     }
   };
 
+  const handleDifficultyClick = (difficulty: 'hard' | 'good' | 'easy') => {
+    // Update accuracy based on difficulty
+    if (difficulty === 'easy') {
+      setAccuracy(Math.min(100, accuracy + 5));
+    } else if (difficulty === 'good') {
+      setAccuracy(Math.min(100, accuracy + 2));
+    } else {
+      setAccuracy(Math.max(0, accuracy - 3));
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
-      <div className="lg:hidden">
-        <Sidebar />
-      </div>
-      <div className="hidden lg:block">
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <div className="flex-shrink-0">
         <Sidebar />
       </div>
       
       <div className="flex-1 flex flex-col lg:flex-row">
         {/* Left Panel - Study Material Upload */}
-        <div className={`${isMinimized ? 'w-full lg:w-12' : 'w-full lg:w-1/3'} bg-white border-b lg:border-r lg:border-b-0 border-gray-200 transition-all duration-300`}>
+        <div className={`${isMinimized ? 'w-0 lg:w-12' : 'w-full lg:w-1/3'} bg-white border-b lg:border-r lg:border-b-0 border-gray-200 transition-all duration-300 overflow-hidden`}>
           {isMinimized ? (
-            <div className="p-3">
+            <div className="hidden lg:block p-3">
               <button
                 onClick={() => setIsMinimized(false)}
                 className="w-full p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -83,14 +91,13 @@ export default function SpeedRunPage() {
                 </h2>
                 <button
                   onClick={() => setIsMinimized(true)}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="hidden lg:block p-2 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <ChevronLeft size={20} className="text-gray-600" />
                 </button>
               </div>
               
               <div className="space-y-4">
-                {/* File Upload */}
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 lg:p-6 text-center hover:border-blue-400 transition-colors">
                   <input
                     type="file"
@@ -106,7 +113,6 @@ export default function SpeedRunPage() {
                   </label>
                 </div>
 
-                {/* Text Area */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Or paste your content here:
@@ -133,7 +139,7 @@ export default function SpeedRunPage() {
         </div>
 
         {/* Center Panel - Flip Cards */}
-        <div className="flex-1 p-4 lg:p-6 flex flex-col">
+        <div className="flex-1 p-4 lg:p-6 flex flex-col relative">
           {!speedRunStarted ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
@@ -147,23 +153,23 @@ export default function SpeedRunPage() {
               </div>
             </div>
           ) : (
-            <div className="max-w-2xl mx-auto h-full flex flex-col justify-center">
+            <div className="max-w-4xl mx-auto h-full flex flex-col justify-center">
               <div className="mb-4 lg:mb-6">
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-xs lg:text-sm text-gray-500">
                     Card {currentCard + 1} of {sampleCards.length}
                   </span>
-                  <div className="w-20 lg:w-32 bg-gray-200 rounded-full h-1.5 lg:h-2">
+                  <div className="w-32 lg:w-48 bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-blue-600 h-1.5 lg:h-2 rounded-full transition-all duration-300"
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${((currentCard + 1) / sampleCards.length) * 100}%` }}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Flip Card */}
-              <div className="relative h-48 lg:h-80 mb-6 lg:mb-8">
+              {/* Bigger Flip Card */}
+              <div className="relative h-64 lg:h-96 mb-6 lg:mb-8">
                 <div 
                   className="absolute inset-0 w-full h-full transition-transform duration-500 cursor-pointer"
                   style={{
@@ -173,52 +179,61 @@ export default function SpeedRunPage() {
                   onClick={() => setIsFlipped(!isFlipped)}
                 >
                   {/* Front of card */}
-                  <div className="absolute inset-0 w-full h-full bg-white rounded-xl border border-gray-200 p-4 lg:p-8 flex items-center justify-center"
+                  <div className="absolute inset-0 w-full h-full bg-white rounded-xl border border-gray-200 p-6 lg:p-12 flex items-center justify-center shadow-lg"
                        style={{ backfaceVisibility: 'hidden' }}>
                     <div className="text-center">
-                      <h3 className="text-base lg:text-xl font-semibold text-gray-900 mb-2 lg:mb-4">
+                      <h3 className="text-lg lg:text-2xl font-semibold text-gray-900 mb-4">
                         {sampleCards[currentCard]?.front}
                       </h3>
-                      <p className="text-xs lg:text-sm text-gray-500">Click to reveal answer</p>
+                      <p className="text-sm lg:text-base text-gray-500">Click to reveal answer</p>
                     </div>
                   </div>
                   
                   {/* Back of card */}
-                  <div className="absolute inset-0 w-full h-full bg-blue-50 rounded-xl border border-blue-200 p-4 lg:p-8 flex items-center justify-center"
+                  <div className="absolute inset-0 w-full h-full bg-blue-50 rounded-xl border border-blue-200 p-6 lg:p-12 flex items-center justify-center shadow-lg"
                        style={{ 
                          backfaceVisibility: 'hidden',
                          transform: 'rotateY(180deg)'
                        }}>
                     <div className="text-center">
-                      <h3 className="text-sm lg:text-lg font-medium text-blue-900 mb-2 lg:mb-4">
+                      <h3 className="text-base lg:text-xl font-medium text-blue-900 mb-4">
                         {sampleCards[currentCard]?.back}
                       </h3>
-                      <p className="text-xs lg:text-sm text-blue-600">Click to go back</p>
+                      <p className="text-sm lg:text-base text-blue-600">Click to go back</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Navigation */}
-              <div className="flex justify-between items-center">
+              {/* Navigation with bigger arrow buttons */}
+              <div className="flex justify-between items-center mb-4">
                 <button
                   onClick={prevCard}
                   disabled={currentCard === 0}
-                  className="flex items-center px-2 lg:px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm lg:text-base"
+                  className="flex items-center px-4 lg:px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronLeft size={16} className="mr-1 lg:mr-2 lg:w-5 lg:h-5" />
+                  <ArrowLeft size={20} className="mr-2" />
                   <span className="hidden sm:inline">Previous</span>
                   <span className="sm:hidden">Prev</span>
                 </button>
                 
-                <div className="flex space-x-1 lg:space-x-2">
-                  <button className="px-2 lg:px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-xs lg:text-sm">
+                <div className="flex space-x-2 lg:space-x-3">
+                  <button 
+                    onClick={() => handleDifficultyClick('hard')}
+                    className="px-3 lg:px-6 py-2 lg:py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm lg:text-base font-medium"
+                  >
                     Hard
                   </button>
-                  <button className="px-2 lg:px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-xs lg:text-sm">
+                  <button 
+                    onClick={() => handleDifficultyClick('good')}
+                    className="px-3 lg:px-6 py-2 lg:py-3 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm lg:text-base font-medium"
+                  >
                     Good
                   </button>
-                  <button className="px-2 lg:px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-xs lg:text-sm">
+                  <button 
+                    onClick={() => handleDifficultyClick('easy')}
+                    className="px-3 lg:px-6 py-2 lg:py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm lg:text-base font-medium"
+                  >
                     Easy
                   </button>
                 </div>
@@ -226,28 +241,39 @@ export default function SpeedRunPage() {
                 <button
                   onClick={nextCard}
                   disabled={currentCard === sampleCards.length - 1}
-                  className="flex items-center px-2 lg:px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm lg:text-base"
+                  className="flex items-center px-4 lg:px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <span className="hidden sm:inline">Next</span>
                   <span className="sm:hidden">Next</span>
-                  <ChevronRight size={16} className="ml-1 lg:ml-2 lg:w-5 lg:h-5" />
+                  <ArrowRight size={20} className="ml-2" />
                 </button>
               </div>
+
+              {/* Navigation hint */}
+              <div className="text-center">
+                <p className="text-xs text-gray-400">
+                  Use arrow keys to navigate between cards
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Accuracy Meter positioned on the right center - Better responsive positioning */}
+          {speedRunStarted && (
+            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 hidden lg:block">
+              <AccuracyMeter accuracy={accuracy} />
             </div>
           )}
         </div>
 
-        {/* Right Panel - Accuracy Meter (Hidden on mobile) */}
-        <div className="hidden lg:block w-24 p-4">
-          <AccuracyMeter accuracy={accuracy} />
-        </div>
-
         {/* Mobile Accuracy Meter (Bottom on mobile) */}
-        <div className="lg:hidden p-4">
-          <div className="flex justify-center">
-            <AccuracyMeter accuracy={accuracy} />
+        {speedRunStarted && (
+          <div className="lg:hidden p-4 border-t border-gray-200">
+            <div className="flex justify-center">
+              <AccuracyMeter accuracy={accuracy} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
