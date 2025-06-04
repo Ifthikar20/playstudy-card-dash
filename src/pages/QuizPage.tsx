@@ -177,29 +177,6 @@ export default function QuizPage() {
         {/* Right Panel - Accuracy Meter */}
         <div className="w-80 p-6">
           <AccuracyMeter accuracy={accuracy} />
-          
-          {/* Quiz Statistics */}
-          {quizStarted && (
-            <div className="mt-6 bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Quiz Stats</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Questions Answered:</span>
-                  <span className="font-medium">{answers.length}/{sampleQuestions.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Correct Answers:</span>
-                  <span className="font-medium text-green-600">
-                    {answers.filter((answer, index) => answer === sampleQuestions[index]?.correct).length}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Current Streak:</span>
-                  <span className="font-medium">0</span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -8,7 +8,9 @@ import {
   Settings, 
   User,
   Menu,
-  X
+  X,
+  LogIn,
+  Share2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +63,19 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* Bottom section with login and share */}
+      <div className="p-4 border-t border-gray-200 space-y-2">
+        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+          <LogIn size={20} className="flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Login</span>}
+        </button>
+        
+        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors">
+          <Share2 size={20} className="flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Share for Credits</span>}
+        </button>
+      </div>
     </div>
   );
 }

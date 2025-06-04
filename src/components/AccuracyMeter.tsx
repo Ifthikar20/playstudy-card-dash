@@ -18,84 +18,63 @@ export function AccuracyMeter({ accuracy }: AccuracyMeterProps) {
         Accuracy Meter
       </h3>
       
-      <div className="relative w-48 h-24 mx-auto">
-        {/* Speedometer background */}
-        <div className="absolute inset-0">
-          <svg viewBox="0 0 200 100" className="w-full h-full">
-            {/* Background arc */}
-            <path
-              d="M 20 80 A 80 80 0 0 1 180 80"
-              fill="none"
-              stroke="#E5E7EB"
-              strokeWidth="8"
-              strokeLinecap="round"
-            />
-            
-            {/* Colored segments */}
-            <path
-              d="M 20 80 A 80 80 0 0 0 60 25"
-              fill="none"
-              stroke="#EF4444"
-              strokeWidth="8"
-              strokeLinecap="round"
-            />
-            <path
-              d="M 60 25 A 80 80 0 0 0 100 20"
-              fill="none"
-              stroke="#F97316"
-              strokeWidth="8"
-              strokeLinecap="round"
-            />
-            <path
-              d="M 100 20 A 80 80 0 0 0 140 25"
-              fill="none"
-              stroke="#F59E0B"
-              strokeWidth="8"
-              strokeLinecap="round"
-            />
-            <path
-              d="M 140 25 A 80 80 0 0 0 180 80"
-              fill="none"
-              stroke="#10B981"
-              strokeWidth="8"
-              strokeLinecap="round"
-            />
-            
-            {/* Center circle */}
-            <circle cx="100" cy="80" r="8" fill="#374151" />
+      <div className="relative w-32 h-64 mx-auto bg-black rounded-lg p-4">
+        {/* Digital-style background */}
+        <div className="absolute inset-2 bg-gray-900 rounded border border-gray-600">
+          
+          {/* Vertical scale lines */}
+          <div className="absolute right-2 top-4 bottom-12 w-8">
+            {[100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0].map((value, index) => (
+              <div key={value} className="absolute right-0 flex items-center" style={{ top: `${index * 9}%` }}>
+                <div className={`w-3 h-0.5 ${value >= 80 ? 'bg-green-400' : value >= 60 ? 'bg-yellow-400' : value >= 40 ? 'bg-orange-400' : 'bg-red-400'}`} />
+                <span className="text-xs text-green-400 ml-1 font-mono">{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Main display area */}
+          <div className="absolute left-2 top-4 bottom-12 right-12 border border-gray-600 bg-gray-800">
+            {/* Needle track */}
+            <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-700" />
             
             {/* Needle */}
-            <line
-              x1="100"
-              y1="80"
-              x2="100"
-              y2="30"
-              stroke={getColor(accuracy)}
-              strokeWidth="3"
-              strokeLinecap="round"
+            <div 
+              className="absolute left-1/2 w-1 bg-red-500 transition-all duration-500 ease-out origin-bottom"
               style={{
-                transformOrigin: "100px 80px",
-                transform: `rotate(${rotation}deg)`,
-                transition: "transform 0.5s ease-out"
+                height: `${accuracy}%`,
+                bottom: 0,
+                transform: 'translateX(-50%)',
+                boxShadow: '0 0 4px rgba(239, 68, 68, 0.8)'
               }}
             />
-          </svg>
-        </div>
-        
-        {/* Percentage display */}
-        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2">
-          <div className="text-2xl font-bold" style={{ color: getColor(accuracy) }}>
-            {accuracy}%
+            
+            {/* Accuracy zones background */}
+            <div className="absolute inset-0">
+              <div className="absolute bottom-0 left-0 right-0 bg-red-900 opacity-30" style={{ height: '40%' }} />
+              <div className="absolute left-0 right-0 bg-orange-900 opacity-30" style={{ bottom: '40%', height: '20%' }} />
+              <div className="absolute left-0 right-0 bg-yellow-900 opacity-30" style={{ bottom: '60%', height: '20%' }} />
+              <div className="absolute left-0 right-0 bg-green-900 opacity-30" style={{ bottom: '80%', height: '20%' }} />
+            </div>
+          </div>
+
+          {/* Digital readout */}
+          <div className="absolute bottom-2 left-2 right-2 bg-black border border-gray-600 rounded px-2 py-1">
+            <div className="text-center">
+              <div className="text-2xl font-mono font-bold" style={{ color: getColor(accuracy) }}>
+                {accuracy.toString().padStart(3, '0')}
+              </div>
+              <div className="text-xs text-green-400 font-mono">ACCURACY</div>
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Labels */}
-      <div className="flex justify-between text-xs text-gray-500 mt-2">
+      {/* Status labels */}
+      <div className="flex justify-between text-xs text-gray-500 mt-4">
         <span>Poor</span>
         <span>Good</span>
         <span>Great</span>
-        <span>Excellent</span>
+        <span>Perfect</span>
       </div>
     </div>
   );
