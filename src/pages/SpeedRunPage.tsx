@@ -1,30 +1,39 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { AccuracyMeter } from "@/components/AccuracyMeter";
-import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight } from "lucide-react";
+import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 
-const sampleCards = [
+interface Question {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+}
+
+const sampleQuestions: Question[] = [
   {
-    front: "What is the capital of France?",
-    back: "Paris - The capital and largest city of France, located in the north-central part of the country."
+    question: "What is the capital of France?",
+    options: ["London", "Berlin", "Paris", "Madrid"],
+    correctAnswer: 2
   },
   {
-    front: "What is 2 + 2?",
-    back: "4 - This is a basic addition problem in arithmetic."
+    question: "What is 2 + 2?",
+    options: ["3", "4", "5", "6"],
+    correctAnswer: 1
   },
   {
-    front: "Who wrote Romeo and Juliet?",
-    back: "William Shakespeare - An English playwright and poet from the 16th century."
+    question: "Who wrote Romeo and Juliet?",
+    options: ["Charles Dickens", "William Shakespeare", "Jane Austen", "Mark Twain"],
+    correctAnswer: 1
   }
 ];
 
 export default function SpeedRunPage() {
   const { topic } = useParams();
   const [studyMaterial, setStudyMaterial] = useState("");
-  const [currentCard, setCurrentCard] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [accuracy, setAccuracy] = useState(85);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [hasAnswered, setHasAnswered] = useState(false);
+  const [correctCount, setCorrectCount] = useState(0);
   const [speedRunStarted, setSpeedRunStarted] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
 
@@ -39,34 +48,52 @@ export default function SpeedRunPage() {
     }
   };
 
-  const nextCard = () => {
-    if (currentCard < sampleCards.length - 1) {
-      setCurrentCard(currentCard + 1);
-      setIsFlipped(false);
+  const handleAnswerSelect = (index: number) => {
+    if (hasAnswered) return;
+    setSelectedAnswer(index);
+    setHasAnswered(true);
+    if (index === sampleQuestions[currentQuestion].correctAnswer) {
+      setCorrectCount(correctCount + 1);
     }
   };
 
-  const prevCard = () => {
-    if (currentCard > 0) {
-      setCurrentCard(currentCard - 1);
-      setIsFlipped(false);
+  const nextQuestion = () => {
+    if (currentQuestion < sampleQuestions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+      setSelectedAnswer(null);
+      setHasAnswered(false);
     }
   };
 
-  const handleDifficultyClick = (difficulty: 'hard' | 'good' | 'easy') => {
-    // Update accuracy based on difficulty
-    if (difficulty === 'easy') {
-      setAccuracy(Math.min(100, accuracy + 5));
-    } else if (difficulty === 'good') {
-      setAccuracy(Math.min(100, accuracy + 2));
-    } else {
-      setAccuracy(Math.max(0, accuracy - 3));
+  const prevQuestion = () => {
+    if (currentQuestion > 0) {
+      setCurrentQuestion(currentQuestion - 1);
+      setSelectedAnswer(null);
+      setHasAnswered(false);
     }
+  };
+
+  const getOptionStyle = (index: number) => {
+    if (!hasAnswered) {
+      return selectedAnswer === index
+        ? "border-primary bg-primary/10"
+        : "border-border hover:border-primary/50 hover:bg-accent/50";
+    }
+    
+    const isCorrect = index === sampleQuestions[currentQuestion].correctAnswer;
+    const isSelected = index === selectedAnswer;
+    
+    if (isCorrect) {
+      return "border-green-500 bg-green-100 dark:bg-green-900/30";
+    }
+    if (isSelected && !isCorrect) {
+      return "border-red-500 bg-red-100 dark:bg-red-900/30";
+    }
+    return "border-border opacity-50";
   };
 
   return (
     <div className="min-h-screen bg-background flex w-full">
-      {/* Sidebar */}
       <Sidebar />
       
       <div className="flex-1 flex flex-col lg:flex-row overflow-auto">
@@ -136,7 +163,7 @@ export default function SpeedRunPage() {
           )}
         </div>
 
-        {/* Center Panel - Flip Cards */}
+        {/* Center Panel - MCQ Questions */}
         <div className="flex-1 p-4 lg:p-6 flex flex-col relative">
           {!speedRunStarted ? (
             <div className="flex items-center justify-center h-full">
@@ -146,132 +173,92 @@ export default function SpeedRunPage() {
                   Upload Study Material to Start Speed Run
                 </h3>
                 <p className="text-sm lg:text-base text-muted-foreground">
-                  Add your study content and we'll generate flip cards for memory training
+                  Add your study content and we'll generate MCQ questions for you
                 </p>
               </div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto h-full flex flex-col justify-center">
-              <div className="mb-4 lg:mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs lg:text-sm text-muted-foreground">
-                    Card {currentCard + 1} of {sampleCards.length}
+            <div className="max-w-2xl mx-auto w-full h-full flex flex-col justify-center">
+              {/* Progress */}
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-muted-foreground">
+                    Question {currentQuestion + 1} of {sampleQuestions.length}
                   </span>
-                  <div className="w-32 lg:w-48 bg-muted rounded-full h-2">
-                    <div
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${((currentCard + 1) / sampleCards.length) * 100}%` }}
-                    />
-                  </div>
+                  <span className="text-sm font-medium text-primary">
+                    Score: {correctCount}/{currentQuestion + (hasAnswered ? 1 : 0)}
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${((currentQuestion + 1) / sampleQuestions.length) * 100}%` }}
+                  />
                 </div>
               </div>
 
-              {/* Bigger Flip Card */}
-              <div className="relative h-64 lg:h-96 mb-6 lg:mb-8">
-                <div 
-                  className="absolute inset-0 w-full h-full transition-transform duration-500 cursor-pointer"
-                  style={{
-                    transformStyle: 'preserve-3d',
-                    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
-                  }}
-                  onClick={() => setIsFlipped(!isFlipped)}
-                >
-                  {/* Front of card */}
-                  <div className="absolute inset-0 w-full h-full bg-card rounded-xl border border-border p-6 lg:p-12 flex items-center justify-center shadow-lg"
-                       style={{ backfaceVisibility: 'hidden' }}>
-                    <div className="text-center">
-                      <h3 className="text-lg lg:text-2xl font-semibold text-foreground mb-4">
-                        {sampleCards[currentCard]?.front}
-                      </h3>
-                      <p className="text-sm lg:text-base text-muted-foreground">Click to reveal answer</p>
-                    </div>
-                  </div>
-                  
-                  {/* Back of card */}
-                  <div className="absolute inset-0 w-full h-full bg-primary/10 rounded-xl border border-primary/20 p-6 lg:p-12 flex items-center justify-center shadow-lg"
-                       style={{ 
-                         backfaceVisibility: 'hidden',
-                         transform: 'rotateY(180deg)'
-                       }}>
-                    <div className="text-center">
-                      <h3 className="text-base lg:text-xl font-medium text-foreground mb-4">
-                        {sampleCards[currentCard]?.back}
-                      </h3>
-                      <p className="text-sm lg:text-base text-primary">Click to go back</p>
-                    </div>
-                  </div>
+              {/* Question Card */}
+              <div className="bg-card rounded-xl border border-border p-6 lg:p-8 mb-6 shadow-sm">
+                <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-6">
+                  {sampleQuestions[currentQuestion]?.question}
+                </h3>
+
+                {/* Options */}
+                <div className="space-y-3">
+                  {sampleQuestions[currentQuestion]?.options.map((option, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleAnswerSelect(index)}
+                      disabled={hasAnswered}
+                      className={`w-full text-left p-4 rounded-lg border-2 transition-all flex items-center justify-between ${getOptionStyle(index)}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                        <span className="text-foreground">{option}</span>
+                      </div>
+                      {hasAnswered && index === sampleQuestions[currentQuestion].correctAnswer && (
+                        <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
+                      )}
+                      {hasAnswered && index === selectedAnswer && index !== sampleQuestions[currentQuestion].correctAnswer && (
+                        <XCircle className="text-red-600 dark:text-red-400" size={20} />
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Navigation with bigger arrow buttons */}
-              <div className="flex justify-between items-center mb-4">
+              {/* Navigation */}
+              <div className="flex justify-between items-center">
                 <button
-                  onClick={prevCard}
-                  disabled={currentCard === 0}
+                  onClick={prevQuestion}
+                  disabled={currentQuestion === 0}
                   className="flex items-center px-4 lg:px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ArrowLeft size={20} className="mr-2" />
-                  <span className="hidden sm:inline">Previous</span>
-                  <span className="sm:hidden">Prev</span>
+                  Previous
                 </button>
-                
-                <div className="flex space-x-2 lg:space-x-3">
-                  <button 
-                    onClick={() => handleDifficultyClick('hard')}
-                    className="px-3 lg:px-6 py-2 lg:py-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors text-sm lg:text-base font-medium"
-                  >
-                    Hard
-                  </button>
-                  <button 
-                    onClick={() => handleDifficultyClick('good')}
-                    className="px-3 lg:px-6 py-2 lg:py-3 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-lg hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors text-sm lg:text-base font-medium"
-                  >
-                    Good
-                  </button>
-                  <button 
-                    onClick={() => handleDifficultyClick('easy')}
-                    className="px-3 lg:px-6 py-2 lg:py-3 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors text-sm lg:text-base font-medium"
-                  >
-                    Easy
-                  </button>
-                </div>
 
                 <button
-                  onClick={nextCard}
-                  disabled={currentCard === sampleCards.length - 1}
-                  className="flex items-center px-4 lg:px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  onClick={nextQuestion}
+                  disabled={currentQuestion === sampleQuestions.length - 1 || !hasAnswered}
+                  className="flex items-center px-4 lg:px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  <span className="hidden sm:inline">Next</span>
-                  <span className="sm:hidden">Next</span>
+                  Next
                   <ArrowRight size={20} className="ml-2" />
                 </button>
               </div>
 
               {/* Navigation hint */}
-              <div className="text-center">
+              <div className="text-center mt-4">
                 <p className="text-xs text-muted-foreground">
-                  Use arrow keys to navigate between cards
+                  Select an answer to continue
                 </p>
               </div>
             </div>
           )}
-
-          {/* Accuracy Meter positioned on the right center - Better responsive positioning */}
-          {speedRunStarted && (
-            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 hidden lg:block">
-              <AccuracyMeter accuracy={accuracy} />
-            </div>
-          )}
         </div>
-
-        {/* Mobile Accuracy Meter (Bottom on mobile) */}
-        {speedRunStarted && (
-          <div className="lg:hidden p-4 border-t border-border">
-            <div className="flex justify-center">
-              <AccuracyMeter accuracy={accuracy} />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
