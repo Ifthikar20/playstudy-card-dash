@@ -1,30 +1,34 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { FolderPlus, FileText, Upload, Trash2 } from "lucide-react";
+import { FolderPlus, FileText, Upload, Trash2, X, Eye } from "lucide-react";
 
 interface StudyFile {
   id: number;
   name: string;
   type: string;
+  content: string;
   uploadedAt: Date;
 }
 
 export default function StudyFolders() {
-  const navigate = useNavigate();
   const [files, setFiles] = useState<StudyFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<StudyFile | null>(null);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = e.target.files;
     if (uploadedFiles) {
-      const newFiles: StudyFile[] = Array.from(uploadedFiles).map((file) => ({
-        id: Date.now() + Math.random(),
-        name: file.name,
-        type: file.type || 'document',
-        uploadedAt: new Date()
-      }));
-      setFiles([...files, ...newFiles]);
+      for (const file of Array.from(uploadedFiles)) {
+        const content = await file.text();
+        const newFile: StudyFile = {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          type: file.type || 'document',
+          content,
+          uploadedAt: new Date()
+        };
+        setFiles(prev => [...prev, newFile]);
+      }
     }
   };
 
@@ -37,27 +41,28 @@ export default function StudyFolders() {
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFiles = e.dataTransfer.files;
     if (droppedFiles) {
-      const newFiles: StudyFile[] = Array.from(droppedFiles).map((file) => ({
-        id: Date.now() + Math.random(),
-        name: file.name,
-        type: file.type || 'document',
-        uploadedAt: new Date()
-      }));
-      setFiles([...files, ...newFiles]);
+      for (const file of Array.from(droppedFiles)) {
+        const content = await file.text();
+        const newFile: StudyFile = {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          type: file.type || 'document',
+          content,
+          uploadedAt: new Date()
+        };
+        setFiles(prev => [...prev, newFile]);
+      }
     }
   };
 
   const handleDeleteFile = (id: number) => {
     setFiles(files.filter(f => f.id !== id));
-  };
-
-  const handleFileClick = (fileName: string) => {
-    navigate(`/quiz/${fileName.toLowerCase().replace(/\.[^/.]+$/, "")}`);
+    if (selectedFile?.id === id) setSelectedFile(null);
   };
 
   return (
@@ -68,7 +73,7 @@ export default function StudyFolders() {
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground mb-2">My Study Materials</h1>
-            <p className="text-muted-foreground">Upload your study files to create quizzes and flashcards</p>
+            <p className="text-muted-foreground">Upload and view your study files</p>
           </div>
 
           {/* Upload area */}
@@ -106,12 +111,12 @@ export default function StudyFolders() {
               {files.map((file) => (
                 <div 
                   key={file.id}
-                  className="flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-primary/30 transition-all group"
+                  className={`flex items-center justify-between p-4 bg-card rounded-lg border transition-all group cursor-pointer ${
+                    selectedFile?.id === file.id ? 'border-primary' : 'border-border hover:border-primary/30'
+                  }`}
+                  onClick={() => setSelectedFile(file)}
                 >
-                  <div 
-                    className="flex items-center gap-3 flex-1 cursor-pointer"
-                    onClick={() => handleFileClick(file.name)}
-                  >
+                  <div className="flex items-center gap-3 flex-1">
                     <FileText className="w-8 h-8 text-primary" />
                     <div>
                       <p className="font-medium text-foreground">{file.name}</p>
@@ -120,12 +125,20 @@ export default function StudyFolders() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteFile(file.id)}
-                    className="p-2 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSelectedFile(file); }}
+                      className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}
+                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -138,6 +151,31 @@ export default function StudyFolders() {
           )}
         </div>
       </div>
+
+      {/* File Preview Modal */}
+      {selectedFile && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-foreground">{selectedFile.name}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedFile(null)}
+                className="p-2 hover:bg-accent rounded-lg transition-colors"
+              >
+                <X size={20} className="text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="whitespace-pre-wrap text-sm text-foreground font-mono bg-muted/30 p-4 rounded-lg">
+                {selectedFile.content || "Unable to display file content"}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
