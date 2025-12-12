@@ -4,30 +4,17 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, Play, Users, Star } from "lucide-react";
-
-const allGames = [
-  { id: 1, title: "Math Speed Challenge", category: "Mathematics", players: 1240, rating: 4.8, image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop", difficulty: "Medium" },
-  { id: 2, title: "Science Quiz Battle", category: "Science", players: 980, rating: 4.6, image: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400&h=300&fit=crop", difficulty: "Hard" },
-  { id: 3, title: "History Trivia Rush", category: "History", players: 756, rating: 4.5, image: "https://images.unsplash.com/photo-1461360370896-922624d12a74?w=400&h=300&fit=crop", difficulty: "Easy" },
-  { id: 4, title: "Language Master", category: "Languages", players: 1100, rating: 4.9, image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=400&h=300&fit=crop", difficulty: "Medium" },
-  { id: 5, title: "Geography Explorer", category: "Geography", players: 620, rating: 4.4, image: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&h=300&fit=crop", difficulty: "Easy" },
-  { id: 6, title: "Coding Challenge", category: "Programming", players: 890, rating: 4.7, image: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=300&fit=crop", difficulty: "Hard" },
-  { id: 7, title: "Physics Fundamentals", category: "Science", players: 540, rating: 4.3, image: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=400&h=300&fit=crop", difficulty: "Hard" },
-  { id: 8, title: "Chemistry Quiz", category: "Science", players: 430, rating: 4.2, image: "https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?w=400&h=300&fit=crop", difficulty: "Medium" },
-  { id: 9, title: "Biology Basics", category: "Science", players: 670, rating: 4.5, image: "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=400&h=300&fit=crop", difficulty: "Easy" },
-  { id: 10, title: "Art History", category: "Arts", players: 320, rating: 4.6, image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=300&fit=crop", difficulty: "Medium" },
-  { id: 11, title: "Music Theory", category: "Music", players: 280, rating: 4.4, image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=300&fit=crop", difficulty: "Medium" },
-  { id: 12, title: "Economics 101", category: "Business", players: 450, rating: 4.3, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=300&fit=crop", difficulty: "Hard" },
-];
+import { Search, Filter, Play, Heart, Star } from "lucide-react";
+import { useAppStore } from "@/store/appStore";
 
 const categories = ["All", "Mathematics", "Science", "History", "Languages", "Geography", "Programming", "Arts", "Music", "Business"];
 
 export default function BrowseGamesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const { games, likeGame } = useAppStore();
 
-  const filteredGames = allGames.filter((game) => {
+  const filteredGames = games.filter((game) => {
     const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "All" || game.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -102,10 +89,13 @@ export default function BrowseGamesPage() {
                 </div>
                 <div className="p-3 flex items-center justify-between">
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Users size={14} />
-                      {game.players.toLocaleString()}
-                    </span>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); likeGame(game.id); }}
+                      className="flex items-center gap-1 hover:text-pink-500 transition-colors"
+                    >
+                      <Heart size={14} className="hover:fill-pink-500" />
+                      {game.likes.toLocaleString()} students
+                    </button>
                     <span className="flex items-center gap-1">
                       <Star size={14} className="text-yellow-500 fill-yellow-500" />
                       {game.rating}
