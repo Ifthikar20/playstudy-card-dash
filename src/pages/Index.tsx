@@ -54,43 +54,43 @@ export default function Index() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-background flex w-full">
       <Sidebar />
       
-      <div className="flex-1 p-8">
+      <div className="flex-1 p-4 md:p-8 overflow-auto">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
               Welcome to Playstudy.ai
             </h1>
-            <p className="text-gray-600">
+            <p className="text-muted-foreground">
               Transform your study materials into engaging, competitive quizzes
             </p>
           </div>
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="text-2xl font-bold text-blue-600">12</div>
-              <div className="text-sm text-gray-600">Study Sessions</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+            <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+              <div className="text-xl md:text-2xl font-bold text-primary">12</div>
+              <div className="text-xs md:text-sm text-muted-foreground">Study Sessions</div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="text-2xl font-bold text-green-600">85%</div>
-              <div className="text-sm text-gray-600">Average Accuracy</div>
+            <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+              <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">85%</div>
+              <div className="text-xs md:text-sm text-muted-foreground">Average Accuracy</div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="text-2xl font-bold text-purple-600">247</div>
-              <div className="text-sm text-gray-600">Questions Answered</div>
+            <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+              <div className="text-xl md:text-2xl font-bold text-purple-600 dark:text-purple-400">247</div>
+              <div className="text-xs md:text-sm text-muted-foreground">Questions Answered</div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="text-2xl font-bold text-orange-600">18hrs</div>
-              <div className="text-sm text-gray-600">Total Study Time</div>
+            <div className="bg-card rounded-xl border border-border p-4 md:p-6">
+              <div className="text-xl md:text-2xl font-bold text-orange-600 dark:text-orange-400">18hrs</div>
+              <div className="text-xs md:text-sm text-muted-foreground">Total Study Time</div>
             </div>
           </div>
 
           {/* Main Dashboard Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {dashboardItems.map((item, index) => (
               <DashboardCard
                 key={index}
@@ -103,29 +103,29 @@ export default function Index() {
           </div>
 
           {/* Recent Activity */}
-          <div className="mt-8 bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
+          <div className="mt-8 bg-card rounded-xl border border-border p-4 md:p-6">
+            <h2 className="text-lg md:text-xl font-semibold text-foreground mb-4">Recent Activity</h2>
             <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div className="flex items-center justify-between py-3 border-b border-border">
                 <div>
-                  <div className="font-medium text-gray-900">Mathematics Quiz</div>
-                  <div className="text-sm text-gray-600">Completed 15 questions • 92% accuracy</div>
+                  <div className="font-medium text-foreground">Mathematics Quiz</div>
+                  <div className="text-sm text-muted-foreground">Completed 15 questions • 92% accuracy</div>
                 </div>
-                <div className="text-sm text-gray-500">2 hours ago</div>
+                <div className="text-sm text-muted-foreground">2 hours ago</div>
               </div>
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div className="flex items-center justify-between py-3 border-b border-border">
                 <div>
-                  <div className="font-medium text-gray-900">Science Study Session</div>
-                  <div className="text-sm text-gray-600">Uploaded new material • Created 20 questions</div>
+                  <div className="font-medium text-foreground">Science Study Session</div>
+                  <div className="text-sm text-muted-foreground">Uploaded new material • Created 20 questions</div>
                 </div>
-                <div className="text-sm text-gray-500">Yesterday</div>
+                <div className="text-sm text-muted-foreground">Yesterday</div>
               </div>
               <div className="flex items-center justify-between py-3">
                 <div>
-                  <div className="font-medium text-gray-900">History Quiz</div>
-                  <div className="text-sm text-gray-600">Completed 25 questions • 78% accuracy</div>
+                  <div className="font-medium text-foreground">History Quiz</div>
+                  <div className="text-sm text-muted-foreground">Completed 25 questions • 78% accuracy</div>
                 </div>
-                <div className="text-sm text-gray-500">2 days ago</div>
+                <div className="text-sm text-muted-foreground">2 days ago</div>
               </div>
             </div>
           </div>
