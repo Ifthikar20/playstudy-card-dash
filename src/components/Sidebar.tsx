@@ -20,10 +20,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { Gamepad2 } from "lucide-react";
 
-const navigation = [
+const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gamified?: boolean }> = [
   { name: "Dashboard", href: "/", icon: BookOpen },
   { name: "Study Folders", href: "/folders", icon: FolderPlus },
-  { name: "Browse Games", href: "/browse-games", icon: Gamepad2 },
+  { name: "🎮 Game Zone", href: "/browse-games", icon: Gamepad2, gamified: true },
   { name: "Full Study", href: "/full-study", icon: GraduationCap },
   { name: "Speed Run", href: "/speedrun", icon: Zap },
   { name: "Achievements", href: "/achievements", icon: Trophy },
@@ -82,12 +82,17 @@ export function Sidebar() {
                 "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 isActive
                   ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                item.gamified && "bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 hover:from-purple-500/20 hover:via-pink-500/20 hover:to-orange-500/20"
               )
             }
           >
-            <item.icon size={20} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3">{item.name}</span>}
+            <item.icon size={20} className={cn("flex-shrink-0", item.gamified && "text-purple-500")} />
+            {!isCollapsed && (
+              <span className={cn("ml-3", item.gamified && "bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 bg-clip-text text-transparent font-bold")}>
+                {item.name}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
