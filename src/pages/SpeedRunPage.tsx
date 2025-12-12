@@ -121,18 +121,31 @@ export default function SpeedRunPage() {
 
   const totalItems = speedRunMode === 'mcq' ? sampleQuestions.length : sampleCards.length;
 
-  // No session selected
+  // No session selected - show create new option
   if (!currentSession) {
     return (
       <div className="min-h-screen bg-background flex w-full">
         <Sidebar />
         <main className="flex-1 flex items-center justify-center">
-          <div className="text-center p-8">
-            <AlertCircle size={64} className="mx-auto text-muted-foreground mb-4" />
-            <h2 className="text-2xl font-bold text-foreground mb-2">No Study Session Selected</h2>
-            <p className="text-muted-foreground mb-4">
-              Select a study session from the sidebar to start Speed Run
+          <div className="text-center p-8 max-w-md">
+            <Zap size={64} className="mx-auto text-primary mb-4" />
+            <h2 className="text-2xl font-bold text-foreground mb-2">Start Speed Run</h2>
+            <p className="text-muted-foreground mb-6">
+              Create a new study session or select an existing one from the sidebar to begin Speed Run mode.
             </p>
+            <Button 
+              size="lg" 
+              onClick={() => {
+                const name = prompt("Enter a name for your new study session:");
+                if (name) {
+                  alert(`Session "${name}" would be created. Select it from the sidebar to continue.`);
+                }
+              }}
+              className="gap-2"
+            >
+              <PlusCircle size={20} />
+              Create New Study Session
+            </Button>
           </div>
         </main>
       </div>
