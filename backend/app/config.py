@@ -1,7 +1,7 @@
 """
 Application configuration settings.
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
@@ -36,14 +36,15 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+    )
+
     @property
     def allowed_origins_list(self) -> List[str]:
         """Convert comma-separated origins string to list."""
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 # Create global settings instance
