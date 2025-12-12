@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Play, CheckCircle2, Circle } from "lucide-react";
+import { BookOpen, Play, CheckCircle2, Circle, PlusCircle, AlertCircle } from "lucide-react";
 import {
   ReactFlow,
   MiniMap,
@@ -20,6 +20,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { useAppStore } from "@/store/appStore";
 
 // Modern node styles with gradients and shadows
 const nodeStyles = {
@@ -127,8 +128,55 @@ export default function FullStudyPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedQuiz, setSelectedQuiz] = useState<number | null>(null);
+  const { currentSession, createFullStudy } = useAppStore();
 
   const onConnect = useCallback(() => {}, []);
+
+  // No session selected
+  if (!currentSession) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8">
+            <AlertCircle size={64} className="mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-2xl font-bold text-foreground mb-2">No Study Session Selected</h2>
+            <p className="text-muted-foreground mb-4">
+              Select a study session from the sidebar to view Full Study content
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Session selected but no Full Study created yet
+  if (!currentSession.hasFullStudy) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8 max-w-md">
+            <BookOpen size={64} className="mx-auto text-primary mb-4" />
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              Create Full Study for "{currentSession.title}"
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              No Full Study session exists yet. Create one to generate quizzes and a learning tree for this topic.
+            </p>
+            <Button 
+              size="lg" 
+              onClick={() => createFullStudy(currentSession.id)}
+              className="gap-2"
+            >
+              <PlusCircle size={20} />
+              Create Full Study
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -143,7 +191,7 @@ export default function FullStudyPage() {
                 <div>
                   <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                     <BookOpen size={24} />
-                    Study Quizzes
+                    {currentSession.title}
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     Complete quizzes to unlock new topics
