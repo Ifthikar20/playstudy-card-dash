@@ -13,7 +13,10 @@ import {
   Clock,
   Target,
   Flame,
-  Plus
+  Plus,
+  Upload,
+  Gamepad2,
+  Rocket
 } from "lucide-react";
 
 const trendingGames = [
@@ -92,6 +95,45 @@ export default function Index() {
               <Plus size={20} />
               Create Study Session
             </Button>
+          </div>
+
+          {/* How to Use Playstudy - 3 Steps */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-foreground mb-4">
+              How to Use Playstudy
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-card rounded-xl border border-border p-6 text-center hover:shadow-lg transition-all">
+                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Upload className="text-primary" size={24} />
+                </div>
+                <div className="text-2xl font-bold text-primary mb-2">1</div>
+                <h3 className="font-semibold text-foreground mb-1">Upload Study Content</h3>
+                <p className="text-sm text-muted-foreground">
+                  Upload your notes, PDFs, or paste text to get started
+                </p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-6 text-center hover:shadow-lg transition-all">
+                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Gamepad2 className="text-primary" size={24} />
+                </div>
+                <div className="text-2xl font-bold text-primary mb-2">2</div>
+                <h3 className="font-semibold text-foreground mb-1">Choose Study Mode</h3>
+                <p className="text-sm text-muted-foreground">
+                  Pick Full Study, Speed Run, or Game Mode
+                </p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-6 text-center hover:shadow-lg transition-all">
+                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Rocket className="text-primary" size={24} />
+                </div>
+                <div className="text-2xl font-bold text-primary mb-2">3</div>
+                <h3 className="font-semibold text-foreground mb-1">Start Play Studying</h3>
+                <p className="text-sm text-muted-foreground">
+                  Learn through interactive quizzes and earn points
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Quick Stats */}
