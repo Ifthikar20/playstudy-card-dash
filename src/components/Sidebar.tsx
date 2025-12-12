@@ -62,13 +62,12 @@ export function Sidebar() {
             {isCollapsed ? <Menu size={20} className="text-foreground" /> : <X size={20} className="text-foreground" />}
           </button>
         </div>
-        {/* Points Display */}
-        <div className="mt-3 flex items-center gap-2 px-2 py-1.5 bg-primary/10 rounded-lg">
-          <Star size={16} className="text-primary fill-primary" />
-          {!isCollapsed && (
-            <span className="text-sm font-semibold text-primary">2,450 Points</span>
-          )}
-        </div>
+        {/* XP Display */}
+        {!isCollapsed && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-sm font-bold text-primary animate-[pulse_2s_ease-in-out_infinite]">2,450 XP</span>
+          </div>
+        )}
       </div>
 
       <nav className="p-4 space-y-2">
