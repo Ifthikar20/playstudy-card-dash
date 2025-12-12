@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { 
@@ -14,6 +13,7 @@ import {
   Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BookOpen },
@@ -29,24 +29,24 @@ export function Sidebar() {
 
   return (
     <div className={cn(
-      "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col h-full",
+      "bg-card border-r border-border transition-all duration-300 flex flex-col h-screen sticky top-0",
       isCollapsed ? "w-16" : "w-64"
     )}>
-      <div className="p-4 border-b border-gray-200">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
           {!isCollapsed && (
-            <h1 className="text-xl font-bold text-gray-900">Playstudy.ai</h1>
+            <h1 className="text-xl font-bold text-foreground">Playstudy.ai</h1>
           )}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-accent transition-colors"
           >
-            {isCollapsed ? <Menu size={20} /> : <X size={20} />}
+            {isCollapsed ? <Menu size={20} className="text-foreground" /> : <X size={20} className="text-foreground" />}
           </button>
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navigation.map((item) => (
           <NavLink
             key={item.name}
@@ -55,8 +55,8 @@ export function Sidebar() {
               cn(
                 "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : "text-gray-700 hover:bg-gray-100"
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )
             }
           >
@@ -66,14 +66,19 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom section with login and share - Fixed position */}
-      <div className="mt-auto p-4 border-t border-gray-200 space-y-2">
-        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+      {/* Bottom section with theme toggle, login and share */}
+      <div className="p-4 border-t border-border space-y-2">
+        <div className="flex items-center justify-between">
+          {!isCollapsed && <span className="text-sm text-muted-foreground">Theme</span>}
+          <ThemeToggle />
+        </div>
+        
+        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
           <LogIn size={20} className="flex-shrink-0" />
           {!isCollapsed && <span className="ml-3">Login</span>}
         </button>
         
-        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors">
+        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors">
           <Share2 size={20} className="flex-shrink-0" />
           {!isCollapsed && <span className="ml-3">Share for Free Credits</span>}
         </button>
