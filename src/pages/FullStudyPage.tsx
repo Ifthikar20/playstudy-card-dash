@@ -22,42 +22,46 @@ import {
 } from "@/components/ui/resizable";
 import { useAppStore } from "@/store/appStore";
 
-// Modern node styles with gradients and shadows
+// Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
   completed: {
     background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
     color: "white",
     border: "none",
-    borderRadius: "12px",
-    padding: "16px 20px",
-    boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
-    fontWeight: 600,
+    borderRadius: "8px",
+    padding: "8px 12px",
+    boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
+    fontWeight: 500,
+    fontSize: "12px",
   },
   inProgress: {
     background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
     color: "white",
     border: "none",
-    borderRadius: "12px",
-    padding: "16px 20px",
-    boxShadow: "0 4px 14px rgba(245, 158, 11, 0.4)",
-    fontWeight: 600,
+    borderRadius: "8px",
+    padding: "8px 12px",
+    boxShadow: "0 2px 8px rgba(245, 158, 11, 0.3)",
+    fontWeight: 500,
+    fontSize: "12px",
   },
   locked: {
     background: "linear-gradient(135deg, hsl(var(--muted)) 0%, hsl(var(--muted)) 100%)",
     color: "hsl(var(--muted-foreground))",
-    border: "2px dashed hsl(var(--border))",
-    borderRadius: "12px",
-    padding: "16px 20px",
+    border: "1px dashed hsl(var(--border))",
+    borderRadius: "8px",
+    padding: "8px 12px",
     fontWeight: 500,
+    fontSize: "12px",
   },
   current: {
     background: "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(260 80% 50%) 100%)",
     color: "white",
     border: "none",
-    borderRadius: "12px",
-    padding: "16px 20px",
-    boxShadow: "0 4px 20px hsla(var(--primary), 0.5)",
-    fontWeight: 600,
+    borderRadius: "8px",
+    padding: "8px 12px",
+    boxShadow: "0 2px 12px hsla(var(--primary), 0.4)",
+    fontWeight: 500,
+    fontSize: "12px",
   },
 };
 
@@ -261,9 +265,9 @@ export default function FullStudyPage() {
           {/* Right Side - Topic Tree View */}
           <ResizablePanel defaultSize={50} minSize={30}>
             <div className="h-full flex flex-col">
-              <div className="p-4 border-b border-border">
-                <h2 className="text-xl font-bold text-foreground">Learning Progress Tree</h2>
-                <p className="text-sm text-muted-foreground">
+              <div className="px-4 py-2 border-b border-border">
+                <h2 className="text-sm font-semibold text-foreground">Learning Progress Tree</h2>
+                <p className="text-xs text-muted-foreground">
                   Drag nodes to reorganize • Click to view details • Complete quizzes to unlock new paths
                 </p>
               </div>
@@ -306,23 +310,23 @@ export default function FullStudyPage() {
               </div>
 
               {/* Modern Legend */}
-              <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
-                <div className="flex flex-wrap gap-6 text-sm justify-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30"></div>
-                    <span className="text-muted-foreground font-medium">Completed</span>
+              <div className="px-4 py-2 border-t border-border bg-card/50 backdrop-blur-sm">
+                <div className="flex flex-wrap gap-4 text-xs justify-center">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-sm shadow-emerald-500/30"></div>
+                    <span className="text-muted-foreground">Completed</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 shadow-md shadow-amber-500/30"></div>
-                    <span className="text-muted-foreground font-medium">In Progress</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-amber-500 to-amber-600 shadow-sm shadow-amber-500/30"></div>
+                    <span className="text-muted-foreground">In Progress</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-lg bg-muted border-2 border-dashed border-border"></div>
-                    <span className="text-muted-foreground font-medium">Locked</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-muted border border-dashed border-border"></div>
+                    <span className="text-muted-foreground">Locked</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-primary to-purple-600 shadow-md shadow-primary/30"></div>
-                    <span className="text-muted-foreground font-medium">Current Topic</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-primary to-purple-600 shadow-sm shadow-primary/30"></div>
+                    <span className="text-muted-foreground">Current</span>
                   </div>
                 </div>
               </div>
