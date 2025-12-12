@@ -72,68 +72,68 @@ export default function BrowseGamesPage() {
             </div>
           </div>
 
-          {/* Games Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Games Grid - Netflix Style */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredGames.map((game) => (
               <Card 
                 key={game.id} 
-                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border-2 hover:border-primary/30"
+                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border hover:border-primary/30"
               >
-                {/* Image Header */}
-                <div className="relative h-40 overflow-hidden">
-                  <img 
-                    src={game.image} 
-                    alt={game.title}
-                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                  <Badge 
-                    className="absolute top-3 right-3"
-                    variant={game.difficulty === "Easy" ? "secondary" : game.difficulty === "Medium" ? "default" : "destructive"}
-                  >
-                    {game.difficulty}
-                  </Badge>
-                  <div className="absolute top-3 left-3">
-                    <Badge variant="outline" className="bg-background/80 backdrop-blur-sm">
-                      {game.category}
+                <div className="flex h-36">
+                  {/* Image Side */}
+                  <div className="relative w-44 shrink-0 overflow-hidden">
+                    <img 
+                      src={game.image} 
+                      alt={game.title}
+                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/20" />
+                    <Badge 
+                      className="absolute top-2 left-2 text-xs"
+                      variant={game.difficulty === "Easy" ? "secondary" : game.difficulty === "Medium" ? "default" : "destructive"}
+                    >
+                      {game.difficulty}
                     </Badge>
                   </div>
-                </div>
 
-                {/* Content */}
-                <div className="p-4 space-y-3">
-                  <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">
-                    {game.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {game.description}
-                  </p>
-
-                  {/* Stats Row */}
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <Users size={14} />
-                      <span className="font-medium">{game.likes.toLocaleString()}</span>
-                      <span className="text-xs">students</span>
+                  {/* Content Side */}
+                  <div className="flex-1 p-4 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {game.category}
+                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Star size={12} className="text-yellow-500 fill-yellow-500" />
+                          <span className="text-xs font-medium text-foreground">{game.rating}</span>
+                        </div>
+                      </div>
+                      <h3 className="font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                        {game.title}
+                      </h3>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {game.description}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Star size={14} className="text-yellow-500 fill-yellow-500" />
-                      <span className="font-medium text-foreground">{game.rating}</span>
+
+                    {/* Bottom Row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Users size={12} />
+                        <span className="text-xs font-medium">{game.likes.toLocaleString()} students</span>
+                      </div>
+                      <Button 
+                        size="icon"
+                        className="rounded-full h-10 w-10 shadow-lg"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Play size={16} className="ml-0.5" />
+                      </Button>
                     </div>
                   </div>
-
-                  {/* Play Button */}
-                  <Button 
-                    className="w-full gap-2 mt-2" 
-                    size="lg"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDialogOpen(true);
-                    }}
-                  >
-                    <Play size={18} />
-                    Play Now
-                  </Button>
                 </div>
               </Card>
             ))}
