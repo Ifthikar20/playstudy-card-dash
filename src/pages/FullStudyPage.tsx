@@ -194,40 +194,41 @@ export default function FullStudyPage() {
             </p>
           </div>
           
-          <div className="flex-1 p-4">
-            <div className="h-[350px] lg:h-[400px] rounded-xl border border-border overflow-hidden bg-gradient-to-br from-background via-background to-muted/30">
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                fitView
-                attributionPosition="bottom-left"
-                className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105"
-              >
-                <Controls 
-                  className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
-                />
-                <MiniMap 
-                  className="bg-card/80 backdrop-blur-sm border border-border rounded-lg shadow-lg"
-                  nodeColor={(node) => {
-                    const bg = node.style?.background as string || "";
-                    if (bg.includes("10b981") || bg.includes("059669")) return "#10b981";
-                    if (bg.includes("f59e0b") || bg.includes("d97706")) return "#f59e0b";
-                    if (bg.includes("primary")) return "hsl(var(--primary))";
-                    return "hsl(var(--muted))";
-                  }}
-                  maskColor="hsl(var(--background) / 0.8)"
-                />
-                <Background 
-                  variant={BackgroundVariant.Dots} 
-                  gap={20} 
-                  size={1.5} 
-                  color="hsl(var(--muted-foreground) / 0.3)"
-                />
-              </ReactFlow>
-            </div>
+          <div className="flex-1 min-h-[500px] lg:min-h-0 bg-gradient-to-br from-background via-background to-muted/30">
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              fitView
+              minZoom={0.5}
+              maxZoom={1.5}
+              defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
+              attributionPosition="bottom-left"
+              className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105"
+            >
+              <Controls 
+                className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
+              />
+              <MiniMap 
+                className="bg-card/80 backdrop-blur-sm border border-border rounded-lg shadow-lg"
+                nodeColor={(node) => {
+                  const bg = node.style?.background as string || "";
+                  if (bg.includes("10b981") || bg.includes("059669")) return "#10b981";
+                  if (bg.includes("f59e0b") || bg.includes("d97706")) return "#f59e0b";
+                  if (bg.includes("primary")) return "hsl(var(--primary))";
+                  return "hsl(var(--muted))";
+                }}
+                maskColor="hsl(var(--background) / 0.8)"
+              />
+              <Background 
+                variant={BackgroundVariant.Dots} 
+                gap={20} 
+                size={1.5} 
+                color="hsl(var(--muted-foreground) / 0.3)"
+              />
+            </ReactFlow>
           </div>
 
           {/* Modern Legend */}
