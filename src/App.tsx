@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
 import QuizPage from "./pages/QuizPage";
 import SpeedRunPage from "./pages/SpeedRunPage";
+import ProfilePage from "./pages/ProfilePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,7 +29,7 @@ const App = () => (
           <Route path="/analytics" element={<Index />} />
           <Route path="/timer" element={<Index />} />
           <Route path="/goals" element={<Index />} />
-          <Route path="/profile" element={<Index />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<Index />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
