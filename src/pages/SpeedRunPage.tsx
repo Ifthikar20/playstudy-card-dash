@@ -126,7 +126,7 @@ export default function SpeedRunPage() {
     return (
       <div className="min-h-screen bg-background flex w-full">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex-1 flex items-center justify-center pt-24">
           <div className="text-center p-8 max-w-md">
             <Zap size={64} className="mx-auto text-primary mb-4" />
             <h2 className="text-2xl font-bold text-foreground mb-2">Start Speed Run</h2>

@@ -137,7 +137,7 @@ export default function FullStudyPage() {
     return (
       <div className="flex min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex-1 flex items-center justify-center pt-24">
           <div className="text-center p-8 max-w-md">
             <BookOpen size={64} className="mx-auto text-primary mb-4" />
             <h2 className="text-2xl font-bold text-foreground mb-2">Start Full Study</h2>
