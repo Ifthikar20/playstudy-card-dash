@@ -26,7 +26,6 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
   { name: "🎮 Game Zone", href: "/browse-games", icon: Gamepad2, gamified: true },
   { name: "Full Study", href: "/full-study", icon: GraduationCap },
   { name: "Speed Run", href: "/speedrun", icon: Zap },
-  { name: "Achievements", href: "/achievements", icon: Trophy },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
