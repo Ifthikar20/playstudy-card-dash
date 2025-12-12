@@ -1,17 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { DashboardCard } from "@/components/DashboardCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 import { 
-  FolderPlus, 
-  BookOpen, 
-  Trophy, 
-  TrendingUp,
-  Clock,
-  Target,
   Flame,
   Plus,
   Upload,
@@ -29,47 +21,8 @@ const trendingGames = [
 ];
 
 export default function Index() {
-  const navigate = useNavigate();
   const [showCreateSession, setShowCreateSession] = useState(false);
 
-  const dashboardItems = [
-    {
-      title: "Create Study Folder",
-      description: "Start a new study session with custom materials",
-      icon: FolderPlus,
-      onClick: () => navigate("/folders")
-    },
-    {
-      title: "Full Study Mode",
-      description: "Complete learning path with progress tracking",
-      icon: BookOpen,
-      onClick: () => navigate("/full-study")
-    },
-    {
-      title: "Achievements",
-      description: "View your learning progress and badges",
-      icon: Trophy,
-      onClick: () => navigate("/achievements")
-    },
-    {
-      title: "Performance Analytics",
-      description: "Track your quiz scores and improvement",
-      icon: TrendingUp,
-      onClick: () => navigate("/analytics")
-    },
-    {
-      title: "Study Timer",
-      description: "Set focused study sessions with breaks",
-      icon: Clock,
-      onClick: () => navigate("/timer")
-    },
-    {
-      title: "Learning Goals",
-      description: "Set and track your study objectives",
-      icon: Target,
-      onClick: () => navigate("/goals")
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-background flex w-full">
@@ -182,18 +135,6 @@ export default function Index() {
             </div>
           </div>
 
-          {/* Main Dashboard Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {dashboardItems.map((item, index) => (
-              <DashboardCard
-                key={index}
-                title={item.title}
-                description={item.description}
-                icon={item.icon}
-                onClick={item.onClick}
-              />
-            ))}
-          </div>
         </div>
       </div>
 
