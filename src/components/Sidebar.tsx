@@ -26,7 +26,6 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
   { name: "🎮 Game Zone", href: "/browse-games", icon: Gamepad2, gamified: true },
   { name: "Full Study", href: "/full-study", icon: GraduationCap },
   { name: "Speed Run", href: "/speedrun", icon: Zap },
-  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 const recentStudySessions = [
@@ -121,7 +120,6 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Bottom section with profile, theme toggle and share */}
       <div className="p-4 border-t border-border space-y-2 mt-auto">
         <NavLink
           to="/profile"
@@ -136,6 +134,21 @@ export function Sidebar() {
         >
           <User size={20} className="flex-shrink-0" />
           {!isCollapsed && <span className="ml-3">Profile</span>}
+        </NavLink>
+
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )
+          }
+        >
+          <Settings size={20} className="flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Settings</span>}
         </NavLink>
 
         <div className="flex items-center justify-between">
