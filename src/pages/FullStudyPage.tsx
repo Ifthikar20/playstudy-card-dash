@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Play, CheckCircle2, Circle, ChevronRight } from "lucide-react";
+import { BookOpen, Play, CheckCircle2, Circle } from "lucide-react";
 import {
   ReactFlow,
   MiniMap,
@@ -16,58 +16,97 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+// Modern node styles with gradients and shadows
+const nodeStyles = {
+  completed: {
+    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+    color: "white",
+    border: "none",
+    borderRadius: "12px",
+    padding: "16px 20px",
+    boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+    fontWeight: 600,
+  },
+  inProgress: {
+    background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+    color: "white",
+    border: "none",
+    borderRadius: "12px",
+    padding: "16px 20px",
+    boxShadow: "0 4px 14px rgba(245, 158, 11, 0.4)",
+    fontWeight: 600,
+  },
+  locked: {
+    background: "linear-gradient(135deg, hsl(var(--muted)) 0%, hsl(var(--muted)) 100%)",
+    color: "hsl(var(--muted-foreground))",
+    border: "2px dashed hsl(var(--border))",
+    borderRadius: "12px",
+    padding: "16px 20px",
+    fontWeight: 500,
+  },
+  current: {
+    background: "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(260 80% 50%) 100%)",
+    color: "white",
+    border: "none",
+    borderRadius: "12px",
+    padding: "16px 20px",
+    boxShadow: "0 4px 20px hsla(var(--primary), 0.5)",
+    fontWeight: 600,
+  },
+};
+
 const initialNodes: Node[] = [
   {
     id: "1",
     type: "default",
     data: { label: "📚 Introduction to Subject" },
     position: { x: 250, y: 0 },
-    style: { background: "hsl(var(--primary))", color: "white", border: "none", borderRadius: "8px", padding: "12px" },
+    style: nodeStyles.current,
   },
   {
     id: "2",
     type: "default",
     data: { label: "✅ Chapter 1: Basics" },
-    position: { x: 100, y: 100 },
-    style: { background: "hsl(142 76% 36%)", color: "white", border: "none", borderRadius: "8px", padding: "12px" },
+    position: { x: 80, y: 120 },
+    style: nodeStyles.completed,
   },
   {
     id: "3",
     type: "default",
     data: { label: "✅ Chapter 2: Core Concepts" },
-    position: { x: 400, y: 100 },
-    style: { background: "hsl(142 76% 36%)", color: "white", border: "none", borderRadius: "8px", padding: "12px" },
+    position: { x: 420, y: 120 },
+    style: nodeStyles.completed,
   },
   {
     id: "4",
     type: "default",
     data: { label: "🔄 Chapter 3: Advanced Topics" },
-    position: { x: 100, y: 200 },
-    style: { background: "hsl(45 93% 47%)", color: "black", border: "none", borderRadius: "8px", padding: "12px" },
+    position: { x: 80, y: 240 },
+    style: nodeStyles.inProgress,
   },
   {
     id: "5",
     type: "default",
     data: { label: "⏳ Chapter 4: Applications" },
-    position: { x: 400, y: 200 },
-    style: { background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))", border: "2px dashed hsl(var(--border))", borderRadius: "8px", padding: "12px" },
+    position: { x: 420, y: 240 },
+    style: nodeStyles.locked,
   },
   {
     id: "6",
     type: "default",
     data: { label: "🔒 Chapter 5: Mastery" },
-    position: { x: 250, y: 300 },
-    style: { background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))", border: "2px dashed hsl(var(--border))", borderRadius: "8px", padding: "12px" },
+    position: { x: 250, y: 360 },
+    style: nodeStyles.locked,
   },
 ];
 
 const initialEdges: Edge[] = [
-  { id: "e1-2", source: "1", target: "2", animated: false, style: { stroke: "hsl(142 76% 36%)" } },
-  { id: "e1-3", source: "1", target: "3", animated: false, style: { stroke: "hsl(142 76% 36%)" } },
-  { id: "e2-4", source: "2", target: "4", animated: true, style: { stroke: "hsl(45 93% 47%)" } },
-  { id: "e3-5", source: "3", target: "5", animated: false, style: { stroke: "hsl(var(--border))" } },
-  { id: "e4-6", source: "4", target: "6", animated: false, style: { stroke: "hsl(var(--border))" } },
-  { id: "e5-6", source: "5", target: "6", animated: false, style: { stroke: "hsl(var(--border))" } },
+  { id: "e1-2", source: "1", target: "2", animated: false, style: { stroke: "#10b981", strokeWidth: 3 } },
+  { id: "e1-3", source: "1", target: "3", animated: false, style: { stroke: "#10b981", strokeWidth: 3 } },
+  { id: "e2-4", source: "2", target: "4", animated: true, style: { stroke: "#f59e0b", strokeWidth: 3 } },
+  { id: "e3-5", source: "3", target: "5", animated: false, style: { stroke: "hsl(var(--border))", strokeWidth: 2 } },
+  { id: "e4-6", source: "4", target: "6", animated: false, style: { stroke: "hsl(var(--border))", strokeWidth: 2 } },
+  { id: "e5-6", source: "5", target: "6", animated: false, style: { stroke: "hsl(var(--border))", strokeWidth: 2 } },
 ];
 
 const quizTopics = [
@@ -155,7 +194,7 @@ export default function FullStudyPage() {
             </p>
           </div>
           
-          <div className="flex-1 min-h-[400px] lg:min-h-0">
+          <div className="flex-1 min-h-[400px] lg:min-h-0 bg-gradient-to-br from-background via-background to-muted/30">
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -164,39 +203,49 @@ export default function FullStudyPage() {
               onConnect={onConnect}
               fitView
               attributionPosition="bottom-left"
+              className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105"
             >
-              <Controls />
+              <Controls 
+                className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
+              />
               <MiniMap 
+                className="bg-card/80 backdrop-blur-sm border border-border rounded-lg shadow-lg"
                 nodeColor={(node) => {
                   const bg = node.style?.background as string || "";
-                  if (bg.includes("142")) return "#22c55e";
-                  if (bg.includes("45")) return "#eab308";
-                  if (bg.includes("primary")) return "#6366f1";
-                  return "#94a3b8";
+                  if (bg.includes("10b981") || bg.includes("059669")) return "#10b981";
+                  if (bg.includes("f59e0b") || bg.includes("d97706")) return "#f59e0b";
+                  if (bg.includes("primary")) return "hsl(var(--primary))";
+                  return "hsl(var(--muted))";
                 }}
+                maskColor="hsl(var(--background) / 0.8)"
               />
-              <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+              <Background 
+                variant={BackgroundVariant.Dots} 
+                gap={20} 
+                size={1.5} 
+                color="hsl(var(--muted-foreground) / 0.3)"
+              />
             </ReactFlow>
           </div>
 
-          {/* Legend */}
-          <div className="p-4 border-t border-border">
-            <div className="flex flex-wrap gap-4 text-sm">
+          {/* Modern Legend */}
+          <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
+            <div className="flex flex-wrap gap-6 text-sm justify-center">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-green-500"></div>
-                <span className="text-muted-foreground">Completed</span>
+                <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30"></div>
+                <span className="text-muted-foreground font-medium">Completed</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-yellow-500"></div>
-                <span className="text-muted-foreground">In Progress</span>
+                <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 shadow-md shadow-amber-500/30"></div>
+                <span className="text-muted-foreground font-medium">In Progress</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-muted border-2 border-dashed border-border"></div>
-                <span className="text-muted-foreground">Locked</span>
+                <div className="w-5 h-5 rounded-lg bg-muted border-2 border-dashed border-border"></div>
+                <span className="text-muted-foreground font-medium">Locked</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-primary"></div>
-                <span className="text-muted-foreground">Current Topic</span>
+                <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-primary to-purple-600 shadow-md shadow-primary/30"></div>
+                <span className="text-muted-foreground font-medium">Current Topic</span>
               </div>
             </div>
           </div>

@@ -10,6 +10,7 @@ import QuizPage from "./pages/QuizPage";
 import SpeedRunPage from "./pages/SpeedRunPage";
 import ProfilePage from "./pages/ProfilePage";
 import FullStudyPage from "./pages/FullStudyPage";
+import BrowseGamesPage from "./pages/BrowseGamesPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/speedrun" element={<SpeedRunPage />} />
           <Route path="/speedrun/:topic" element={<SpeedRunPage />} />
           <Route path="/full-study" element={<FullStudyPage />} />
+          <Route path="/browse-games" element={<BrowseGamesPage />} />
           <Route path="/achievements" element={<Index />} />
           <Route path="/analytics" element={<Index />} />
           <Route path="/timer" element={<Index />} />
