@@ -52,8 +52,10 @@ export function Sidebar() {
         </div>
         {/* XP Display */}
         {!isCollapsed && (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm font-bold text-primary animate-[pulse_2s_ease-in-out_infinite]">2,450 XP</span>
+          <div className="mt-3">
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm font-bold text-primary animate-[pulse_2s_ease-in-out_infinite]">
+              2,450 XP
+            </span>
           </div>
         )}
       </div>
