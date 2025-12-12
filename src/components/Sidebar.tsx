@@ -18,9 +18,12 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+import { Gamepad2 } from "lucide-react";
+
 const navigation = [
   { name: "Dashboard", href: "/", icon: BookOpen },
   { name: "Study Folders", href: "/folders", icon: FolderPlus },
+  { name: "Browse Games", href: "/browse-games", icon: Gamepad2 },
   { name: "Full Study", href: "/full-study", icon: GraduationCap },
   { name: "Speed Run", href: "/speedrun", icon: Zap },
   { name: "Achievements", href: "/achievements", icon: Trophy },

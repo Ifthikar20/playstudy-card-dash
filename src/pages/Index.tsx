@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { DashboardCard } from "@/components/DashboardCard";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 import { 
   FolderPlus, 
   BookOpen, 
@@ -9,7 +12,8 @@ import {
   TrendingUp,
   Clock,
   Target,
-  Flame
+  Flame,
+  Plus
 } from "lucide-react";
 
 const trendingGames = [
@@ -23,6 +27,7 @@ const trendingGames = [
 
 export default function Index() {
   const navigate = useNavigate();
+  const [showCreateSession, setShowCreateSession] = useState(false);
 
   const dashboardItems = [
     {
@@ -70,13 +75,23 @@ export default function Index() {
       <div className="flex-1 p-4 md:p-8 overflow-auto">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Welcome to Playstudy.ai
-            </h1>
-            <p className="text-muted-foreground">
-              Transform your study materials into engaging, competitive quizzes
-            </p>
+          <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+                Welcome to Playstudy.ai
+              </h1>
+              <p className="text-muted-foreground">
+                Transform your study materials into engaging, competitive quizzes
+              </p>
+            </div>
+            <Button 
+              size="lg" 
+              className="gap-2 shadow-lg hover:shadow-xl transition-all"
+              onClick={() => setShowCreateSession(true)}
+            >
+              <Plus size={20} />
+              Create Study Session
+            </Button>
           </div>
 
           {/* Quick Stats */}
@@ -139,6 +154,11 @@ export default function Index() {
           </div>
         </div>
       </div>
+
+      <CreateStudySessionDialog 
+        open={showCreateSession} 
+        onOpenChange={setShowCreateSession} 
+      />
     </div>
   );
 }
