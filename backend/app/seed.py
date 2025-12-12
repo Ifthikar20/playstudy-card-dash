@@ -90,21 +90,25 @@ def seed_database():
             print(f"✓ Seeded {len(games)} games successfully!")
 
         # Create a test user (optional)
-        existing_user = db.query(User).filter(User.email == "test@example.com").first()
-        if not existing_user:
-            test_user = User(
-                email="test@example.com",
-                name="Test User",
-                hashed_password=get_password_hash("password123"),
-                xp=250,
-                level=3,
-                is_active=True,
-            )
-            db.add(test_user)
-            db.commit()
-            print("✓ Created test user: test@example.com / password123")
-        else:
-            print("Test user already exists, skipping...")
+        try:
+            existing_user = db.query(User).filter(User.email == "test@example.com").first()
+            if not existing_user:
+                test_user = User(
+                    email="test@example.com",
+                    name="Test User",
+                    hashed_password=get_password_hash("password123"),
+                    xp=250,
+                    level=3,
+                    is_active=True,
+                )
+                db.add(test_user)
+                db.commit()
+                print("✓ Created test user: test@example.com / password123")
+            else:
+                print("Test user already exists, skipping...")
+        except Exception as e:
+            print(f"⚠️  Skipping test user creation (bcrypt error): {str(e)}")
+            db.rollback()
 
         print("\n✅ Database seeding completed successfully!")
 
