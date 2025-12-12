@@ -12,11 +12,13 @@ import {
   Zap,
   GraduationCap,
   Clock,
-  Star
+  Star,
+  Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAppStore } from "@/store/appStore";
 
 import { Gamepad2 } from "lucide-react";
 
@@ -28,22 +30,9 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
   { name: "Speed Run", href: "/speedrun", icon: Zap },
 ];
 
-const recentStudySessions = [
-  { id: 1, title: "Calculus Fundamentals", progress: 92, time: "2 hours ago", topics: 12 },
-  { id: 2, title: "Organic Chemistry", progress: 85, time: "5 hours ago", topics: 8 },
-  { id: 3, title: "World War II History", progress: 78, time: "Yesterday", topics: 15 },
-  { id: 4, title: "Spanish Vocabulary", progress: 95, time: "Yesterday", topics: 20 },
-  { id: 5, title: "Geography Capitals", progress: 88, time: "2 days ago", topics: 10 },
-  { id: 6, title: "Python Basics", progress: 91, time: "2 days ago", topics: 14 },
-  { id: 7, title: "Classical Mechanics", progress: 82, time: "3 days ago", topics: 11 },
-  { id: 8, title: "Periodic Table", progress: 76, time: "4 days ago", topics: 9 },
-  { id: 9, title: "Cell Biology", progress: 89, time: "5 days ago", topics: 13 },
-  { id: 10, title: "Renaissance Art", progress: 94, time: "1 week ago", topics: 7 },
-];
-
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-
+  const { studySessions, currentSession, setCurrentSession } = useAppStore();
   return (
     <div className={cn(
       "bg-card border-r border-border transition-all duration-300 flex flex-col h-screen sticky top-0",
@@ -103,16 +92,27 @@ export function Sidebar() {
           </h3>
           <ScrollArea className="h-[calc(100%-2rem)]">
             <div className="space-y-1 pr-2">
-              {recentStudySessions.map((session) => (
+              {studySessions.map((session) => (
                 <div 
                   key={session.id} 
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                  onClick={() => setCurrentSession(session)}
+                  className={cn(
+                    "flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer",
+                    currentSession?.id === session.id 
+                      ? "bg-primary/10 border border-primary/20" 
+                      : "hover:bg-accent/50"
+                  )}
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium text-foreground truncate">{session.title}</p>
                     <p className="text-[10px] text-muted-foreground">{session.time} • {session.topics} topics</p>
                   </div>
-                  <div className="text-xs font-semibold text-primary ml-2">{session.progress}%</div>
+                  <div className="flex items-center gap-1">
+                    {currentSession?.id === session.id && (
+                      <Check size={12} className="text-primary" />
+                    )}
+                    <span className="text-xs font-semibold text-primary">{session.progress}%</span>
+                  </div>
                 </div>
               ))}
             </div>

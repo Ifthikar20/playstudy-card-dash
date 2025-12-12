@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, CheckCircle2, XCircle, Timer, Layers } from "lucide-react";
+import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, CheckCircle2, XCircle, Timer, Layers, AlertCircle, PlusCircle, Zap } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
+import { Button } from "@/components/ui/button";
 
 interface Question {
   question: string;
@@ -40,8 +40,7 @@ const sampleCards: FlashCard[] = [
 ];
 
 export default function SpeedRunPage() {
-  const { topic } = useParams();
-  const { speedRunMode, setSpeedRunMode, addXp } = useAppStore();
+  const { currentSession, speedRunMode, setSpeedRunMode, addXp, createSpeedRun } = useAppStore();
   const [studyMaterial, setStudyMaterial] = useState("");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -122,6 +121,52 @@ export default function SpeedRunPage() {
 
   const totalItems = speedRunMode === 'mcq' ? sampleQuestions.length : sampleCards.length;
 
+  // No session selected
+  if (!currentSession) {
+    return (
+      <div className="min-h-screen bg-background flex w-full">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8">
+            <AlertCircle size={64} className="mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-2xl font-bold text-foreground mb-2">No Study Session Selected</h2>
+            <p className="text-muted-foreground mb-4">
+              Select a study session from the sidebar to start Speed Run
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Session selected but no Speed Run created yet
+  if (!currentSession.hasSpeedRun) {
+    return (
+      <div className="min-h-screen bg-background flex w-full">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8 max-w-md">
+            <Zap size={64} className="mx-auto text-primary mb-4" />
+            <h2 className="text-2xl font-bold text-foreground mb-2">
+              Create Speed Run for "{currentSession.title}"
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              No Speed Run exists yet. Create one to practice with timed MCQs or flip cards.
+            </p>
+            <Button 
+              size="lg" 
+              onClick={() => createSpeedRun(currentSession.id)}
+              className="gap-2"
+            >
+              <PlusCircle size={20} />
+              Create Speed Run
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex w-full">
       <Sidebar />
@@ -142,7 +187,7 @@ export default function SpeedRunPage() {
             <div className="p-4 lg:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg lg:text-xl font-semibold text-foreground">
-                  Study Material - {topic}
+                  {currentSession.title}
                 </h2>
                 <button
                   onClick={() => setIsMinimized(true)}
