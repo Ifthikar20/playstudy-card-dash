@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Play, CheckCircle2, Circle, PlusCircle, AlertCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle, PlusCircle, Lock } from "lucide-react";
 import {
   ReactFlow,
   MiniMap,
@@ -21,6 +21,9 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useAppStore } from "@/store/appStore";
+import { StudyContentUpload } from "@/components/StudyContentUpload";
+import { TopicQuizCard } from "@/components/TopicQuizCard";
+import { TopicSummary } from "@/components/TopicSummary";
 
 // Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
@@ -65,76 +68,125 @@ const nodeStyles = {
   },
 };
 
-const initialNodes: Node[] = [
-  {
-    id: "1",
-    type: "default",
-    data: { label: "📚 Introduction to Subject" },
-    position: { x: 250, y: 0 },
-    style: nodeStyles.current,
-  },
-  {
-    id: "2",
-    type: "default",
-    data: { label: "✅ Chapter 1: Basics" },
-    position: { x: 80, y: 120 },
-    style: nodeStyles.completed,
-  },
-  {
-    id: "3",
-    type: "default",
-    data: { label: "✅ Chapter 2: Core Concepts" },
-    position: { x: 420, y: 120 },
-    style: nodeStyles.completed,
-  },
-  {
-    id: "4",
-    type: "default",
-    data: { label: "🔄 Chapter 3: Advanced Topics" },
-    position: { x: 80, y: 240 },
-    style: nodeStyles.inProgress,
-  },
-  {
-    id: "5",
-    type: "default",
-    data: { label: "⏳ Chapter 4: Applications" },
-    position: { x: 420, y: 240 },
-    style: nodeStyles.locked,
-  },
-  {
-    id: "6",
-    type: "default",
-    data: { label: "🔒 Chapter 5: Mastery" },
-    position: { x: 250, y: 360 },
-    style: nodeStyles.locked,
-  },
-];
-
-const initialEdges: Edge[] = [
-  { id: "e1-2", source: "1", target: "2", animated: false, style: { stroke: "#10b981", strokeWidth: 3 } },
-  { id: "e1-3", source: "1", target: "3", animated: false, style: { stroke: "#10b981", strokeWidth: 3 } },
-  { id: "e2-4", source: "2", target: "4", animated: true, style: { stroke: "#f59e0b", strokeWidth: 3 } },
-  { id: "e3-5", source: "3", target: "5", animated: false, style: { stroke: "hsl(var(--border))", strokeWidth: 2 } },
-  { id: "e4-6", source: "4", target: "6", animated: false, style: { stroke: "hsl(var(--border))", strokeWidth: 2 } },
-  { id: "e5-6", source: "5", target: "6", animated: false, style: { stroke: "hsl(var(--border))", strokeWidth: 2 } },
-];
-
-const quizTopics = [
-  { id: 1, title: "Introduction Quiz", questions: 10, completed: true, score: 95 },
-  { id: 2, title: "Chapter 1: Basics", questions: 15, completed: true, score: 88 },
-  { id: 3, title: "Chapter 2: Core Concepts", questions: 20, completed: true, score: 92 },
-  { id: 4, title: "Chapter 3: Advanced", questions: 25, completed: false, score: null },
-  { id: 5, title: "Chapter 4: Applications", questions: 15, completed: false, score: null },
-  { id: 6, title: "Final Mastery Test", questions: 50, completed: false, score: null },
-];
-
 export default function FullStudyPage() {
+  const { currentSession, processStudyContent, answerQuestion, completeTopic } = useAppStore();
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Generate nodes and edges from extracted topics
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
+    const topics = currentSession?.extractedTopics || [];
+    
+    if (topics.length === 0) {
+      return { nodes: [], edges: [] };
+    }
+
+    const generatedNodes: Node[] = topics.map((topic, index) => {
+      const isCompleted = topic.completed;
+      const isCurrent = !isCompleted && (index === 0 || topics[index - 1]?.completed);
+      const isLocked = !isCompleted && !isCurrent;
+
+      let style = nodeStyles.locked;
+      let emoji = "🔒";
+      
+      if (isCompleted) {
+        style = nodeStyles.completed;
+        emoji = "✅";
+      } else if (isCurrent) {
+        style = nodeStyles.current;
+        emoji = "📚";
+      } else {
+        emoji = "⏳";
+      }
+
+      // Position nodes in a tree-like structure
+      const row = Math.floor(index / 2);
+      const col = index % 2;
+      const x = col === 0 ? 100 : 350;
+      const y = row * 120;
+
+      return {
+        id: topic.id,
+        type: "default",
+        data: { label: `${emoji} ${topic.title}` },
+        position: { x, y },
+        style,
+      };
+    });
+
+    const generatedEdges: Edge[] = topics.slice(1).map((topic, index) => {
+      const sourceId = topics[index].id;
+      const targetId = topic.id;
+      const isCompleted = topics[index].completed;
+
+      return {
+        id: `e-${sourceId}-${targetId}`,
+        source: sourceId,
+        target: targetId,
+        animated: !isCompleted && topics[index + 1]?.completed !== true,
+        style: { 
+          stroke: isCompleted ? "#10b981" : "hsl(var(--border))", 
+          strokeWidth: isCompleted ? 3 : 2 
+        },
+      };
+    });
+
+    return { nodes: generatedNodes, edges: generatedEdges };
+  }, [currentSession?.extractedTopics]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedQuiz, setSelectedQuiz] = useState<number | null>(null);
-  const { currentSession, createFullStudy } = useAppStore();
+
+  // Update nodes when topics change
+  useMemo(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(() => {}, []);
+
+  const handleContentSubmit = (content: string) => {
+    if (!currentSession) return;
+    setIsProcessing(true);
+    // Simulate processing delay
+    setTimeout(() => {
+      processStudyContent(currentSession.id, content);
+      setIsProcessing(false);
+    }, 1500);
+  };
+
+  const handleAnswerQuestion = (topicId: string, answerIndex: number) => {
+    if (!currentSession) return { correct: false, explanation: '' };
+    return answerQuestion(currentSession.id, topicId, answerIndex);
+  };
+
+  const handleCompleteTopic = (topicId: string) => {
+    if (!currentSession) return;
+    setShowSummary(true);
+  };
+
+  const handleContinueToNextTopic = () => {
+    const topics = currentSession?.extractedTopics || [];
+    const currentIndex = topics.findIndex(t => t.id === selectedTopicId);
+    const nextTopic = topics[currentIndex + 1];
+    
+    setShowSummary(false);
+    
+    if (nextTopic) {
+      setSelectedTopicId(nextTopic.id);
+    } else {
+      setSelectedTopicId(null);
+    }
+  };
+
+  const handleRetryTopic = () => {
+    setShowSummary(false);
+    // Reset would require store update - for now just close summary
+  };
+
+  const selectedTopic = currentSession?.extractedTopics?.find(t => t.id === selectedTopicId);
+  const topics = currentSession?.extractedTopics || [];
 
   // No session selected - show create new option
   if (!currentSession) {
@@ -151,10 +203,8 @@ export default function FullStudyPage() {
             <Button 
               size="lg" 
               onClick={() => {
-                // For now, just show a message - later integrate with CreateStudySessionDialog
                 const name = prompt("Enter a name for your new study session:");
                 if (name) {
-                  // This would be replaced with proper session creation
                   alert(`Session "${name}" would be created. Select it from the sidebar to continue.`);
                 }
               }}
@@ -169,29 +219,16 @@ export default function FullStudyPage() {
     );
   }
 
-  // Session selected but no Full Study created yet
-  if (!currentSession.hasFullStudy) {
+  // Session selected but no content uploaded yet
+  if (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0) {
     return (
       <div className="flex min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center p-8 max-w-md">
-            <BookOpen size={64} className="mx-auto text-primary mb-4" />
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              Create Full Study for "{currentSession.title}"
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              No Full Study session exists yet. Create one to generate quizzes and a learning tree for this topic.
-            </p>
-            <Button 
-              size="lg" 
-              onClick={() => createFullStudy(currentSession.id)}
-              className="gap-2"
-            >
-              <PlusCircle size={20} />
-              Create Full Study
-            </Button>
-          </div>
+        <main className="flex-1 flex items-center justify-center p-6">
+          <StudyContentUpload 
+            onContentSubmit={handleContentSubmit}
+            isProcessing={isProcessing}
+          />
         </main>
       </div>
     );
@@ -203,8 +240,8 @@ export default function FullStudyPage() {
       
       <main className="flex-1 flex flex-col lg:flex-row min-h-0">
         <ResizablePanelGroup direction="horizontal" className="flex-1">
-          {/* Left Side - Quiz Options */}
-          <ResizablePanel defaultSize={50} minSize={20} maxSize={70}>
+          {/* Left Side - Topic List & Quiz */}
+          <ResizablePanel defaultSize={50} minSize={30} maxSize={70}>
             <div className="h-full overflow-y-auto p-4 border-r border-border">
               <div className="space-y-4">
                 <div>
@@ -213,48 +250,92 @@ export default function FullStudyPage() {
                     {currentSession.title}
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Complete quizzes to unlock new topics
+                    {topics.filter(t => t.completed).length} of {topics.length} topics completed
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  {quizTopics.map((quiz) => (
-                    <Card 
-                      key={quiz.id}
-                      className={`cursor-pointer transition-all hover:shadow-md ${
-                        selectedQuiz === quiz.id ? "ring-2 ring-primary" : ""
-                      } ${quiz.completed ? "bg-green-50 dark:bg-green-950/20" : ""}`}
-                      onClick={() => setSelectedQuiz(quiz.id)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {quiz.completed ? (
-                              <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
-                            ) : (
-                              <Circle className="text-muted-foreground" size={20} />
-                            )}
-                            <div>
-                              <p className="font-medium text-foreground text-sm">{quiz.title}</p>
-                              <p className="text-xs text-muted-foreground">{quiz.questions} questions</p>
-                            </div>
-                          </div>
-                          {quiz.completed && quiz.score && (
-                            <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                              {quiz.score}%
-                            </span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                {/* Topic List */}
+                {!selectedTopicId && (
+                  <div className="space-y-2">
+                    {topics.map((topic, index) => {
+                      const isCompleted = topic.completed;
+                      const isCurrent = !isCompleted && (index === 0 || topics[index - 1]?.completed);
+                      const isLocked = !isCompleted && !isCurrent;
 
-                {selectedQuiz && (
-                  <Button className="w-full" size="lg">
-                    <Play size={18} className="mr-2" />
-                    Start Quiz
-                  </Button>
+                      return (
+                        <Card 
+                          key={topic.id}
+                          className={`cursor-pointer transition-all ${
+                            isLocked ? "opacity-60" : "hover:shadow-md"
+                          } ${isCompleted ? "bg-green-50 dark:bg-green-950/20" : ""}`}
+                          onClick={() => !isLocked && setSelectedTopicId(topic.id)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {isCompleted ? (
+                                  <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
+                                ) : isLocked ? (
+                                  <Lock className="text-muted-foreground" size={20} />
+                                ) : (
+                                  <Circle className="text-primary" size={20} />
+                                )}
+                                <div>
+                                  <p className="font-medium text-foreground text-sm">{topic.title}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {topic.questions.length} questions
+                                    {topic.description && ` • ${topic.description}`}
+                                  </p>
+                                </div>
+                              </div>
+                              {isCompleted && topic.score !== null && (
+                                <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                                  {Math.round(topic.score)}%
+                                </span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Quiz View */}
+                {selectedTopicId && selectedTopic && !showSummary && (
+                  <div className="space-y-4">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setSelectedTopicId(null)}
+                    >
+                      ← Back to Topics
+                    </Button>
+                    
+                    <TopicQuizCard
+                      topicTitle={selectedTopic.title}
+                      questions={selectedTopic.questions}
+                      currentQuestionIndex={selectedTopic.currentQuestionIndex}
+                      onAnswer={(answerIndex) => handleAnswerQuestion(selectedTopicId, answerIndex)}
+                      onComplete={() => handleCompleteTopic(selectedTopicId)}
+                      score={selectedTopic.score}
+                      isCompleted={selectedTopic.completed}
+                    />
+                  </div>
+                )}
+
+                {/* Topic Summary */}
+                {showSummary && selectedTopic && (
+                  <div className="space-y-4">
+                    <TopicSummary
+                      topicTitle={selectedTopic.title}
+                      score={selectedTopic.score || 0}
+                      totalQuestions={selectedTopic.questions.length}
+                      onContinue={handleContinueToNextTopic}
+                      onRetry={handleRetryTopic}
+                      isLastTopic={topics.findIndex(t => t.id === selectedTopicId) === topics.length - 1}
+                    />
+                  </div>
                 )}
               </div>
             </div>
@@ -268,7 +349,7 @@ export default function FullStudyPage() {
               <div className="px-4 py-2 border-b border-border">
                 <h2 className="text-sm font-semibold text-foreground">Learning Progress Tree</h2>
                 <p className="text-xs text-muted-foreground">
-                  Drag nodes to reorganize • Click to view details • Complete quizzes to unlock new paths
+                  Click topics to start • Complete quizzes to unlock new paths
                 </p>
               </div>
               
@@ -279,12 +360,23 @@ export default function FullStudyPage() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
+                  onNodeClick={(_, node) => {
+                    const topic = topics.find(t => t.id === node.id);
+                    if (topic) {
+                      const index = topics.indexOf(topic);
+                      const isCurrent = !topic.completed && (index === 0 || topics[index - 1]?.completed);
+                      if (!topic.completed || isCurrent) {
+                        setSelectedTopicId(node.id);
+                        setShowSummary(false);
+                      }
+                    }
+                  }}
                   fitView
                   minZoom={0.5}
                   maxZoom={1.5}
                   defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
                   attributionPosition="bottom-left"
-                  className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105"
+                  className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105 [&_.react-flow__node]:cursor-pointer"
                 >
                   <Controls 
                     className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
@@ -317,16 +409,12 @@ export default function FullStudyPage() {
                     <span className="text-muted-foreground">Completed</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-gradient-to-br from-amber-500 to-amber-600 shadow-sm shadow-amber-500/30"></div>
-                    <span className="text-muted-foreground">In Progress</span>
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-primary to-purple-600 shadow-sm shadow-primary/30"></div>
+                    <span className="text-muted-foreground">Current</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 rounded bg-muted border border-dashed border-border"></div>
                     <span className="text-muted-foreground">Locked</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-gradient-to-br from-primary to-purple-600 shadow-sm shadow-primary/30"></div>
-                    <span className="text-muted-foreground">Current</span>
                   </div>
                 </div>
               </div>
