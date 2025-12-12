@@ -137,7 +137,7 @@ export default function FullStudyPage() {
       <main className="flex-1 flex flex-col lg:flex-row min-h-0">
         <ResizablePanelGroup direction="horizontal" className="flex-1">
           {/* Left Side - Quiz Options */}
-          <ResizablePanel defaultSize={25} minSize={15} maxSize={50}>
+          <ResizablePanel defaultSize={50} minSize={20} maxSize={70}>
             <div className="h-full overflow-y-auto p-4 border-r border-border">
               <div className="space-y-4">
                 <div>
@@ -196,7 +196,7 @@ export default function FullStudyPage() {
           <ResizableHandle withHandle />
 
           {/* Right Side - Topic Tree View */}
-          <ResizablePanel defaultSize={75} minSize={40}>
+          <ResizablePanel defaultSize={50} minSize={30}>
             <div className="h-full flex flex-col">
               <div className="p-4 border-b border-border">
                 <h2 className="text-xl font-bold text-foreground">Learning Progress Tree</h2>
