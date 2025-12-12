@@ -20,7 +20,6 @@ const navigation = [
   { name: "Study Folders", href: "/folders", icon: FolderPlus },
   { name: "Speed Run", href: "/speedrun", icon: Zap },
   { name: "Achievements", href: "/achievements", icon: Trophy },
-  { name: "Profile", href: "/profile", icon: User },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -66,8 +65,23 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom section with theme toggle, login and share */}
+      {/* Bottom section with profile, theme toggle, login and share */}
       <div className="p-4 border-t border-border space-y-2">
+        <NavLink
+          to="/profile"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )
+          }
+        >
+          <User size={20} className="flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Profile</span>}
+        </NavLink>
+
         <div className="flex items-center justify-between">
           {!isCollapsed && <span className="text-sm text-muted-foreground">Theme</span>}
           <ThemeToggle />
