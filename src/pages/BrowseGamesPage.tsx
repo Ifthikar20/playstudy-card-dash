@@ -4,14 +4,16 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, Play, Heart, Star } from "lucide-react";
+import { Search, Filter, Play, Users, Star, Gamepad2 } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
+import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 
 const categories = ["All", "Mathematics", "Science", "History", "Languages", "Geography", "Programming", "Arts", "Music", "Business"];
 
 export default function BrowseGamesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [dialogOpen, setDialogOpen] = useState(false);
   const { games, likeGame } = useAppStore();
 
   const filteredGames = games.filter((game) => {
@@ -28,7 +30,12 @@ export default function BrowseGamesPage() {
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Browse Games</h1>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-xl bg-primary/10">
+                <Gamepad2 className="text-primary" size={28} />
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Browse Games</h1>
+            </div>
             <p className="text-muted-foreground">Discover and play educational games across all subjects</p>
           </div>
 
@@ -66,44 +73,66 @@ export default function BrowseGamesPage() {
           </div>
 
           {/* Games Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredGames.map((game) => (
-              <Card key={game.id} className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1">
-                <div className="relative h-36 overflow-hidden">
+              <Card 
+                key={game.id} 
+                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border-2 hover:border-primary/30"
+              >
+                {/* Image Header */}
+                <div className="relative h-40 overflow-hidden">
                   <img 
                     src={game.image} 
                     alt={game.title}
                     className="w-full h-full object-cover transition-transform group-hover:scale-110"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                   <Badge 
-                    className="absolute top-2 right-2"
+                    className="absolute top-3 right-3"
                     variant={game.difficulty === "Easy" ? "secondary" : game.difficulty === "Medium" ? "default" : "destructive"}
                   >
                     {game.difficulty}
                   </Badge>
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <h3 className="font-semibold text-white text-sm mb-1">{game.title}</h3>
-                    <p className="text-xs text-white/80">{game.category}</p>
+                  <div className="absolute top-3 left-3">
+                    <Badge variant="outline" className="bg-background/80 backdrop-blur-sm">
+                      {game.category}
+                    </Badge>
                   </div>
                 </div>
-                <div className="p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); likeGame(game.id); }}
-                      className="flex items-center gap-1 hover:text-pink-500 transition-colors"
-                    >
-                      <Heart size={14} className="hover:fill-pink-500" />
-                      {game.likes.toLocaleString()} students
-                    </button>
-                    <span className="flex items-center gap-1">
+
+                {/* Content */}
+                <div className="p-4 space-y-3">
+                  <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors">
+                    {game.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {game.description}
+                  </p>
+
+                  {/* Stats Row */}
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Users size={14} />
+                      <span className="font-medium">{game.likes.toLocaleString()}</span>
+                      <span className="text-xs">students</span>
+                    </div>
+                    <div className="flex items-center gap-1">
                       <Star size={14} className="text-yellow-500 fill-yellow-500" />
-                      {game.rating}
-                    </span>
+                      <span className="font-medium text-foreground">{game.rating}</span>
+                    </div>
                   </div>
-                  <Button size="sm" className="h-8 gap-1">
-                    <Play size={14} />
-                    Play
+
+                  {/* Play Button */}
+                  <Button 
+                    className="w-full gap-2 mt-2" 
+                    size="lg"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDialogOpen(true);
+                    }}
+                  >
+                    <Play size={18} />
+                    Play Now
                   </Button>
                 </div>
               </Card>
@@ -117,6 +146,8 @@ export default function BrowseGamesPage() {
           )}
         </div>
       </main>
+
+      <CreateStudySessionDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   );
 }
