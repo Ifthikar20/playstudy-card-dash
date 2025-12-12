@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, CheckCircle2, XCircle } from "lucide-react";
+import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, CheckCircle2, XCircle, Timer, Layers } from "lucide-react";
+import { useAppStore } from "@/store/appStore";
 
 interface Question {
   question: string;
   options: string[];
   correctAnswer: number;
+}
+
+interface FlashCard {
+  front: string;
+  back: string;
 }
 
 const sampleQuestions: Question[] = [
@@ -27,15 +33,35 @@ const sampleQuestions: Question[] = [
   }
 ];
 
+const sampleCards: FlashCard[] = [
+  { front: "What is the capital of France?", back: "Paris" },
+  { front: "What is 2 + 2?", back: "4" },
+  { front: "Who wrote Romeo and Juliet?", back: "William Shakespeare" }
+];
+
 export default function SpeedRunPage() {
   const { topic } = useParams();
+  const { speedRunMode, setSpeedRunMode, addXp } = useAppStore();
   const [studyMaterial, setStudyMaterial] = useState("");
-  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [speedRunStarted, setSpeedRunStarted] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(15);
+
+  // Timer for MCQ mode
+  useEffect(() => {
+    if (speedRunStarted && speedRunMode === 'mcq' && !hasAnswered && timeLeft > 0) {
+      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+    if (timeLeft === 0 && !hasAnswered) {
+      setHasAnswered(true);
+    }
+  }, [timeLeft, speedRunStarted, speedRunMode, hasAnswered]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -52,24 +78,30 @@ export default function SpeedRunPage() {
     if (hasAnswered) return;
     setSelectedAnswer(index);
     setHasAnswered(true);
-    if (index === sampleQuestions[currentQuestion].correctAnswer) {
+    if (index === sampleQuestions[currentIndex].correctAnswer) {
       setCorrectCount(correctCount + 1);
+      addXp(10);
     }
   };
 
-  const nextQuestion = () => {
-    if (currentQuestion < sampleQuestions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
+  const nextItem = () => {
+    const maxIndex = speedRunMode === 'mcq' ? sampleQuestions.length - 1 : sampleCards.length - 1;
+    if (currentIndex < maxIndex) {
+      setCurrentIndex(currentIndex + 1);
       setSelectedAnswer(null);
       setHasAnswered(false);
+      setIsFlipped(false);
+      setTimeLeft(15);
     }
   };
 
-  const prevQuestion = () => {
-    if (currentQuestion > 0) {
-      setCurrentQuestion(currentQuestion - 1);
+  const prevItem = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
       setSelectedAnswer(null);
       setHasAnswered(false);
+      setIsFlipped(false);
+      setTimeLeft(15);
     }
   };
 
@@ -80,17 +112,15 @@ export default function SpeedRunPage() {
         : "border-border hover:border-primary/50 hover:bg-accent/50";
     }
     
-    const isCorrect = index === sampleQuestions[currentQuestion].correctAnswer;
+    const isCorrect = index === sampleQuestions[currentIndex].correctAnswer;
     const isSelected = index === selectedAnswer;
     
-    if (isCorrect) {
-      return "border-green-500 bg-green-100 dark:bg-green-900/30";
-    }
-    if (isSelected && !isCorrect) {
-      return "border-red-500 bg-red-100 dark:bg-red-900/30";
-    }
+    if (isCorrect) return "border-green-500 bg-green-100 dark:bg-green-900/30";
+    if (isSelected && !isCorrect) return "border-red-500 bg-red-100 dark:bg-red-900/30";
     return "border-border opacity-50";
   };
+
+  const totalItems = speedRunMode === 'mcq' ? sampleQuestions.length : sampleCards.length;
 
   return (
     <div className="min-h-screen bg-background flex w-full">
@@ -121,6 +151,35 @@ export default function SpeedRunPage() {
                   <ChevronLeft size={20} className="text-muted-foreground" />
                 </button>
               </div>
+
+              {/* Mode Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-foreground mb-2">Study Mode</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSpeedRunMode('cards')}
+                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                      speedRunMode === 'cards' 
+                        ? 'border-primary bg-primary/10 text-primary' 
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <Layers size={18} />
+                    <span className="text-sm font-medium">Flip Cards</span>
+                  </button>
+                  <button
+                    onClick={() => setSpeedRunMode('mcq')}
+                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                      speedRunMode === 'mcq' 
+                        ? 'border-primary bg-primary/10 text-primary' 
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <Timer size={18} />
+                    <span className="text-sm font-medium">Timed MCQ</span>
+                  </button>
+                </div>
+              </div>
               
               <div className="space-y-4">
                 <div className="border-2 border-dashed border-border rounded-lg p-4 lg:p-6 text-center hover:border-primary transition-colors">
@@ -132,9 +191,9 @@ export default function SpeedRunPage() {
                     onChange={handleFileUpload}
                   />
                   <label htmlFor="file-upload" className="cursor-pointer">
-                    <Upload size={24} className="mx-auto text-muted-foreground mb-2 lg:w-8 lg:h-8" />
-                    <p className="text-sm lg:text-base text-muted-foreground">Click to upload study material</p>
-                    <p className="text-xs lg:text-sm text-muted-foreground/60">PDF, DOC, TXT files</p>
+                    <Upload size={24} className="mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">Click to upload study material</p>
+                    <p className="text-xs text-muted-foreground/60">PDF, DOC, TXT files</p>
                   </label>
                 </div>
 
@@ -146,66 +205,70 @@ export default function SpeedRunPage() {
                     value={studyMaterial}
                     onChange={(e) => setStudyMaterial(e.target.value)}
                     placeholder="Paste your study material here..."
-                    className="w-full h-32 lg:h-64 px-3 py-2 border border-border bg-background text-foreground rounded-lg resize-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm lg:text-base"
+                    className="w-full h-32 lg:h-48 px-3 py-2 border border-border bg-background text-foreground rounded-lg resize-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                 </div>
 
                 <button
-                  onClick={() => setSpeedRunStarted(true)}
+                  onClick={() => { setSpeedRunStarted(true); setTimeLeft(15); }}
                   disabled={!studyMaterial.trim()}
-                  className="w-full flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground transition-colors text-sm lg:text-base"
+                  className="w-full flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground transition-colors"
                 >
-                  <Send size={16} className="mr-2 lg:w-5 lg:h-5" />
-                  Generate Speed Run
+                  <Send size={16} className="mr-2" />
+                  Start {speedRunMode === 'mcq' ? 'Timed MCQ' : 'Flip Cards'}
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Center Panel - MCQ Questions */}
+        {/* Center Panel */}
         <div className="flex-1 p-4 lg:p-6 flex flex-col relative">
           {!speedRunStarted ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <FileText size={48} className="mx-auto text-muted-foreground mb-4 lg:w-16 lg:h-16" />
+                <FileText size={48} className="mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-2">
-                  Upload Study Material to Start Speed Run
+                  Upload Study Material to Start
                 </h3>
-                <p className="text-sm lg:text-base text-muted-foreground">
-                  Add your study content and we'll generate MCQ questions for you
+                <p className="text-sm text-muted-foreground">
+                  Choose between flip cards or timed MCQ mode
                 </p>
               </div>
             </div>
-          ) : (
+          ) : speedRunMode === 'mcq' ? (
+            /* MCQ Mode */
             <div className="max-w-2xl mx-auto w-full h-full flex flex-col justify-center">
-              {/* Progress */}
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-muted-foreground">
-                    Question {currentQuestion + 1} of {sampleQuestions.length}
+                    Question {currentIndex + 1} of {totalItems}
                   </span>
-                  <span className="text-sm font-medium text-primary">
-                    Score: {correctCount}/{currentQuestion + (hasAnswered ? 1 : 0)}
-                  </span>
+                  <div className="flex items-center gap-4">
+                    <span className={`text-sm font-bold flex items-center gap-1 ${timeLeft <= 5 ? 'text-red-500' : 'text-primary'}`}>
+                      <Timer size={16} />
+                      {timeLeft}s
+                    </span>
+                    <span className="text-sm font-medium text-primary">
+                      Score: {correctCount}/{currentIndex + (hasAnswered ? 1 : 0)}
+                    </span>
+                  </div>
                 </div>
                 <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${((currentQuestion + 1) / sampleQuestions.length) * 100}%` }}
+                    style={{ width: `${((currentIndex + 1) / totalItems) * 100}%` }}
                   />
                 </div>
               </div>
 
-              {/* Question Card */}
               <div className="bg-card rounded-xl border border-border p-6 lg:p-8 mb-6 shadow-sm">
                 <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-6">
-                  {sampleQuestions[currentQuestion]?.question}
+                  {sampleQuestions[currentIndex]?.question}
                 </h3>
 
-                {/* Options */}
                 <div className="space-y-3">
-                  {sampleQuestions[currentQuestion]?.options.map((option, index) => (
+                  {sampleQuestions[currentIndex]?.options.map((option, index) => (
                     <button
                       key={index}
                       onClick={() => handleAnswerSelect(index)}
@@ -218,10 +281,10 @@ export default function SpeedRunPage() {
                         </span>
                         <span className="text-foreground">{option}</span>
                       </div>
-                      {hasAnswered && index === sampleQuestions[currentQuestion].correctAnswer && (
+                      {hasAnswered && index === sampleQuestions[currentIndex].correctAnswer && (
                         <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
                       )}
-                      {hasAnswered && index === selectedAnswer && index !== sampleQuestions[currentQuestion].correctAnswer && (
+                      {hasAnswered && index === selectedAnswer && index !== sampleQuestions[currentIndex].correctAnswer && (
                         <XCircle className="text-red-600 dark:text-red-400" size={20} />
                       )}
                     </button>
@@ -229,11 +292,10 @@ export default function SpeedRunPage() {
                 </div>
               </div>
 
-              {/* Navigation */}
               <div className="flex justify-between items-center">
                 <button
-                  onClick={prevQuestion}
-                  disabled={currentQuestion === 0}
+                  onClick={prevItem}
+                  disabled={currentIndex === 0}
                   className="flex items-center px-4 lg:px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ArrowLeft size={20} className="mr-2" />
@@ -241,20 +303,86 @@ export default function SpeedRunPage() {
                 </button>
 
                 <button
-                  onClick={nextQuestion}
-                  disabled={currentQuestion === sampleQuestions.length - 1 || !hasAnswered}
+                  onClick={nextItem}
+                  disabled={currentIndex === totalItems - 1 || !hasAnswered}
                   className="flex items-center px-4 lg:px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Next
                   <ArrowRight size={20} className="ml-2" />
                 </button>
               </div>
+            </div>
+          ) : (
+            /* Flip Cards Mode */
+            <div className="max-w-2xl mx-auto w-full h-full flex flex-col justify-center">
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-muted-foreground">
+                    Card {currentIndex + 1} of {totalItems}
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${((currentIndex + 1) / totalItems) * 100}%` }}
+                  />
+                </div>
+              </div>
 
-              {/* Navigation hint */}
-              <div className="text-center mt-4">
-                <p className="text-xs text-muted-foreground">
-                  Select an answer to continue
-                </p>
+              <div 
+                className="relative h-64 lg:h-80 mb-6 cursor-pointer perspective-1000"
+                onClick={() => setIsFlipped(!isFlipped)}
+              >
+                <div 
+                  className="absolute inset-0 w-full h-full transition-transform duration-500"
+                  style={{
+                    transformStyle: 'preserve-3d',
+                    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                  }}
+                >
+                  <div className="absolute inset-0 w-full h-full bg-card rounded-xl border border-border p-8 flex items-center justify-center shadow-lg"
+                       style={{ backfaceVisibility: 'hidden' }}>
+                    <div className="text-center">
+                      <h3 className="text-xl font-semibold text-foreground mb-4">
+                        {sampleCards[currentIndex]?.front}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">Click to reveal answer</p>
+                    </div>
+                  </div>
+                  
+                  <div className="absolute inset-0 w-full h-full bg-primary/10 rounded-xl border border-primary/20 p-8 flex items-center justify-center shadow-lg"
+                       style={{ 
+                         backfaceVisibility: 'hidden',
+                         transform: 'rotateY(180deg)'
+                       }}>
+                    <div className="text-center">
+                      <h3 className="text-xl font-medium text-foreground mb-4">
+                        {sampleCards[currentIndex]?.back}
+                      </h3>
+                      <p className="text-sm text-primary">Click to go back</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <button
+                  onClick={prevItem}
+                  disabled={currentIndex === 0}
+                  className="flex items-center px-4 lg:px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ArrowLeft size={20} className="mr-2" />
+                  Previous
+                </button>
+
+                <button
+                  onClick={nextItem}
+                  disabled={currentIndex === totalItems - 1}
+                  className="flex items-center px-4 lg:px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ArrowRight size={20} className="ml-2" />
+                </button>
               </div>
             </div>
           )}
