@@ -63,6 +63,7 @@ export function Sidebar() {
           <NavLink
             key={item.name}
             to={item.href}
+            onClick={() => setCurrentSession(null)}
             className={({ isActive }) =>
               cn(
                 "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
@@ -85,8 +86,8 @@ export function Sidebar() {
 
       {/* Recent Study Sessions Section */}
       {!isCollapsed && (
-        <div className="flex-1 px-4 pb-2 overflow-hidden">
-          <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+        <div className="flex-1 px-4 pt-4 pb-2 overflow-hidden">
+          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
             <Clock size={16} />
             Recent Study Sessions
           </h3>
