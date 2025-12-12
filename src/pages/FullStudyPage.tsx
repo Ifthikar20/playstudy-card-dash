@@ -15,6 +15,11 @@ import {
   Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 // Modern node styles with gradients and shadows
 const nodeStyles = {
@@ -129,130 +134,138 @@ export default function FullStudyPage() {
     <div className="flex min-h-screen bg-background">
       <Sidebar />
       
-      <main className="flex-1 flex flex-col lg:flex-row">
-        {/* Left Side - Quiz Options */}
-        <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-border p-4 overflow-y-auto">
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-                <BookOpen size={24} />
-                Study Quizzes
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Complete quizzes to unlock new topics
-              </p>
-            </div>
+      <main className="flex-1 flex flex-col lg:flex-row min-h-0">
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+          {/* Left Side - Quiz Options */}
+          <ResizablePanel defaultSize={25} minSize={15} maxSize={50}>
+            <div className="h-full overflow-y-auto p-4 border-r border-border">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                    <BookOpen size={24} />
+                    Study Quizzes
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Complete quizzes to unlock new topics
+                  </p>
+                </div>
 
-            <div className="space-y-2">
-              {quizTopics.map((quiz) => (
-                <Card 
-                  key={quiz.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${
-                    selectedQuiz === quiz.id ? "ring-2 ring-primary" : ""
-                  } ${quiz.completed ? "bg-green-50 dark:bg-green-950/20" : ""}`}
-                  onClick={() => setSelectedQuiz(quiz.id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {quiz.completed ? (
-                          <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
-                        ) : (
-                          <Circle className="text-muted-foreground" size={20} />
-                        )}
-                        <div>
-                          <p className="font-medium text-foreground text-sm">{quiz.title}</p>
-                          <p className="text-xs text-muted-foreground">{quiz.questions} questions</p>
+                <div className="space-y-2">
+                  {quizTopics.map((quiz) => (
+                    <Card 
+                      key={quiz.id}
+                      className={`cursor-pointer transition-all hover:shadow-md ${
+                        selectedQuiz === quiz.id ? "ring-2 ring-primary" : ""
+                      } ${quiz.completed ? "bg-green-50 dark:bg-green-950/20" : ""}`}
+                      onClick={() => setSelectedQuiz(quiz.id)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {quiz.completed ? (
+                              <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
+                            ) : (
+                              <Circle className="text-muted-foreground" size={20} />
+                            )}
+                            <div>
+                              <p className="font-medium text-foreground text-sm">{quiz.title}</p>
+                              <p className="text-xs text-muted-foreground">{quiz.questions} questions</p>
+                            </div>
+                          </div>
+                          {quiz.completed && quiz.score && (
+                            <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                              {quiz.score}%
+                            </span>
+                          )}
                         </div>
-                      </div>
-                      {quiz.completed && quiz.score && (
-                        <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                          {quiz.score}%
-                        </span>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
 
-            {selectedQuiz && (
-              <Button className="w-full" size="lg">
-                <Play size={18} className="mr-2" />
-                Start Quiz
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Right Side - Topic Tree View */}
-        <div className="flex-1 flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h2 className="text-xl font-bold text-foreground">Learning Progress Tree</h2>
-            <p className="text-sm text-muted-foreground">
-              Drag nodes to reorganize • Click to view details • Complete quizzes to unlock new paths
-            </p>
-          </div>
-          
-          <div className="flex-1 min-h-[500px] lg:min-h-0 bg-gradient-to-br from-background via-background to-muted/30">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              fitView
-              minZoom={0.5}
-              maxZoom={1.5}
-              defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
-              attributionPosition="bottom-left"
-              className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105"
-            >
-              <Controls 
-                className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
-              />
-              <MiniMap 
-                className="bg-card/80 backdrop-blur-sm border border-border rounded-lg shadow-lg"
-                nodeColor={(node) => {
-                  const bg = node.style?.background as string || "";
-                  if (bg.includes("10b981") || bg.includes("059669")) return "#10b981";
-                  if (bg.includes("f59e0b") || bg.includes("d97706")) return "#f59e0b";
-                  if (bg.includes("primary")) return "hsl(var(--primary))";
-                  return "hsl(var(--muted))";
-                }}
-                maskColor="hsl(var(--background) / 0.8)"
-              />
-              <Background 
-                variant={BackgroundVariant.Dots} 
-                gap={20} 
-                size={1.5} 
-                color="hsl(var(--muted-foreground) / 0.3)"
-              />
-            </ReactFlow>
-          </div>
-
-          {/* Modern Legend */}
-          <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
-            <div className="flex flex-wrap gap-6 text-sm justify-center">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30"></div>
-                <span className="text-muted-foreground font-medium">Completed</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 shadow-md shadow-amber-500/30"></div>
-                <span className="text-muted-foreground font-medium">In Progress</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-muted border-2 border-dashed border-border"></div>
-                <span className="text-muted-foreground font-medium">Locked</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-primary to-purple-600 shadow-md shadow-primary/30"></div>
-                <span className="text-muted-foreground font-medium">Current Topic</span>
+                {selectedQuiz && (
+                  <Button className="w-full" size="lg">
+                    <Play size={18} className="mr-2" />
+                    Start Quiz
+                  </Button>
+                )}
               </div>
             </div>
-          </div>
-        </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Right Side - Topic Tree View */}
+          <ResizablePanel defaultSize={75} minSize={40}>
+            <div className="h-full flex flex-col">
+              <div className="p-4 border-b border-border">
+                <h2 className="text-xl font-bold text-foreground">Learning Progress Tree</h2>
+                <p className="text-sm text-muted-foreground">
+                  Drag nodes to reorganize • Click to view details • Complete quizzes to unlock new paths
+                </p>
+              </div>
+              
+              <div className="flex-1 bg-gradient-to-br from-background via-background to-muted/30">
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  fitView
+                  minZoom={0.5}
+                  maxZoom={1.5}
+                  defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
+                  attributionPosition="bottom-left"
+                  className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105"
+                >
+                  <Controls 
+                    className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
+                  />
+                  <MiniMap 
+                    className="bg-card/80 backdrop-blur-sm border border-border rounded-lg shadow-lg"
+                    nodeColor={(node) => {
+                      const bg = node.style?.background as string || "";
+                      if (bg.includes("10b981") || bg.includes("059669")) return "#10b981";
+                      if (bg.includes("f59e0b") || bg.includes("d97706")) return "#f59e0b";
+                      if (bg.includes("primary")) return "hsl(var(--primary))";
+                      return "hsl(var(--muted))";
+                    }}
+                    maskColor="hsl(var(--background) / 0.8)"
+                  />
+                  <Background 
+                    variant={BackgroundVariant.Dots} 
+                    gap={20} 
+                    size={1.5} 
+                    color="hsl(var(--muted-foreground) / 0.3)"
+                  />
+                </ReactFlow>
+              </div>
+
+              {/* Modern Legend */}
+              <div className="p-4 border-t border-border bg-card/50 backdrop-blur-sm">
+                <div className="flex flex-wrap gap-6 text-sm justify-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-500/30"></div>
+                    <span className="text-muted-foreground font-medium">Completed</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 shadow-md shadow-amber-500/30"></div>
+                    <span className="text-muted-foreground font-medium">In Progress</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-lg bg-muted border-2 border-dashed border-border"></div>
+                    <span className="text-muted-foreground font-medium">Locked</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-primary to-purple-600 shadow-md shadow-primary/30"></div>
+                    <span className="text-muted-foreground font-medium">Current Topic</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </main>
     </div>
   );
