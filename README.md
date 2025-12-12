@@ -1,6 +1,88 @@
-# Welcome to your Lovable project
+# Playstudy Card Dashboard
 
-## Project info
+A modern, interactive study platform that transforms educational content into engaging, game-like experiences.
+
+## 🚀 Quick Start
+
+### Frontend Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+Visit http://localhost:5173
+
+### Backend Setup
+
+```bash
+# Run the quick start script
+./backend-quickstart.sh
+```
+
+See [Backend Implementation Guide](./BACKEND_IMPLEMENTATION.md) for detailed setup.
+
+---
+
+## 📚 New: Backend API Documentation
+
+### Complete Implementation Guides
+
+- **[API Integration Guide](./API_INTEGRATION.md)** - How the consolidated API architecture works
+- **[Backend Implementation](./BACKEND_IMPLEMENTATION.md)** - Complete Python FastAPI backend with security features
+- **[Security Checklist](./SECURITY_CHECKLIST.md)** - Comprehensive security implementation checklist
+
+### Key Features
+
+✅ **Single API Call Architecture**
+- Consolidated `/api/app-data` endpoint returns all data in ONE request
+- React Query caching with 5-minute TTL
+- Automatic fallback to mock data for development
+- Type-safe with TypeScript
+
+✅ **Security Features** (Backend)
+- JWT authentication with token expiration
+- Bcrypt password hashing
+- Rate limiting (30 req/min per user, 1000 req/hour)
+- CORS protection with origin whitelist
+- SQL injection prevention (SQLAlchemy ORM)
+- XSS protection headers
+- Input validation with Pydantic
+- User data isolation
+- Redis caching with TTL
+
+✅ **Backend Tech Stack**
+- FastAPI (async Python framework)
+- PostgreSQL database
+- Redis for caching
+- SQLAlchemy ORM
+- JWT authentication
+- Comprehensive security features
+
+### API Endpoint Structure
+
+**GET `/api/app-data`** - Single consolidated endpoint
+
+Returns:
+```json
+{
+  "games": [...],           // All available games
+  "studySessions": [...],   // User's study sessions
+  "userProfile": {...},     // User profile data
+  "stats": {...}            // User statistics
+}
+```
+
+**Authentication**: Required (Bearer token)
+**Rate Limit**: 30 requests/minute
+**Cache**: 5 minutes TTL
+
+---
+
+## Project Info (Lovable)
 
 **URL**: https://lovable.dev/projects/c985e206-2cf7-46c1-a186-df980533f51b
 

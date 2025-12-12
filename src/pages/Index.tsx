@@ -3,7 +3,8 @@ import { Sidebar } from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
-import { 
+import { useAppStore } from "@/store/appStore";
+import {
   Flame,
   Plus,
   Upload,
@@ -11,17 +12,14 @@ import {
   Rocket
 } from "lucide-react";
 
-const trendingGames = [
-  { id: 1, title: "Math Speed Challenge", category: "Mathematics", image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop" },
-  { id: 2, title: "Science Quiz Battle", category: "Science", image: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400&h=300&fit=crop" },
-  { id: 3, title: "History Trivia Rush", category: "History", image: "https://images.unsplash.com/photo-1461360370896-922624d12a74?w=400&h=300&fit=crop" },
-  { id: 4, title: "Language Master", category: "Languages", image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=400&h=300&fit=crop" },
-  { id: 5, title: "Geography Explorer", category: "Geography", image: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&h=300&fit=crop" },
-  { id: 6, title: "Coding Challenge", category: "Programming", image: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=300&fit=crop" },
-];
-
 export default function Index() {
   const [showCreateSession, setShowCreateSession] = useState(false);
+  const { games, stats } = useAppStore();
+
+  // Get top 6 games by rating for trending section
+  const trendingGames = [...games]
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 6);
 
 
   return (
@@ -92,19 +90,19 @@ export default function Index() {
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-primary">12</div>
+              <div className="text-xl md:text-2xl font-bold text-primary">{stats.totalSessions}</div>
               <div className="text-xs md:text-sm text-muted-foreground">Study Sessions</div>
             </div>
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">85%</div>
+              <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">{stats.averageAccuracy}%</div>
               <div className="text-xs md:text-sm text-muted-foreground">Average Accuracy</div>
             </div>
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-purple-600 dark:text-purple-400">247</div>
+              <div className="text-xl md:text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.questionsAnswered}</div>
               <div className="text-xs md:text-sm text-muted-foreground">Questions Answered</div>
             </div>
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-orange-600 dark:text-orange-400">18hrs</div>
+              <div className="text-xl md:text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.totalStudyTime}</div>
               <div className="text-xs md:text-sm text-muted-foreground">Total Study Time</div>
             </div>
           </div>
