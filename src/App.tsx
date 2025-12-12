@@ -9,6 +9,7 @@ import StudyFolders from "./pages/StudyFolders";
 import QuizPage from "./pages/QuizPage";
 import SpeedRunPage from "./pages/SpeedRunPage";
 import ProfilePage from "./pages/ProfilePage";
+import FullStudyPage from "./pages/FullStudyPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/quiz/:topic" element={<QuizPage />} />
           <Route path="/speedrun" element={<SpeedRunPage />} />
           <Route path="/speedrun/:topic" element={<SpeedRunPage />} />
+          <Route path="/full-study" element={<FullStudyPage />} />
           <Route path="/achievements" element={<Index />} />
           <Route path="/analytics" element={<Index />} />
           <Route path="/timer" element={<Index />} />

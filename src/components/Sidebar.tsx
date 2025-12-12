@@ -10,7 +10,8 @@ import {
   X,
   LogIn,
   Share2,
-  Zap
+  Zap,
+  GraduationCap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -18,6 +19,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 const navigation = [
   { name: "Dashboard", href: "/", icon: BookOpen },
   { name: "Study Folders", href: "/folders", icon: FolderPlus },
+  { name: "Full Study", href: "/full-study", icon: GraduationCap },
   { name: "Speed Run", href: "/speedrun", icon: Zap },
   { name: "Achievements", href: "/achievements", icon: Trophy },
   { name: "Settings", href: "/settings", icon: Settings },
