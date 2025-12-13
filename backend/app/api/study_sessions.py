@@ -198,7 +198,7 @@ Return ONLY a valid JSON object in this EXACT format:
 
         # Call AI to extract topics
         topics_message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-5-sonnet-20240620",
             max_tokens=2048,
             temperature=0.7,
             messages=[{"role": "user", "content": topics_prompt}]
@@ -273,7 +273,7 @@ Return in this EXACT format:
 
             # Call AI to generate questions
             questions_message = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-3-5-sonnet-20240620",
                 max_tokens=4096,
                 temperature=0.7,
                 messages=[{"role": "user", "content": questions_prompt}]
