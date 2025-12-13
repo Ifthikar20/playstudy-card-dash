@@ -215,22 +215,25 @@ export default function FullStudyPage() {
     }, 1500);
   }, [currentSession, processStudyContent]);
 
+  // Store session ID in a ref to avoid recreating callbacks
+  const sessionIdRef = useMemo(() => currentSession?.id, [currentSession?.id]);
+
   const handleAnswerQuestion = useCallback((topicId: string, answerIndex: number) => {
-    if (!currentSession) return { correct: false, explanation: '' };
-    return answerQuestion(currentSession.id, topicId, answerIndex);
-  }, [currentSession, answerQuestion]);
+    if (!sessionIdRef) return { correct: false, explanation: '' };
+    return answerQuestion(sessionIdRef, topicId, answerIndex);
+  }, [sessionIdRef, answerQuestion]);
 
   const handleMoveToNext = useCallback((topicId: string) => {
-    if (!currentSession) return;
+    if (!sessionIdRef) return;
     console.log('🎯 handleMoveToNext called for topic:', topicId);
-    moveToNextQuestion(currentSession.id, topicId);
-  }, [currentSession, moveToNextQuestion]);
+    moveToNextQuestion(sessionIdRef, topicId);
+  }, [sessionIdRef, moveToNextQuestion]);
 
   const handleCompleteTopic = useCallback((topicId: string) => {
-    if (!currentSession) return;
-    completeTopic(currentSession.id, topicId);
+    if (!sessionIdRef) return;
+    completeTopic(sessionIdRef, topicId);
     setShowSummary(true);
-  }, [currentSession, completeTopic]);
+  }, [sessionIdRef, completeTopic]);
 
   const handleSkipToNextTopic = useCallback(() => {
     const currentIndex = leafTopics.findIndex(t => t.id === selectedTopicId);

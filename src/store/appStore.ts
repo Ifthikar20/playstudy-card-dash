@@ -389,41 +389,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   moveToNextQuestion: (sessionId, topicId) => {
     console.log('🔄 moveToNextQuestion called', { sessionId, topicId });
 
-    const state = get();
-    const session = state.studySessions.find(s => s.id === sessionId);
-    if (!session?.extractedTopics) {
-      console.error('❌ No session or extractedTopics found');
-      return;
-    }
-
-    // Helper function to find topic in hierarchical structure
-    const findTopic = (topics: Topic[], id: string): Topic | null => {
-      for (const topic of topics) {
-        if (topic.id === id) return topic;
-        if (topic.subtopics) {
-          const found = findTopic(topic.subtopics, id);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    const topic = findTopic(session.extractedTopics, topicId);
-    if (!topic) {
-      console.error('❌ Topic not found', topicId);
-      return;
-    }
-
-    console.log('📝 Current question index:', topic.currentQuestionIndex, '/', topic.questions.length);
-
-    // Helper function to increment question index and check completion
+    // Helper function to find and update topic in hierarchical structure
     const updateIndexRecursively = (topics: Topic[]): Topic[] => {
       return topics.map(t => {
         if (t.id === topicId) {
-          const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
+          const newIndex = t.currentQuestionIndex + 1;
           const isComplete = newIndex >= t.questions.length;
 
-          console.log('➡️ Moving to question index:', newIndex, 'Complete:', isComplete);
+          console.log('➡️ Moving from index', t.currentQuestionIndex, 'to', newIndex, '/', t.questions.length);
 
           return {
             ...t,
@@ -432,7 +405,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             score: isComplete ? Math.round(t.score || 0) : t.score,
           };
         }
-        if (t.subtopics) {
+        if (t.subtopics && t.subtopics.length > 0) {
           return {
             ...t,
             subtopics: updateIndexRecursively(t.subtopics)
@@ -442,23 +415,35 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     };
 
-    // Move to next question
+    // Update state with new question index
     set((state) => {
-      const updatedSessions = state.studySessions.map((s) => {
-        if (s.id !== sessionId || !s.extractedTopics) return s;
+      const updatedSessions = state.studySessions.map((session) => {
+        if (session.id !== sessionId) return session;
+
+        if (!session.extractedTopics) {
+          console.error('❌ No extractedTopics found for session', sessionId);
+          return session;
+        }
+
+        const newExtractedTopics = updateIndexRecursively(session.extractedTopics);
+        console.log('✅ Updated extractedTopics for session', sessionId);
+
         return {
-          ...s,
-          extractedTopics: updateIndexRecursively(s.extractedTopics)
+          ...session,
+          extractedTopics: newExtractedTopics
         };
       });
 
-      const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-
-      console.log('✅ State updated, new currentSession:', updatedCurrent?.id);
+      // Update currentSession if it matches the sessionId
+      let newCurrentSession = state.currentSession;
+      if (state.currentSession?.id === sessionId) {
+        newCurrentSession = updatedSessions.find(s => s.id === sessionId) || state.currentSession;
+        console.log('✅ Updated currentSession to new version');
+      }
 
       return {
         studySessions: updatedSessions,
-        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
+        currentSession: newCurrentSession
       };
     });
   },

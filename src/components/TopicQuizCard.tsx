@@ -44,11 +44,11 @@ export function TopicQuizCard({
 
   // Reset state when question changes
   useEffect(() => {
-    console.log('🔄 Question index changed, resetting state. New index:', currentQuestionIndex);
+    console.log('🔄 Question index changed, resetting state. New index:', currentQuestionIndex, 'Question:', currentQuestion?.question.substring(0, 50));
     setSelectedAnswer(null);
     setShowResult(false);
     setResult(null);
-  }, [currentQuestionIndex]);
+  }, [currentQuestionIndex, currentQuestion?.question]);
 
   // Auto-advance to next question after showing result
   useEffect(() => {
