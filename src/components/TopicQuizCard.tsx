@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, XCircle, Trophy, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -105,9 +106,18 @@ export function TopicQuizCard({
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{topicTitle}</span>
-          <span>Question {currentQuestionIndex + 1} of {questions.length}</span>
+        {/* Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{topicTitle}</span>
+            <span className="font-semibold text-foreground">
+              {currentQuestionIndex + 1} / {questions.length}
+            </span>
+          </div>
+          <Progress
+            value={((currentQuestionIndex + 1) / questions.length) * 100}
+            className="h-2"
+          />
         </div>
 
         <h3 className="text-lg font-semibold text-foreground">
