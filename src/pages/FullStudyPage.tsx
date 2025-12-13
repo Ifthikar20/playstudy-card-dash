@@ -222,6 +222,7 @@ export default function FullStudyPage() {
 
   const handleCompleteTopic = (topicId: string) => {
     if (!currentSession) return;
+    completeTopic(currentSession.id, topicId);
     setShowSummary(true);
   };
 
@@ -439,10 +440,10 @@ export default function FullStudyPage() {
                     <TopicSummary
                       topicTitle={selectedTopic.title}
                       score={selectedTopic.score || 0}
-                      totalQuestions={selectedTopic.questions.length}
+                      totalQuestions={selectedTopic.questions?.length || 0}
                       onContinue={handleContinueToNextTopic}
                       onRetry={handleRetryTopic}
-                      isLastTopic={topics.findIndex(t => t.id === selectedTopicId) === topics.length - 1}
+                      isLastTopic={leafTopics.findIndex(t => t.id === selectedTopicId) === leafTopics.length - 1}
                     />
                   </div>
                 )}

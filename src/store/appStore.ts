@@ -28,6 +28,9 @@ interface Topic {
   completed: boolean;
   score: number | null;
   currentQuestionIndex: number;
+  isCategory?: boolean;
+  parentTopicId?: string | null;
+  subtopics?: Topic[];
 }
 
 interface StudySession {
@@ -305,63 +308,102 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     const session = state.studySessions.find(s => s.id === sessionId);
     if (!session?.extractedTopics) return { correct: false, explanation: '' };
-    
-    const topic = session.extractedTopics.find(t => t.id === topicId);
+
+    // Helper function to find topic in hierarchical structure
+    const findTopic = (topics: Topic[], id: string): Topic | null => {
+      for (const topic of topics) {
+        if (topic.id === id) return topic;
+        if (topic.subtopics) {
+          const found = findTopic(topic.subtopics, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const topic = findTopic(session.extractedTopics, topicId);
     if (!topic) return { correct: false, explanation: '' };
-    
+
     const question = topic.questions[topic.currentQuestionIndex];
     if (!question) return { correct: false, explanation: '' };
-    
+
     const correct = answerIndex === question.correctAnswer;
-    
+
+    // Helper function to update topic recursively
+    const updateTopicRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
+          const isComplete = newIndex >= t.questions.length;
+          return {
+            ...t,
+            currentQuestionIndex: newIndex,
+            completed: isComplete,
+            score: isComplete ? Math.round(((t.score || 0) + (correct ? 100 / t.questions.length : 0))) : (t.score || 0) + (correct ? 100 / t.questions.length : 0),
+          };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: updateTopicRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
     // Update current question index
     set((state) => {
       const updatedSessions = state.studySessions.map((s) => {
         if (s.id !== sessionId || !s.extractedTopics) return s;
         return {
           ...s,
-          extractedTopics: s.extractedTopics.map(t => {
-            if (t.id !== topicId) return t;
-            const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
-            const isComplete = newIndex >= t.questions.length;
-            return {
-              ...t,
-              currentQuestionIndex: newIndex,
-              completed: isComplete,
-              score: isComplete ? Math.round(((t.score || 0) + (correct ? 100 / t.questions.length : 0))) : (t.score || 0) + (correct ? 100 / t.questions.length : 0),
-            };
-          })
+          extractedTopics: updateTopicRecursively(s.extractedTopics)
         };
       });
-      
+
       const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-      return { 
-        studySessions: updatedSessions, 
-        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession 
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
       };
     });
 
     if (correct) {
       get().addXp(10);
     }
-    
+
     return { correct, explanation: question.explanation };
   },
 
   completeTopic: (sessionId, topicId) => set((state) => {
+    // Helper function to update topic recursively
+    const markCompleteRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          return { ...t, completed: true };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: markCompleteRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
     const updatedSessions = state.studySessions.map((s) => {
       if (s.id !== sessionId || !s.extractedTopics) return s;
       return {
         ...s,
-        extractedTopics: s.extractedTopics.map(t =>
-          t.id === topicId ? { ...t, completed: true } : t
-        )
+        extractedTopics: markCompleteRecursively(s.extractedTopics)
       };
     });
     const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-    return { 
-      studySessions: updatedSessions, 
-      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession 
+    return {
+      studySessions: updatedSessions,
+      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
     };
   }),
 
