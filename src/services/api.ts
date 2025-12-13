@@ -235,7 +235,7 @@ export const createStudySessionWithAI = async (
     const token = getAuthToken();
 
     if (!token) {
-      throw new Error('Authentication required');
+      throw new Error('Authentication required. Please log in again.');
     }
 
     const response = await fetch(`${API_URL}/study-sessions/create-with-ai`, {
@@ -253,6 +253,15 @@ export const createStudySessionWithAI = async (
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired or invalid - clear it and redirect to login
+        removeAuthToken();
+        // Redirect to login after a short delay to show the error message
+        setTimeout(() => {
+          window.location.href = '/auth';
+        }, 2000);
+        throw new Error('Your session has expired. Please log in again.');
+      }
       const errorData = await response.json();
       throw new Error(errorData.detail || 'Failed to create study session');
     }
