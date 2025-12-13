@@ -70,11 +70,11 @@ async def get_app_data(
     games = db.query(Game).filter(Game.is_active == True).all()
     logger.debug(f"📊 Found {len(games)} active games")
 
-    # Fetch user's study sessions
+    # Fetch user's study sessions - ordered by title (content-based) instead of date
     study_sessions = (
         db.query(StudySession)
         .filter(StudySession.user_id == current_user.id)
-        .order_by(StudySession.created_at.desc())
+        .order_by(StudySession.title.asc())
         .all()
     )
     logger.debug(f"📊 Found {len(study_sessions)} study sessions for user {current_user.id}")

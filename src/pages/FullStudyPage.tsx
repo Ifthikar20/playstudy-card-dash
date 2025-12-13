@@ -205,7 +205,7 @@ export default function FullStudyPage() {
 
   const onConnect = useCallback(() => {}, []);
 
-  const handleContentSubmit = (content: string) => {
+  const handleContentSubmit = useCallback((content: string) => {
     if (!currentSession) return;
     setIsProcessing(true);
     // Simulate processing delay
@@ -213,25 +213,26 @@ export default function FullStudyPage() {
       processStudyContent(currentSession.id, content);
       setIsProcessing(false);
     }, 1500);
-  };
+  }, [currentSession, processStudyContent]);
 
-  const handleAnswerQuestion = (topicId: string, answerIndex: number) => {
+  const handleAnswerQuestion = useCallback((topicId: string, answerIndex: number) => {
     if (!currentSession) return { correct: false, explanation: '' };
     return answerQuestion(currentSession.id, topicId, answerIndex);
-  };
+  }, [currentSession, answerQuestion]);
 
-  const handleMoveToNext = (topicId: string) => {
+  const handleMoveToNext = useCallback((topicId: string) => {
     if (!currentSession) return;
+    console.log('🎯 handleMoveToNext called for topic:', topicId);
     moveToNextQuestion(currentSession.id, topicId);
-  };
+  }, [currentSession, moveToNextQuestion]);
 
-  const handleCompleteTopic = (topicId: string) => {
+  const handleCompleteTopic = useCallback((topicId: string) => {
     if (!currentSession) return;
     completeTopic(currentSession.id, topicId);
     setShowSummary(true);
-  };
+  }, [currentSession, completeTopic]);
 
-  const handleSkipToNextTopic = () => {
+  const handleSkipToNextTopic = useCallback(() => {
     const currentIndex = leafTopics.findIndex(t => t.id === selectedTopicId);
     const nextTopic = leafTopics[currentIndex + 1];
 
@@ -242,16 +243,16 @@ export default function FullStudyPage() {
       // No more topics, go back to topic list
       setSelectedTopicId(null);
     }
-  };
+  }, [leafTopics, selectedTopicId]);
 
-  const handleContinueToNextTopic = () => {
+  const handleContinueToNextTopic = useCallback(() => {
     handleSkipToNextTopic();
-  };
+  }, [handleSkipToNextTopic]);
 
-  const handleRetryTopic = () => {
+  const handleRetryTopic = useCallback(() => {
     setShowSummary(false);
     // Reset would require store update - for now just close summary
-  };
+  }, []);
 
   const selectedTopic = useMemo(() => {
     const topic = flattenedTopics.find(t => t.id === selectedTopicId);
