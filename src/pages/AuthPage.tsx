@@ -3,24 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { login, register } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mail, Sparkles } from 'lucide-react';
+import ShootingStars from '@/components/ShootingStars';
 
 export default function AuthPage() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<'initial' | 'signin' | 'register'>('initial');
 
-  // Login form state
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-
-  // Register form state
-  const [registerName, setRegisterName] = useState('');
-  const [registerEmail, setRegisterEmail] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
+  // Form state
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,15 +24,13 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      const result = await login(loginEmail, loginPassword);
-
+      const result = await login(email, password);
       if (result.success) {
-        // Redirect to dashboard
         navigate('/');
       } else {
         setError(result.error || 'Login failed');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
@@ -49,15 +43,13 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      const result = await register(registerEmail, registerName, registerPassword);
-
+      const result = await register(email, name, password);
       if (result.success) {
-        // Redirect to dashboard
         navigate('/');
       } else {
         setError(result.error || 'Registration failed');
       }
-    } catch (err) {
+    } catch {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
@@ -65,183 +57,257 @@ export default function AuthPage() {
   };
 
   const fillDemoCredentials = () => {
-    setLoginEmail('student@playstudy.ai');
-    setLoginPassword('password123');
+    setEmail('student@playstudy.ai');
+    setPassword('password123');
+    setMode('signin');
+  };
+
+  const resetToInitial = () => {
+    setMode('initial');
+    setError('');
+    setEmail('');
+    setPassword('');
+    setName('');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-            PlayStudy
-          </h1>
-          <p className="text-gray-600 mt-2">Learn, Play, Succeed</p>
-        </div>
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[hsl(262,83%,12%)] via-[hsl(262,70%,18%)] to-[hsl(280,60%,8%)]">
+      {/* Shooting Stars Animation */}
+      <ShootingStars />
+      
+      {/* Ambient glow effects */}
+      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
+      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl" />
+      
+      {/* Content */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          {/* Modal Card */}
+          <div className="bg-card rounded-3xl shadow-2xl p-8 relative overflow-hidden border border-border/50 backdrop-blur-sm">
+            {/* Close/Back button for forms */}
+            {mode !== 'initial' && (
+              <button
+                onClick={resetToInitial}
+                className="absolute top-6 right-6 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            )}
 
-        <Tabs defaultValue="login" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Sign In</TabsTrigger>
-            <TabsTrigger value="register">Sign Up</TabsTrigger>
-          </TabsList>
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center gap-2 mb-4">
+                <Sparkles className="h-8 w-8 text-primary" />
+                <span className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
+                  PlayStudy
+                </span>
+              </div>
+              <h1 className="text-2xl font-bold text-foreground mb-2">
+                {mode === 'initial' && 'Welcome to PlayStudy'}
+                {mode === 'signin' && 'Welcome Back'}
+                {mode === 'register' && 'Create Account'}
+              </h1>
+              <p className="text-muted-foreground">
+                {mode === 'initial' && 'Sign in to access study resources'}
+                {mode === 'signin' && 'Enter your credentials to continue'}
+                {mode === 'register' && 'Start your learning journey today'}
+              </p>
+            </div>
 
-          <TabsContent value="login">
-            <Card>
-              <CardHeader>
-                <CardTitle>Welcome Back</CardTitle>
-                <CardDescription>
-                  Sign in to continue your learning journey
-                </CardDescription>
-              </CardHeader>
-              <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4">
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
-                      {error}
-                    </div>
-                  )}
+            {/* Error Display */}
+            {error && (
+              <div className="mb-6 bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm">
+                {error}
+              </div>
+            )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      required
-                      disabled={isLoading}
-                    />
+            {/* Initial Mode - Auth Options */}
+            {mode === 'initial' && (
+              <div className="space-y-4">
+                {/* Demo Account Button */}
+                <Button
+                  variant="outline"
+                  className="w-full h-14 rounded-full text-base font-medium border-2 hover:bg-accent transition-all"
+                  onClick={fillDemoCredentials}
+                >
+                  <Sparkles className="mr-3 h-5 w-5 text-primary" />
+                  Use Demo Account
+                </Button>
+
+                {/* Divider */}
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border"></div>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                      disabled={isLoading}
-                    />
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-card text-muted-foreground">or continue with email</span>
                   </div>
+                </div>
 
+                {/* Email Options */}
+                <div className="grid grid-cols-2 gap-3">
                   <Button
-                    type="button"
                     variant="outline"
-                    className="w-full"
-                    onClick={fillDemoCredentials}
-                    disabled={isLoading}
+                    className="h-14 rounded-full text-base font-medium border-2 hover:bg-accent transition-all"
+                    onClick={() => setMode('signin')}
                   >
-                    Use Demo Account
+                    <Mail className="mr-2 h-5 w-5" />
+                    Sign In
                   </Button>
-                </CardContent>
-                <CardFooter>
                   <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
+                    variant="outline"
+                    className="h-14 rounded-full text-base font-medium border-2 hover:bg-accent transition-all"
+                    onClick={() => setMode('register')}
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
-                      </>
-                    ) : (
-                      'Sign In'
-                    )}
+                    <Mail className="mr-2 h-5 w-5" />
+                    Register
                   </Button>
-                </CardFooter>
-              </form>
-            </Card>
-          </TabsContent>
+                </div>
+              </div>
+            )}
 
-          <TabsContent value="register">
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Account</CardTitle>
-                <CardDescription>
-                  Start your learning journey today
-                </CardDescription>
-              </CardHeader>
-              <form onSubmit={handleRegister}>
-                <CardContent className="space-y-4">
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
-                      {error}
-                    </div>
+            {/* Sign In Form */}
+            {mode === 'signin' && (
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    className="h-12 rounded-xl border-2 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    className="h-12 rounded-xl border-2 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-14 rounded-full text-base font-medium mt-6"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign In'
                   )}
+                </Button>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="register-name">Name</Label>
-                    <Input
-                      id="register-name"
-                      type="text"
-                      placeholder="John Doe"
-                      value={registerName}
-                      onChange={(e) => setRegisterName(e.target.value)}
-                      required
-                      disabled={isLoading}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="register-email">Email</Label>
-                    <Input
-                      id="register-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={registerEmail}
-                      onChange={(e) => setRegisterEmail(e.target.value)}
-                      required
-                      disabled={isLoading}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password">Password</Label>
-                    <Input
-                      id="register-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={registerPassword}
-                      onChange={(e) => setRegisterPassword(e.target.value)}
-                      required
-                      minLength={8}
-                      disabled={isLoading}
-                    />
-                    <p className="text-xs text-gray-500">
-                      Minimum 8 characters
-                    </p>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
+                <p className="text-center text-sm text-muted-foreground mt-4">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setMode('register'); setError(''); }}
+                    className="text-primary hover:underline font-medium"
                   >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating account...
-                      </>
-                    ) : (
-                      'Create Account'
-                    )}
-                  </Button>
-                </CardFooter>
+                    Register
+                  </button>
+                </p>
               </form>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            )}
 
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>Demo Credentials:</p>
-          <p className="font-mono text-xs mt-1">
-            student@playstudy.ai / password123
-          </p>
+            {/* Register Form */}
+            {mode === 'register' && (
+              <form onSubmit={handleRegister} className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium">Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    className="h-12 rounded-xl border-2 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="register-email" className="text-sm font-medium">Email</Label>
+                  <Input
+                    id="register-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    disabled={isLoading}
+                    className="h-12 rounded-xl border-2 focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="register-password" className="text-sm font-medium">Password</Label>
+                  <Input
+                    id="register-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    disabled={isLoading}
+                    className="h-12 rounded-xl border-2 focus:border-primary transition-colors"
+                  />
+                  <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-14 rounded-full text-base font-medium mt-6"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    'Create Account'
+                  )}
+                </Button>
+
+                <p className="text-center text-sm text-muted-foreground mt-4">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setMode('signin'); setError(''); }}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Sign In
+                  </button>
+                </p>
+              </form>
+            )}
+          </div>
+
+          {/* Demo credentials hint */}
+          <div className="mt-6 text-center text-sm text-white/60">
+            <p>Demo: student@playstudy.ai / password123</p>
+          </div>
         </div>
       </div>
     </div>
