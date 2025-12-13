@@ -45,7 +45,7 @@ export default function UserMenu() {
               {userProfile?.email || 'user@example.com'}
             </p>
             <p className="text-xs leading-none text-muted-foreground mt-1">
-              Level {userProfile?.level || 1} • {userProfile?.xp || 0} XP
+              Level {userProfile?.level || 1}
             </p>
           </div>
         </DropdownMenuLabel>
