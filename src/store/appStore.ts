@@ -329,7 +329,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     const question = topic.questions[topic.currentQuestionIndex];
     if (!question) return { correct: false, explanation: '' };
 
-    const correct = answerIndex === question.correctAnswer;
+    // Debug logging
+    console.log('Answer validation:', {
+      answerIndex,
+      correctAnswer: question.correctAnswer,
+      answerIndexType: typeof answerIndex,
+      correctAnswerType: typeof question.correctAnswer,
+      question: question.question,
+      options: question.options
+    });
+
+    // Ensure both are numbers for comparison
+    const correct = Number(answerIndex) === Number(question.correctAnswer);
 
     // Helper function to update topic recursively
     const updateTopicRecursively = (topics: Topic[]): Topic[] => {
