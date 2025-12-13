@@ -11,19 +11,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { 
-  Upload, 
-  FileText, 
-  ArrowRight, 
+import {
+  Upload,
+  FileText,
+  ArrowRight,
   ArrowLeft,
-  BookOpen, 
-  Zap, 
+  BookOpen,
+  Zap,
   Gamepad2,
   Clock,
   Target,
   Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store/appStore";
+import { createStudySessionWithAI } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
   open: boolean;
@@ -36,47 +39,104 @@ type StudyMode = "full-study" | "speed-run" | "game";
 
 export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySessionDialogProps) {
   const navigate = useNavigate();
+  const { setCurrentSession, createSpeedRun } = useAppStore();
+  const { toast } = useToast();
   const [step, setStep] = useState<Step>("upload");
   const [uploadType, setUploadType] = useState<UploadType>("text");
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedMode, setSelectedMode] = useState<StudyMode | null>(null);
-  const [topicCount, setTopicCount] = useState([5]);
-  const [questionCount, setQuestionCount] = useState([20]);
+  const [topicCount, setTopicCount] = useState([4]);
+  const [questionCount, setQuestionCount] = useState([10]);
   const [speedRunDuration, setSpeedRunDuration] = useState([10]);
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [createdSession, setCreatedSession] = useState<any>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+
+      // Read file content
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+
+        // For binary files (Word docs, PDFs), extract base64
+        // For text files, use as-is
+        if (result.startsWith('data:')) {
+          // Remove the "data:...;base64," prefix
+          const base64Content = result.split(',')[1];
+          setTextContent(base64Content);
+        } else {
+          setTextContent(result);
+        }
+      };
+
+      // Use readAsDataURL for proper binary handling
+      // This encodes files as base64, which the backend can decode
+      reader.readAsDataURL(file);
     }
   };
 
   const handleProcessContent = async () => {
     setIsProcessing(true);
-    // Simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsProcessing(false);
-    setStep("select-mode");
+
+    try {
+      const content = textContent.trim();
+      const title = sessionTitle.trim() || `Study Session ${new Date().toLocaleDateString()}`;
+
+      // Call backend API to create session with AI
+      const newSession = await createStudySessionWithAI(
+        title,
+        content,
+        topicCount[0],
+        questionCount[0]
+      );
+
+      setCreatedSession(newSession);
+      setCurrentSession(newSession);
+
+      toast({
+        title: "Session Created!",
+        description: `${newSession.topics} topics generated with ${questionCount[0]} questions each.`,
+      });
+
+      setIsProcessing(false);
+      setStep("select-mode");
+    } catch (error: any) {
+      setIsProcessing(false);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create study session. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleStartSession = () => {
-    onOpenChange(false);
-    
+    if (!createdSession) return;
+
+    // Navigate to the selected mode
     if (selectedMode === "full-study") {
       navigate("/full-study");
     } else if (selectedMode === "speed-run") {
+      createSpeedRun(createdSession.id);
       navigate("/speedrun");
     } else if (selectedMode === "game") {
       navigate("/browse-games");
     }
-    
+
     // Reset state
+    onOpenChange(false);
     setStep("upload");
     setUploadType("text");
     setTextContent("");
     setSelectedFile(null);
     setSelectedMode(null);
+    setSessionTitle("");
+    setCreatedSession(null);
   };
 
   const canProceed = uploadType === "text" ? textContent.trim().length > 0 : selectedFile !== null;
@@ -101,6 +161,18 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
         {step === "upload" && (
           <div className="space-y-4">
+            {/* Session Title */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Session Name (optional)
+              </label>
+              <Input
+                placeholder="e.g., Biology Chapter 5, Math Final Review..."
+                value={sessionTitle}
+                onChange={(e) => setSessionTitle(e.target.value)}
+              />
+            </div>
+
             {/* Upload Type Toggle */}
             <div className="flex rounded-lg border border-border p-1 bg-muted/50">
               <button

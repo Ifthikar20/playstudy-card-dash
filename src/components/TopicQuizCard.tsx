@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, ArrowRight, Trophy } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Question {
@@ -17,7 +17,9 @@ interface TopicQuizCardProps {
   questions: Question[];
   currentQuestionIndex: number;
   onAnswer: (answerIndex: number) => { correct: boolean; explanation: string };
+  onMoveToNext: () => void;  // Move to next question
   onComplete: () => void;
+  onSkipToNext?: () => void;  // Skip to next topic
   score: number | null;
   isCompleted: boolean;
 }
@@ -27,7 +29,9 @@ export function TopicQuizCard({
   questions,
   currentQuestionIndex,
   onAnswer,
+  onMoveToNext,
   onComplete,
+  onSkipToNext,
   score,
   isCompleted,
 }: TopicQuizCardProps) {
@@ -38,26 +42,51 @@ export function TopicQuizCard({
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex >= questions.length - 1;
 
-  const handleSelectAnswer = (index: number) => {
-    if (showResult) return;
-    setSelectedAnswer(index);
-  };
-
-  const handleSubmitAnswer = () => {
-    if (selectedAnswer === null) return;
-    const answerResult = onAnswer(selectedAnswer);
-    setResult(answerResult);
-    setShowResult(true);
-  };
-
-  const handleNext = () => {
+  // Reset state when question changes
+  useEffect(() => {
+    console.log('🔄 Question index changed, resetting state. New index:', currentQuestionIndex);
     setSelectedAnswer(null);
     setShowResult(false);
     setResult(null);
-    
-    if (isLastQuestion) {
-      onComplete();
+  }, [currentQuestionIndex]);
+
+  // Auto-advance to next question after showing result
+  useEffect(() => {
+    console.log('⏰ Timer effect triggered', { showResult, isLastQuestion });
+
+    if (showResult && !isLastQuestion) {
+      console.log('⏳ Starting 2-second timer to move to next question');
+      const timer = setTimeout(() => {
+        console.log('🚀 Timer fired! Calling onMoveToNext');
+        // Move to next question (which will trigger state reset via the other useEffect)
+        onMoveToNext();
+      }, 2000); // 2 second delay to read the explanation
+
+      return () => {
+        console.log('🧹 Cleaning up timer');
+        clearTimeout(timer);
+      };
+    } else if (showResult && isLastQuestion) {
+      console.log('🏁 Last question - starting timer to complete');
+      // If last question, auto-complete after delay
+      const timer = setTimeout(() => {
+        console.log('✅ Completing topic');
+        onComplete();
+      }, 2000);
+
+      return () => clearTimeout(timer);
     }
+  }, [showResult, isLastQuestion, onMoveToNext, onComplete]); // Removed currentQuestionIndex from deps
+
+  const handleSelectAnswer = (index: number) => {
+    if (showResult) return; // Don't allow selecting after already answered
+
+    setSelectedAnswer(index);
+
+    // Immediately submit the answer
+    const answerResult = onAnswer(index);
+    setResult(answerResult);
+    setShowResult(true);
   };
 
   if (isCompleted) {
@@ -113,11 +142,12 @@ export function TopicQuizCard({
                 disabled={showResult}
                 className={cn(
                   "w-full text-left p-3 rounded-lg border transition-all",
-                  "hover:border-primary hover:bg-primary/5",
+                  !showResult && "hover:border-primary hover:bg-primary/5 cursor-pointer",
                   isSelected && !showResult && "border-primary bg-primary/10",
                   isCorrect && "border-green-500 bg-green-50 dark:bg-green-950/30",
                   isWrong && "border-red-500 bg-red-50 dark:bg-red-950/30",
-                  showResult && !isCorrect && !isWrong && "opacity-50"
+                  showResult && !isCorrect && !isWrong && "opacity-50",
+                  showResult && "cursor-not-allowed"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -135,33 +165,33 @@ export function TopicQuizCard({
 
         {showResult && result && (
           <div className={cn(
-            "p-4 rounded-lg text-sm",
-            result.correct 
-              ? "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200" 
+            "p-4 rounded-lg text-sm animate-in fade-in slide-in-from-top-2 duration-300",
+            result.correct
+              ? "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200"
               : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200"
           )}>
             <p className="font-medium mb-1">
               {result.correct ? "Correct! 🎉" : "Not quite right"}
             </p>
             <p>{result.explanation}</p>
+            <p className="text-xs mt-2 opacity-70">
+              {isLastQuestion ? "Completing topic..." : "Next question in 2 seconds..."}
+            </p>
           </div>
         )}
 
-        <div className="flex justify-end pt-2">
-          {!showResult ? (
-            <Button 
-              onClick={handleSubmitAnswer} 
-              disabled={selectedAnswer === null}
+        {onSkipToNext && !showResult && (
+          <div className="flex justify-start pt-2">
+            <Button
+              variant="outline"
+              onClick={onSkipToNext}
+              className="gap-2"
             >
-              Submit Answer
+              <SkipForward size={16} />
+              Skip to Next Topic
             </Button>
-          ) : (
-            <Button onClick={handleNext}>
-              {isLastQuestion ? "Complete Topic" : "Next Question"}
-              <ArrowRight size={16} className="ml-2" />
-            </Button>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

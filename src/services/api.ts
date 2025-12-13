@@ -223,6 +223,139 @@ export const generateQuestions = async (topic: string, numQuestions: number = 5,
 };
 
 /**
+ * Create study session with AI-generated topics and questions
+ */
+export const createStudySessionWithAI = async (
+  title: string,
+  content: string,
+  numTopics: number = 4,
+  questionsPerTopic: number = 10
+): Promise<StudySession> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/create-with-ai`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title,
+        content,
+        num_topics: numTopics,
+        questions_per_topic: questionsPerTopic,
+      }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired or invalid - clear it and redirect to login
+        removeAuthToken();
+        // Redirect to login after a short delay to show the error message
+        setTimeout(() => {
+          window.location.href = '/auth';
+        }, 2000);
+        throw new Error('Your session has expired. Please log in again.');
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to create study session');
+    }
+
+    const data = await response.json();
+
+    // Transform API response to match frontend StudySession interface
+    return {
+      id: String(data.id),
+      title: data.title,
+      progress: data.progress,
+      topics: data.topics,
+      time: 'Just now',
+      hasFullStudy: data.hasFullStudy,
+      hasSpeedRun: data.hasSpeedRun,
+      hasQuiz: false,
+      studyContent: data.studyContent,
+      extractedTopics: data.extractedTopics,
+    };
+  } catch (error) {
+    console.error('Failed to create study session:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a study session
+ */
+export const deleteStudySession = async (sessionId: string): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      // If session doesn't exist (404), consider it already deleted - don't throw error
+      if (response.status === 404) {
+        console.warn(`Session ${sessionId} not found on server - may have been already deleted`);
+        return; // Success - session is gone either way
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to delete study session');
+    }
+  } catch (error) {
+    console.error('Failed to delete study session:', error);
+    throw error;
+  }
+};
+
+/**
+ * Archive a study session
+ */
+export const archiveStudySession = async (sessionId: string): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}/archive`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      // If session doesn't exist (404), consider it already gone - don't throw error
+      if (response.status === 404) {
+        console.warn(`Session ${sessionId} not found on server - may have been already deleted`);
+        return; // Success - session is gone either way
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to archive study session');
+    }
+  } catch (error) {
+    console.error('Failed to archive study session:', error);
+    throw error;
+  }
+};
+
+/**
  * Mock data for development/fallback
  */
 const getMockAppData = (): AppData => {

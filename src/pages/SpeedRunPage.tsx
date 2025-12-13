@@ -51,6 +51,23 @@ export default function SpeedRunPage() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [timeLeft, setTimeLeft] = useState(15);
 
+  // Generate questions and cards from session topics
+  const sessionQuestions = currentSession?.extractedTopics?.flatMap(topic => topic.questions) || sampleQuestions;
+  const sessionCards: FlashCard[] = currentSession?.extractedTopics?.flatMap(topic =>
+    topic.questions.map(q => ({
+      front: q.question,
+      back: q.options[q.correctAnswer]
+    }))
+  ) || sampleCards;
+
+  // Auto-start speed run if we have content from the session
+  useEffect(() => {
+    if (currentSession?.extractedTopics && currentSession.extractedTopics.length > 0 && !speedRunStarted) {
+      setSpeedRunStarted(true);
+      setStudyMaterial(currentSession.studyContent || '');
+    }
+  }, [currentSession, speedRunStarted]);
+
   // Timer for MCQ mode
   useEffect(() => {
     if (speedRunStarted && speedRunMode === 'mcq' && !hasAnswered && timeLeft > 0) {
@@ -77,14 +94,14 @@ export default function SpeedRunPage() {
     if (hasAnswered) return;
     setSelectedAnswer(index);
     setHasAnswered(true);
-    if (index === sampleQuestions[currentIndex].correctAnswer) {
+    if (index === sessionQuestions[currentIndex].correctAnswer) {
       setCorrectCount(correctCount + 1);
       addXp(10);
     }
   };
 
   const nextItem = () => {
-    const maxIndex = speedRunMode === 'mcq' ? sampleQuestions.length - 1 : sampleCards.length - 1;
+    const maxIndex = speedRunMode === 'mcq' ? sessionQuestions.length - 1 : sessionCards.length - 1;
     if (currentIndex < maxIndex) {
       setCurrentIndex(currentIndex + 1);
       setSelectedAnswer(null);
@@ -110,16 +127,16 @@ export default function SpeedRunPage() {
         ? "border-primary bg-primary/10"
         : "border-border hover:border-primary/50 hover:bg-accent/50";
     }
-    
-    const isCorrect = index === sampleQuestions[currentIndex].correctAnswer;
+
+    const isCorrect = index === sessionQuestions[currentIndex].correctAnswer;
     const isSelected = index === selectedAnswer;
-    
+
     if (isCorrect) return "border-green-500 bg-green-100 dark:bg-green-900/30";
     if (isSelected && !isCorrect) return "border-red-500 bg-red-100 dark:bg-red-900/30";
     return "border-border opacity-50";
   };
 
-  const totalItems = speedRunMode === 'mcq' ? sampleQuestions.length : sampleCards.length;
+  const totalItems = speedRunMode === 'mcq' ? sessionQuestions.length : sessionCards.length;
 
   // No session selected - show create new option
   if (!currentSession) {
@@ -152,8 +169,8 @@ export default function SpeedRunPage() {
     );
   }
 
-  // Session selected but no Speed Run created yet
-  if (!currentSession.hasSpeedRun) {
+  // Session selected but no topics extracted yet
+  if (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0) {
     return (
       <div className="min-h-screen bg-background flex w-full">
         <Sidebar />
@@ -161,18 +178,18 @@ export default function SpeedRunPage() {
           <div className="text-center p-8 max-w-md">
             <Zap size={64} className="mx-auto text-primary mb-4" />
             <h2 className="text-2xl font-bold text-foreground mb-2">
-              Create Speed Run for "{currentSession.title}"
+              No Content for "{currentSession.title}"
             </h2>
             <p className="text-muted-foreground mb-6">
-              No Speed Run exists yet. Create one to practice with timed MCQs or flip cards.
+              This session needs study content. Please upload content through the Create Study Session dialog first.
             </p>
-            <Button 
-              size="lg" 
-              onClick={() => createSpeedRun(currentSession.id)}
+            <Button
+              size="lg"
+              onClick={() => window.location.href = '/'}
               className="gap-2"
             >
               <PlusCircle size={20} />
-              Create Speed Run
+              Go to Dashboard
             </Button>
           </div>
         </main>
@@ -322,11 +339,11 @@ export default function SpeedRunPage() {
 
               <div className="bg-card rounded-xl border border-border p-6 lg:p-8 mb-6 shadow-sm">
                 <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-6">
-                  {sampleQuestions[currentIndex]?.question}
+                  {sessionQuestions[currentIndex]?.question}
                 </h3>
 
                 <div className="space-y-3">
-                  {sampleQuestions[currentIndex]?.options.map((option, index) => (
+                  {sessionQuestions[currentIndex]?.options.map((option, index) => (
                     <button
                       key={index}
                       onClick={() => handleAnswerSelect(index)}
@@ -339,10 +356,10 @@ export default function SpeedRunPage() {
                         </span>
                         <span className="text-foreground">{option}</span>
                       </div>
-                      {hasAnswered && index === sampleQuestions[currentIndex].correctAnswer && (
+                      {hasAnswered && index === sessionQuestions[currentIndex].correctAnswer && (
                         <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
                       )}
-                      {hasAnswered && index === selectedAnswer && index !== sampleQuestions[currentIndex].correctAnswer && (
+                      {hasAnswered && index === selectedAnswer && index !== sessionQuestions[currentIndex].correctAnswer && (
                         <XCircle className="text-red-600 dark:text-red-400" size={20} />
                       )}
                     </button>
@@ -402,20 +419,20 @@ export default function SpeedRunPage() {
                        style={{ backfaceVisibility: 'hidden' }}>
                     <div className="text-center">
                       <h3 className="text-xl font-semibold text-foreground mb-4">
-                        {sampleCards[currentIndex]?.front}
+                        {sessionCards[currentIndex]?.front}
                       </h3>
                       <p className="text-sm text-muted-foreground">Click to reveal answer</p>
                     </div>
                   </div>
-                  
+
                   <div className="absolute inset-0 w-full h-full bg-primary/10 rounded-xl border border-primary/20 p-8 flex items-center justify-center shadow-lg"
-                       style={{ 
+                       style={{
                          backfaceVisibility: 'hidden',
                          transform: 'rotateY(180deg)'
                        }}>
                     <div className="text-center">
                       <h3 className="text-xl font-medium text-foreground mb-4">
-                        {sampleCards[currentIndex]?.back}
+                        {sessionCards[currentIndex]?.back}
                       </h3>
                       <p className="text-sm text-primary">Click to go back</p>
                     </div>

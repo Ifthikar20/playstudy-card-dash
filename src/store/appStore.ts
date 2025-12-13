@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AppData } from '@/services/api';
+import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession } from '@/services/api';
 
 interface Game {
   id: number;
@@ -28,6 +28,9 @@ interface Topic {
   completed: boolean;
   score: number | null;
   currentQuestionIndex: number;
+  isCategory?: boolean;
+  parentTopicId?: string | null;
+  subtopics?: Topic[];
 }
 
 interface StudySession {
@@ -52,12 +55,16 @@ interface AppState {
   currentSession: StudySession | null;
   studySessions: StudySession[];
   setCurrentSession: (session: StudySession | null) => void;
+  createSession: (title: string, content: string) => StudySession;
   createFullStudy: (sessionId: string) => void;
   createSpeedRun: (sessionId: string) => void;
   createQuiz: (sessionId: string) => void;
   processStudyContent: (sessionId: string, content: string) => void;
   answerQuestion: (sessionId: string, topicId: string, answerIndex: number) => { correct: boolean; explanation: string };
+  moveToNextQuestion: (sessionId: string, topicId: string) => void;
   completeTopic: (sessionId: string, topicId: string) => void;
+  deleteStudySession: (sessionId: string) => Promise<void>;
+  archiveStudySession: (sessionId: string) => Promise<void>;
 
   // Games
   games: Game[];
@@ -245,7 +252,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   studySessions: [],
 
   setCurrentSession: (session) => set({ currentSession: session }),
-  
+
+  createSession: (title, content) => {
+    const newSession: StudySession = {
+      id: `session-${Date.now()}`,
+      title,
+      progress: 0,
+      topics: 0,
+      time: 'Just now',
+      hasFullStudy: false,
+      hasSpeedRun: false,
+      hasQuiz: false,
+      studyContent: content,
+    };
+
+    set((state) => ({
+      studySessions: [...state.studySessions, newSession],
+      currentSession: newSession,
+    }));
+
+    return newSession;
+  },
+
   createFullStudy: (sessionId) => set((state) => ({
     studySessions: state.studySessions.map((s) =>
       s.id === sessionId ? { ...s, hasFullStudy: true } : s
@@ -283,65 +311,232 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     const session = state.studySessions.find(s => s.id === sessionId);
     if (!session?.extractedTopics) return { correct: false, explanation: '' };
-    
-    const topic = session.extractedTopics.find(t => t.id === topicId);
+
+    // Helper function to find topic in hierarchical structure
+    const findTopic = (topics: Topic[], id: string): Topic | null => {
+      for (const topic of topics) {
+        if (topic.id === id) return topic;
+        if (topic.subtopics) {
+          const found = findTopic(topic.subtopics, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const topic = findTopic(session.extractedTopics, topicId);
     if (!topic) return { correct: false, explanation: '' };
-    
+
     const question = topic.questions[topic.currentQuestionIndex];
     if (!question) return { correct: false, explanation: '' };
-    
-    const correct = answerIndex === question.correctAnswer;
-    
-    // Update current question index
+
+    // Debug logging
+    console.log('Answer validation:', {
+      answerIndex,
+      correctAnswer: question.correctAnswer,
+      answerIndexType: typeof answerIndex,
+      correctAnswerType: typeof question.correctAnswer,
+      question: question.question,
+      options: question.options
+    });
+
+    // Ensure both are numbers for comparison
+    const correct = Number(answerIndex) === Number(question.correctAnswer);
+
+    // Helper function to update score recursively (WITHOUT incrementing index)
+    const updateScoreRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          return {
+            ...t,
+            score: (t.score || 0) + (correct ? 100 / t.questions.length : 0),
+          };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: updateScoreRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
+    // Update score (but don't move to next question yet)
     set((state) => {
       const updatedSessions = state.studySessions.map((s) => {
         if (s.id !== sessionId || !s.extractedTopics) return s;
         return {
           ...s,
-          extractedTopics: s.extractedTopics.map(t => {
-            if (t.id !== topicId) return t;
-            const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
-            const isComplete = newIndex >= t.questions.length;
-            return {
-              ...t,
-              currentQuestionIndex: newIndex,
-              completed: isComplete,
-              score: isComplete ? Math.round(((t.score || 0) + (correct ? 100 / t.questions.length : 0))) : (t.score || 0) + (correct ? 100 / t.questions.length : 0),
-            };
-          })
+          extractedTopics: updateScoreRecursively(s.extractedTopics)
         };
       });
-      
+
       const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-      return { 
-        studySessions: updatedSessions, 
-        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession 
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
       };
     });
 
     if (correct) {
       get().addXp(10);
     }
-    
+
     return { correct, explanation: question.explanation };
   },
 
+  moveToNextQuestion: (sessionId, topicId) => {
+    console.log('🔄 moveToNextQuestion called', { sessionId, topicId });
+
+    const state = get();
+    const session = state.studySessions.find(s => s.id === sessionId);
+    if (!session?.extractedTopics) {
+      console.error('❌ No session or extractedTopics found');
+      return;
+    }
+
+    // Helper function to find topic in hierarchical structure
+    const findTopic = (topics: Topic[], id: string): Topic | null => {
+      for (const topic of topics) {
+        if (topic.id === id) return topic;
+        if (topic.subtopics) {
+          const found = findTopic(topic.subtopics, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const topic = findTopic(session.extractedTopics, topicId);
+    if (!topic) {
+      console.error('❌ Topic not found', topicId);
+      return;
+    }
+
+    console.log('📝 Current question index:', topic.currentQuestionIndex, '/', topic.questions.length);
+
+    // Helper function to increment question index and check completion
+    const updateIndexRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
+          const isComplete = newIndex >= t.questions.length;
+
+          console.log('➡️ Moving to question index:', newIndex, 'Complete:', isComplete);
+
+          return {
+            ...t,
+            currentQuestionIndex: newIndex,
+            completed: isComplete,
+            score: isComplete ? Math.round(t.score || 0) : t.score,
+          };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: updateIndexRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
+    // Move to next question
+    set((state) => {
+      const updatedSessions = state.studySessions.map((s) => {
+        if (s.id !== sessionId || !s.extractedTopics) return s;
+        return {
+          ...s,
+          extractedTopics: updateIndexRecursively(s.extractedTopics)
+        };
+      });
+
+      const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
+
+      console.log('✅ State updated, new currentSession:', updatedCurrent?.id);
+
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
+      };
+    });
+  },
+
   completeTopic: (sessionId, topicId) => set((state) => {
+    // Helper function to update topic recursively
+    const markCompleteRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          return { ...t, completed: true };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: markCompleteRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
     const updatedSessions = state.studySessions.map((s) => {
       if (s.id !== sessionId || !s.extractedTopics) return s;
       return {
         ...s,
-        extractedTopics: s.extractedTopics.map(t =>
-          t.id === topicId ? { ...t, completed: true } : t
-        )
+        extractedTopics: markCompleteRecursively(s.extractedTopics)
       };
     });
     const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-    return { 
-      studySessions: updatedSessions, 
-      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession 
+    return {
+      studySessions: updatedSessions,
+      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
     };
   }),
+
+  deleteStudySession: async (sessionId) => {
+    // Optimistic update - remove from UI immediately
+    set((state) => {
+      const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+      };
+    });
+
+    // Then sync with backend
+    try {
+      await apiDeleteStudySession(sessionId);
+      console.log(`✓ Session ${sessionId} deleted successfully`);
+    } catch (error) {
+      console.error('Failed to delete study session on server:', error);
+      // UI already updated, so user doesn't see the error
+      // Session will be gone from local state but may still exist on server
+      // It will re-appear on next page refresh if deletion failed
+    }
+  },
+
+  archiveStudySession: async (sessionId) => {
+    // Optimistic update - remove from UI immediately
+    set((state) => {
+      const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+      };
+    });
+
+    // Then sync with backend
+    try {
+      await apiArchiveStudySession(sessionId);
+      console.log(`✓ Session ${sessionId} archived successfully`);
+    } catch (error) {
+      console.error('Failed to archive study session on server:', error);
+      // UI already updated, so user doesn't see the error
+      // Session will be gone from local state but may still exist on server
+      // It will re-appear on next page refresh if archival failed
+    }
+  },
 
   // Games data - Start empty, will be populated by API
   games: [],
