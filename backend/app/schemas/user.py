@@ -25,26 +25,53 @@ class UserLogin(BaseModel):
 
 class UserProfile(BaseModel):
     """Schema for user profile data."""
-    id: int
+    id: str  # Convert to string for frontend
     email: str
     name: str
     xp: int
     level: int
-    created_at: datetime
 
     class Config:
         from_attributes = True
 
+    @classmethod
+    def from_db_model(cls, user):
+        """Create response from database model."""
+        return cls(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            xp=user.xp,
+            level=user.level,
+        )
+
 
 class UserStats(BaseModel):
-    """Schema for user statistics."""
-    total_sessions: int
-    total_study_time: int  # in seconds
-    average_accuracy: float
-    current_streak: int
-    longest_streak: int
-    xp: int
-    level: int
+    """Schema for user statistics - matches frontend interface."""
+    totalSessions: int
+    averageAccuracy: int  # Rounded percentage
+    questionsAnswered: int
+    totalStudyTime: str  # Formatted as "18hrs" or "2.5hrs"
+
+    @classmethod
+    def from_calculations(cls, total_sessions: int, avg_accuracy: float,
+                         questions_answered: int, total_time_seconds: int):
+        """Create stats from calculated values with proper formatting."""
+        # Format total study time
+        hours = total_time_seconds / 3600
+        if hours < 1:
+            time_str = f"{int(hours * 60)}min"
+        elif hours == int(hours):
+            time_str = f"{int(hours)}hrs"
+        else:
+            time_str = f"{hours:.1f}hrs"
+
+        return cls(
+            totalSessions=total_sessions,
+            averageAccuracy=round(avg_accuracy),
+            questionsAnswered=questions_answered,
+            totalStudyTime=time_str,
+        )
 
 
 class Token(BaseModel):

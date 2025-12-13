@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
+    # Anthropic AI
+    ANTHROPIC_API_KEY: str
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

@@ -68,15 +68,8 @@ async def get_app_data(
         .all()
     )
 
-    # Build user profile
-    user_profile = UserProfile(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        xp=current_user.xp,
-        level=current_user.level,
-        created_at=current_user.created_at,
-    )
+    # Build user profile using custom method
+    user_profile = UserProfile.from_db_model(current_user)
 
     # Calculate user statistics
     total_sessions = len(study_sessions)
@@ -90,24 +83,21 @@ async def get_app_data(
         else 0.0
     )
 
-    # Calculate streak (simplified - consecutive days would require date logic)
-    current_streak = min(total_sessions, 7)  # Placeholder logic
-    longest_streak = min(total_sessions, 10)  # Placeholder logic
+    # Calculate total questions answered (estimated from topics_count)
+    questions_answered = sum(session.topics_count * 5 for session in study_sessions)  # ~5 questions per topic
 
-    user_stats = UserStats(
+    # Create user stats using custom method
+    user_stats = UserStats.from_calculations(
         total_sessions=total_sessions,
-        total_study_time=total_study_time,
-        average_accuracy=round(average_accuracy, 2),
-        current_streak=current_streak,
-        longest_streak=longest_streak,
-        xp=current_user.xp,
-        level=current_user.level,
+        avg_accuracy=average_accuracy,
+        questions_answered=questions_answered,
+        total_time_seconds=total_study_time,
     )
 
-    # Convert to response schemas
-    games_response = [GameResponse.model_validate(game) for game in games]
+    # Convert to response schemas using custom methods
+    games_response = [GameResponse.from_db_model(game) for game in games]
     sessions_response = [
-        StudySessionResponse.model_validate(session) for session in study_sessions
+        StudySessionResponse.from_db_model(session) for session in study_sessions
     ]
 
     # Build final response
