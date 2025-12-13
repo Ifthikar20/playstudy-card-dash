@@ -279,6 +279,64 @@ export const createStudySessionWithAI = async (
 };
 
 /**
+ * Delete a study session
+ */
+export const deleteStudySession = async (sessionId: string): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to delete study session');
+    }
+  } catch (error) {
+    console.error('Failed to delete study session:', error);
+    throw error;
+  }
+};
+
+/**
+ * Archive a study session
+ */
+export const archiveStudySession = async (sessionId: string): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}/archive`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to archive study session');
+    }
+  } catch (error) {
+    console.error('Failed to archive study session:', error);
+    throw error;
+  }
+};
+
+/**
  * Mock data for development/fallback
  */
 const getMockAppData = (): AppData => {

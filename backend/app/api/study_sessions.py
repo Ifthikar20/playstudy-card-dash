@@ -403,3 +403,54 @@ Return in this EXACT format:
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create study session: {str(e)}")
+
+
+@router.delete("/{session_id}")
+async def delete_study_session(
+    session_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a study session and all its associated data.
+
+    This will cascade delete all topics and questions associated with the session.
+    """
+    session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    db.delete(session)
+    db.commit()
+
+    return {"message": "Study session deleted successfully", "id": session_id}
+
+
+@router.patch("/{session_id}/archive")
+async def archive_study_session(
+    session_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Archive a study session.
+
+    Changes the session status to 'archived'.
+    """
+    session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    session.status = "archived"
+    db.commit()
+    db.refresh(session)
+
+    return {"message": "Study session archived successfully", "id": session_id}

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AppData } from '@/services/api';
+import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession } from '@/services/api';
 
 interface Game {
   id: number;
@@ -62,6 +62,8 @@ interface AppState {
   processStudyContent: (sessionId: string, content: string) => void;
   answerQuestion: (sessionId: string, topicId: string, answerIndex: number) => { correct: boolean; explanation: string };
   completeTopic: (sessionId: string, topicId: string) => void;
+  deleteStudySession: (sessionId: string) => Promise<void>;
+  archiveStudySession: (sessionId: string) => Promise<void>;
 
   // Games
   games: Game[];
@@ -406,6 +408,60 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
     };
   }),
+
+  deleteStudySession: async (sessionId) => {
+    try {
+      // Call API to delete from backend
+      await apiDeleteStudySession(sessionId);
+
+      // Update local state after successful API call
+      set((state) => {
+        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+        return {
+          studySessions: updatedSessions,
+          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+        };
+      });
+    } catch (error) {
+      console.error('Failed to delete study session:', error);
+      // Still update local state even if API fails (for offline functionality)
+      set((state) => {
+        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+        return {
+          studySessions: updatedSessions,
+          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+        };
+      });
+    }
+  },
+
+  archiveStudySession: async (sessionId) => {
+    try {
+      // Call API to archive on backend
+      await apiArchiveStudySession(sessionId);
+
+      // Update local state after successful API call
+      // For now, archive just removes from the list (similar to delete)
+      // The backend sets status to 'archived'
+      set((state) => {
+        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+        return {
+          studySessions: updatedSessions,
+          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+        };
+      });
+    } catch (error) {
+      console.error('Failed to archive study session:', error);
+      // Still update local state even if API fails (for offline functionality)
+      set((state) => {
+        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+        return {
+          studySessions: updatedSessions,
+          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+        };
+      });
+    }
+  },
 
   // Games data - Start empty, will be populated by API
   games: [],

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { 
-  BookOpen, 
-  FolderPlus, 
-  Trophy, 
-  Settings, 
+import {
+  BookOpen,
+  FolderPlus,
+  Trophy,
+  Settings,
   User,
   Menu,
   X,
@@ -13,7 +13,9 @@ import {
   GraduationCap,
   Clock,
   Star,
-  Check
+  Check,
+  Trash2,
+  Archive
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -32,7 +34,7 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { studySessions, currentSession, setCurrentSession } = useAppStore();
+  const { studySessions, currentSession, setCurrentSession, deleteStudySession, archiveStudySession } = useAppStore();
   return (
     <div className={cn(
       "bg-card border-r border-border transition-all duration-300 flex flex-col h-screen sticky top-0",
@@ -96,17 +98,19 @@ export function Sidebar() {
           <ScrollArea className="h-[calc(100%-2rem)]">
             <div className="space-y-1 pr-2">
               {studySessions.map((session) => (
-                <div 
-                  key={session.id} 
-                  onClick={() => setCurrentSession(session)}
+                <div
+                  key={session.id}
                   className={cn(
-                    "flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer",
-                    currentSession?.id === session.id 
-                      ? "bg-primary/10 border border-primary/20" 
+                    "group flex items-center justify-between p-2 rounded-lg transition-colors",
+                    currentSession?.id === session.id
+                      ? "bg-primary/10 border border-primary/20"
                       : "hover:bg-accent/50"
                   )}
                 >
-                  <div className="min-w-0 flex-1">
+                  <div
+                    className="min-w-0 flex-1 cursor-pointer"
+                    onClick={() => setCurrentSession(session)}
+                  >
                     <p className="text-xs font-medium text-foreground truncate">{session.title}</p>
                     <p className="text-[10px] text-muted-foreground">{session.time} • {session.topics} topics</p>
                   </div>
@@ -115,6 +119,21 @@ export function Sidebar() {
                       <Check size={12} className="text-primary" />
                     )}
                     <span className="text-xs font-semibold text-primary">{session.progress}%</span>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Delete "${session.title}"?`)) {
+                          await deleteStudySession(session.id);
+                          if (currentSession?.id === session.id) {
+                            setCurrentSession(null);
+                          }
+                        }
+                      }}
+                      className="ml-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-destructive/20 rounded transition-all"
+                      title="Delete session"
+                    >
+                      <Trash2 size={12} className="text-destructive" />
+                    </button>
                   </div>
                 </div>
               ))}
