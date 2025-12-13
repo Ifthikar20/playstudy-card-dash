@@ -7,6 +7,9 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 import anthropic
 import json
+import io
+from docx import Document
+from PyPDF2 import PdfReader
 
 from app.config import settings
 from app.dependencies import get_current_active_user, get_db
@@ -17,6 +20,53 @@ from app.models.question import Question
 from app.core.rate_limit import limiter
 
 router = APIRouter()
+
+
+def extract_text_from_content(content: str) -> str:
+    """
+    Extract readable text from uploaded content.
+    Handles:
+    - Plain text
+    - Word documents (.docx)
+    - PDF files
+
+    Args:
+        content: Raw content string (may be binary or text)
+
+    Returns:
+        Extracted text string
+    """
+    # Check if content starts with binary markers
+    if content.startswith('PK\x03\x04'):
+        # This is a ZIP file (likely .docx)
+        try:
+            content_bytes = content.encode('latin-1')
+            doc = Document(io.BytesIO(content_bytes))
+            text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+            if text.strip():
+                return text
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to extract text from Word document: {str(e)}"
+            )
+
+    elif content.startswith('%PDF'):
+        # This is a PDF file
+        try:
+            content_bytes = content.encode('latin-1')
+            pdf_reader = PdfReader(io.BytesIO(content_bytes))
+            text = '\n'.join([page.extract_text() for page in pdf_reader.pages])
+            if text.strip():
+                return text
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to extract text from PDF: {str(e)}"
+            )
+
+    # Assume it's plain text
+    return content
 
 
 class QuestionSchema(BaseModel):
@@ -80,6 +130,15 @@ async def create_study_session_with_ai(
         - 5 requests per minute per user
     """
     try:
+        # Extract text from content (handles Word docs, PDFs, plain text)
+        extracted_text = extract_text_from_content(data.content)
+
+        if not extracted_text or len(extracted_text.strip()) < 50:
+            raise HTTPException(
+                status_code=400,
+                detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
+            )
+
         # Initialize Anthropic client
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
@@ -87,7 +146,7 @@ async def create_study_session_with_ai(
         topics_prompt = f"""Analyze this study material and extract {data.num_topics} major topics that should be covered.
 
 Study Material:
-{data.content}
+{extracted_text}
 
 Requirements:
 1. Identify {data.num_topics} distinct, important topics from the material
@@ -129,7 +188,7 @@ Return ONLY a valid JSON object in this EXACT format:
             user_id=current_user.id,
             title=data.title,
             topic=extracted_topics[0]["title"] if extracted_topics else "General Study",
-            study_content=data.content,
+            study_content=extracted_text,  # Store the extracted text, not binary
             topics_count=len(extracted_topics),
             has_full_study=True,
             has_speed_run=True,
@@ -159,7 +218,7 @@ Topic: {topic_data['title']}
 Description: {topic_data.get('description', '')}
 
 Study Material:
-{data.content}
+{extracted_text}
 
 Requirements:
 1. Generate exactly {data.questions_per_topic} questions
