@@ -52,6 +52,7 @@ interface AppState {
   currentSession: StudySession | null;
   studySessions: StudySession[];
   setCurrentSession: (session: StudySession | null) => void;
+  createSession: (title: string, content: string) => StudySession;
   createFullStudy: (sessionId: string) => void;
   createSpeedRun: (sessionId: string) => void;
   createQuiz: (sessionId: string) => void;
@@ -245,7 +246,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   studySessions: [],
 
   setCurrentSession: (session) => set({ currentSession: session }),
-  
+
+  createSession: (title, content) => {
+    const newSession: StudySession = {
+      id: `session-${Date.now()}`,
+      title,
+      progress: 0,
+      topics: 0,
+      time: 'Just now',
+      hasFullStudy: false,
+      hasSpeedRun: false,
+      hasQuiz: false,
+      studyContent: content,
+    };
+
+    set((state) => ({
+      studySessions: [...state.studySessions, newSession],
+      currentSession: newSession,
+    }));
+
+    return newSession;
+  },
+
   createFullStudy: (sessionId) => set((state) => ({
     studySessions: state.studySessions.map((s) =>
       s.id === sessionId ? { ...s, hasFullStudy: true } : s

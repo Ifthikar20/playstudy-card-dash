@@ -11,19 +11,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { 
-  Upload, 
-  FileText, 
-  ArrowRight, 
+import {
+  Upload,
+  FileText,
+  ArrowRight,
   ArrowLeft,
-  BookOpen, 
-  Zap, 
+  BookOpen,
+  Zap,
   Gamepad2,
   Clock,
   Target,
   Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/store/appStore";
 
 interface CreateStudySessionDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ type StudyMode = "full-study" | "speed-run" | "game";
 
 export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySessionDialogProps) {
   const navigate = useNavigate();
+  const { createSession, processStudyContent, createSpeedRun } = useAppStore();
   const [step, setStep] = useState<Step>("upload");
   const [uploadType, setUploadType] = useState<UploadType>("text");
   const [textContent, setTextContent] = useState("");
@@ -45,10 +47,20 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [topicCount, setTopicCount] = useState([5]);
   const [questionCount, setQuestionCount] = useState([20]);
   const [speedRunDuration, setSpeedRunDuration] = useState([10]);
+  const [sessionTitle, setSessionTitle] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFile(file);
+
+      // Read file content
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setTextContent(content);
+      };
+      reader.readAsText(file);
     }
   };
 
@@ -61,22 +73,33 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   };
 
   const handleStartSession = () => {
-    onOpenChange(false);
-    
+    // Use textContent which contains the file content if a file was uploaded
+    const content = textContent.trim();
+    const title = sessionTitle.trim() || `Study Session ${new Date().toLocaleDateString()}`;
+
+    // Create the session with content
+    const newSession = createSession(title, content);
+
+    // Process content for full study mode
     if (selectedMode === "full-study") {
+      processStudyContent(newSession.id, content);
       navigate("/full-study");
     } else if (selectedMode === "speed-run") {
+      createSpeedRun(newSession.id);
+      processStudyContent(newSession.id, content);
       navigate("/speedrun");
     } else if (selectedMode === "game") {
       navigate("/browse-games");
     }
-    
+
     // Reset state
+    onOpenChange(false);
     setStep("upload");
     setUploadType("text");
     setTextContent("");
     setSelectedFile(null);
     setSelectedMode(null);
+    setSessionTitle("");
   };
 
   const canProceed = uploadType === "text" ? textContent.trim().length > 0 : selectedFile !== null;
@@ -101,6 +124,18 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
         {step === "upload" && (
           <div className="space-y-4">
+            {/* Session Title */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Session Name (optional)
+              </label>
+              <Input
+                placeholder="e.g., Biology Chapter 5, Math Final Review..."
+                value={sessionTitle}
+                onChange={(e) => setSessionTitle(e.target.value)}
+              />
+            </div>
+
             {/* Upload Type Toggle */}
             <div className="flex rounded-lg border border-border p-1 bg-muted/50">
               <button
