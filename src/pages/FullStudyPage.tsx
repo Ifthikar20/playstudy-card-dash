@@ -69,7 +69,13 @@ const nodeStyles = {
 };
 
 export default function FullStudyPage() {
-  const { currentSession, processStudyContent, answerQuestion, moveToNextQuestion, completeTopic } = useAppStore();
+  // Use explicit selector to ensure re-renders on currentSession changes
+  const currentSession = useAppStore(state => state.currentSession);
+  const processStudyContent = useAppStore(state => state.processStudyContent);
+  const answerQuestion = useAppStore(state => state.answerQuestion);
+  const moveToNextQuestion = useAppStore(state => state.moveToNextQuestion);
+  const completeTopic = useAppStore(state => state.completeTopic);
+
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -459,6 +465,7 @@ export default function FullStudyPage() {
                     </Button>
                     
                     <TopicQuizCard
+                      key={`quiz-${selectedTopicId}-q${selectedTopic.currentQuestionIndex || 0}`}
                       topicTitle={selectedTopic.title}
                       questions={selectedTopic.questions || []}
                       currentQuestionIndex={selectedTopic.currentQuestionIndex || 0}
