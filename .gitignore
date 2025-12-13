@@ -35,6 +35,18 @@ htmlcov/
 .ruff_cache/
 .tox/
 .cache/
+venv/
+env/
+ENV/
+
+# =====================
+# Environment / Secrets
+# =====================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
 
 # =====================
 # OS files
