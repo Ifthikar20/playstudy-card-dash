@@ -69,7 +69,7 @@ const nodeStyles = {
 };
 
 export default function FullStudyPage() {
-  const { currentSession, processStudyContent, answerQuestion, completeTopic } = useAppStore();
+  const { currentSession, processStudyContent, answerQuestion, moveToNextQuestion, completeTopic } = useAppStore();
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -218,6 +218,11 @@ export default function FullStudyPage() {
   const handleAnswerQuestion = (topicId: string, answerIndex: number) => {
     if (!currentSession) return { correct: false, explanation: '' };
     return answerQuestion(currentSession.id, topicId, answerIndex);
+  };
+
+  const handleMoveToNext = (topicId: string) => {
+    if (!currentSession) return;
+    moveToNextQuestion(currentSession.id, topicId);
   };
 
   const handleCompleteTopic = (topicId: string) => {
@@ -426,6 +431,7 @@ export default function FullStudyPage() {
                       questions={selectedTopic.questions || []}
                       currentQuestionIndex={selectedTopic.currentQuestionIndex || 0}
                       onAnswer={(answerIndex) => handleAnswerQuestion(selectedTopicId, answerIndex)}
+                      onMoveToNext={() => handleMoveToNext(selectedTopicId)}
                       onComplete={() => handleCompleteTopic(selectedTopicId)}
                       onSkipToNext={handleSkipToNextTopic}
                       score={selectedTopic.score}

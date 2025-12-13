@@ -17,8 +17,9 @@ interface TopicQuizCardProps {
   questions: Question[];
   currentQuestionIndex: number;
   onAnswer: (answerIndex: number) => { correct: boolean; explanation: string };
+  onMoveToNext: () => void;  // Move to next question
   onComplete: () => void;
-  onSkipToNext?: () => void;  // New prop to skip to next topic
+  onSkipToNext?: () => void;  // Skip to next topic
   score: number | null;
   isCompleted: boolean;
 }
@@ -28,6 +29,7 @@ export function TopicQuizCard({
   questions,
   currentQuestionIndex,
   onAnswer,
+  onMoveToNext,
   onComplete,
   onSkipToNext,
   score,
@@ -51,7 +53,8 @@ export function TopicQuizCard({
   useEffect(() => {
     if (showResult && !isLastQuestion) {
       const timer = setTimeout(() => {
-        // State will be reset by the useEffect above when currentQuestionIndex changes
+        // Move to next question (which will trigger state reset via the other useEffect)
+        onMoveToNext();
       }, 2000); // 2 second delay to read the explanation
 
       return () => clearTimeout(timer);
@@ -63,7 +66,7 @@ export function TopicQuizCard({
 
       return () => clearTimeout(timer);
     }
-  }, [showResult, isLastQuestion, onComplete]);
+  }, [showResult, isLastQuestion, onMoveToNext, onComplete]);
 
   const handleSelectAnswer = (index: number) => {
     if (showResult) return; // Don't allow selecting after already answered

@@ -61,6 +61,7 @@ interface AppState {
   createQuiz: (sessionId: string) => void;
   processStudyContent: (sessionId: string, content: string) => void;
   answerQuestion: (sessionId: string, topicId: string, answerIndex: number) => { correct: boolean; explanation: string };
+  moveToNextQuestion: (sessionId: string, topicId: string) => void;
   completeTopic: (sessionId: string, topicId: string) => void;
   deleteStudySession: (sessionId: string) => Promise<void>;
   archiveStudySession: (sessionId: string) => Promise<void>;
@@ -342,36 +343,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Ensure both are numbers for comparison
     const correct = Number(answerIndex) === Number(question.correctAnswer);
 
-    // Helper function to update topic recursively
-    const updateTopicRecursively = (topics: Topic[]): Topic[] => {
+    // Helper function to update score recursively (WITHOUT incrementing index)
+    const updateScoreRecursively = (topics: Topic[]): Topic[] => {
       return topics.map(t => {
         if (t.id === topicId) {
-          const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
-          const isComplete = newIndex >= t.questions.length;
           return {
             ...t,
-            currentQuestionIndex: newIndex,
-            completed: isComplete,
-            score: isComplete ? Math.round(((t.score || 0) + (correct ? 100 / t.questions.length : 0))) : (t.score || 0) + (correct ? 100 / t.questions.length : 0),
+            score: (t.score || 0) + (correct ? 100 / t.questions.length : 0),
           };
         }
         if (t.subtopics) {
           return {
             ...t,
-            subtopics: updateTopicRecursively(t.subtopics)
+            subtopics: updateScoreRecursively(t.subtopics)
           };
         }
         return t;
       });
     };
 
-    // Update current question index
+    // Update score (but don't move to next question yet)
     set((state) => {
       const updatedSessions = state.studySessions.map((s) => {
         if (s.id !== sessionId || !s.extractedTopics) return s;
         return {
           ...s,
-          extractedTopics: updateTopicRecursively(s.extractedTopics)
+          extractedTopics: updateScoreRecursively(s.extractedTopics)
         };
       });
 
@@ -387,6 +384,67 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     return { correct, explanation: question.explanation };
+  },
+
+  moveToNextQuestion: (sessionId, topicId) => {
+    const state = get();
+    const session = state.studySessions.find(s => s.id === sessionId);
+    if (!session?.extractedTopics) return;
+
+    // Helper function to find topic in hierarchical structure
+    const findTopic = (topics: Topic[], id: string): Topic | null => {
+      for (const topic of topics) {
+        if (topic.id === id) return topic;
+        if (topic.subtopics) {
+          const found = findTopic(topic.subtopics, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const topic = findTopic(session.extractedTopics, topicId);
+    if (!topic) return;
+
+    // Helper function to increment question index and check completion
+    const updateIndexRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          const newIndex = Math.min(t.currentQuestionIndex + 1, t.questions.length);
+          const isComplete = newIndex >= t.questions.length;
+          return {
+            ...t,
+            currentQuestionIndex: newIndex,
+            completed: isComplete,
+            score: isComplete ? Math.round(t.score || 0) : t.score,
+          };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: updateIndexRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
+    // Move to next question
+    set((state) => {
+      const updatedSessions = state.studySessions.map((s) => {
+        if (s.id !== sessionId || !s.extractedTopics) return s;
+        return {
+          ...s,
+          extractedTopics: updateIndexRecursively(s.extractedTopics)
+        };
+      });
+
+      const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
+      };
+    });
   },
 
   completeTopic: (sessionId, topicId) => set((state) => {
