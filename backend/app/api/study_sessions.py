@@ -39,51 +39,45 @@ def extract_text_from_content(content: str) -> str:
     """
     import base64
 
-    # Try to detect and decode base64 content
     content_bytes = None
 
-    # First, try base64 decode
+    # First, aggressively try base64 decode (most likely for file uploads)
     try:
-        # Remove any whitespace and check if it looks like base64
-        clean_content = content.strip()
-        if len(clean_content) % 4 == 0 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in clean_content[:100]):
-            content_bytes = base64.b64decode(clean_content)
+        # Try base64 decode - this is the most common format for file uploads via JSON
+        decoded = base64.b64decode(content, validate=False)
+        # Check if it looks like a valid file (ZIP/docx or PDF)
+        if decoded.startswith(b'PK\x03\x04') or decoded.startswith(b'%PDF'):
+            content_bytes = decoded
     except Exception:
         pass
 
-    # If base64 decode failed, try other methods
-    if content_bytes is None:
-        # Check if content starts with binary markers
-        if content.startswith('PK\x03\x04') or content.startswith('%PDF'):
-            # Try to convert string to bytes using different encodings
-            for encoding in ['latin-1', 'iso-8859-1', 'cp1252']:
-                try:
-                    content_bytes = content.encode(encoding)
-                    break
-                except UnicodeEncodeError:
-                    continue
+    # If base64 didn't work and content looks like binary, try encoding it
+    if content_bytes is None and (content.startswith('PK\x03\x04') or content.startswith('%PDF')):
+        # Try different encodings to convert string to bytes
+        for encoding in ['latin-1', 'iso-8859-1', 'cp1252', 'utf-8']:
+            try:
+                content_bytes = content.encode(encoding)
+                break
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                continue
 
-            if content_bytes is None:
-                # Last resort: use utf-8 with error handling
-                content_bytes = content.encode('utf-8', errors='ignore')
-
-    # Now try to extract text based on file type
+    # Process based on file type if we have bytes
     if content_bytes:
-        # Check for Word document (ZIP/docx)
+        # Word document (ZIP/docx)
         if content_bytes.startswith(b'PK\x03\x04'):
             try:
                 doc = Document(io.BytesIO(content_bytes))
                 text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
                 if text.strip():
                     return text
-                raise ValueError("No text content found in document")
+                raise ValueError("No text content found in Word document")
             except Exception as e:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Failed to extract text from Word document: {str(e)}"
                 )
 
-        # Check for PDF
+        # PDF file
         elif content_bytes.startswith(b'%PDF'):
             try:
                 pdf_reader = PdfReader(io.BytesIO(content_bytes))
@@ -97,13 +91,13 @@ def extract_text_from_content(content: str) -> str:
                     detail=f"Failed to extract text from PDF: {str(e)}"
                 )
 
-    # If we got here, assume it's plain text
+    # If we got here, treat as plain text
     # Clean up any Unicode replacement characters
     cleaned_text = content.replace('\ufffd', '').strip()
-    if cleaned_text:
+    if cleaned_text and len(cleaned_text) > 10:
         return cleaned_text
 
-    # If all else fails, return the original content
+    # Last resort - return original
     return content
 
 
