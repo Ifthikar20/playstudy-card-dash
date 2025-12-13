@@ -76,18 +76,40 @@ export function TopicQuizCard({
   };
 
   if (isCompleted) {
+    const totalQuestions = questions.length;
+    const pointsEarned = Math.round((score || 0) * totalQuestions / 100);
+
     return (
       <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20">
-        <CardContent className="p-6 text-center">
+        <CardContent className="p-6 text-center space-y-4">
           <Trophy className="mx-auto text-green-600 dark:text-green-400 mb-4" size={48} />
-          <h3 className="text-xl font-bold text-foreground mb-2">Topic Completed!</h3>
+          <h3 className="text-xl font-bold text-foreground mb-2">Topic Complete!</h3>
           <p className="text-muted-foreground mb-4">{topicTitle}</p>
-          <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {Math.round(score || 0)}%
+
+          <div className="space-y-2">
+            <div className="text-5xl font-bold text-green-600 dark:text-green-400">
+              {pointsEarned} / {totalQuestions}
+            </div>
+            <p className="text-lg font-semibold text-foreground">
+              Points Earned
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            Great job! Move on to the next topic.
-          </p>
+
+          <div className="pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">
+              {pointsEarned === totalQuestions
+                ? "Perfect score! 🎉 Amazing work!"
+                : pointsEarned >= totalQuestions * 0.7
+                ? "Great job! Keep up the good work! 💪"
+                : "Keep practicing to improve your score! 📚"}
+            </p>
+          </div>
+
+          <div className="pt-2">
+            <p className="text-xs text-primary font-medium">
+              +{pointsEarned} XP added to your total learning points
+            </p>
+          </div>
         </CardContent>
       </Card>
     );

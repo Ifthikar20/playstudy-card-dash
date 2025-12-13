@@ -468,7 +468,7 @@ export default function FullStudyPage() {
                                         </div>
                                         {isCompleted && subtopic.score !== null && (
                                           <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                                            {Math.round(subtopic.score)}%
+                                            {Math.round((subtopic.score || 0) * (subtopic.questions?.length || 0) / 100)}/{subtopic.questions?.length || 0} pts
                                           </span>
                                         )}
                                       </div>
