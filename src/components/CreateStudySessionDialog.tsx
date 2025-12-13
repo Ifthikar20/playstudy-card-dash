@@ -61,10 +61,22 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
       // Read file content
       const reader = new FileReader();
       reader.onload = (event) => {
-        const content = event.target?.result as string;
-        setTextContent(content);
+        const result = event.target?.result as string;
+
+        // For binary files (Word docs, PDFs), extract base64
+        // For text files, use as-is
+        if (result.startsWith('data:')) {
+          // Remove the "data:...;base64," prefix
+          const base64Content = result.split(',')[1];
+          setTextContent(base64Content);
+        } else {
+          setTextContent(result);
+        }
       };
-      reader.readAsText(file);
+
+      // Use readAsDataURL for proper binary handling
+      // This encodes files as base64, which the backend can decode
+      reader.readAsDataURL(file);
     }
   };
 
