@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, ArrowRight, Trophy } from "lucide-react";
+import { CheckCircle2, XCircle, ArrowRight, Trophy, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Question {
@@ -18,6 +18,7 @@ interface TopicQuizCardProps {
   currentQuestionIndex: number;
   onAnswer: (answerIndex: number) => { correct: boolean; explanation: string };
   onComplete: () => void;
+  onSkipToNext?: () => void;  // New prop to skip to next topic
   score: number | null;
   isCompleted: boolean;
 }
@@ -28,6 +29,7 @@ export function TopicQuizCard({
   currentQuestionIndex,
   onAnswer,
   onComplete,
+  onSkipToNext,
   score,
   isCompleted,
 }: TopicQuizCardProps) {
@@ -147,10 +149,21 @@ export function TopicQuizCard({
           </div>
         )}
 
-        <div className="flex justify-end pt-2">
+        <div className="flex justify-between pt-2">
+          {onSkipToNext && (
+            <Button
+              variant="outline"
+              onClick={onSkipToNext}
+              className="gap-2"
+            >
+              <SkipForward size={16} />
+              Skip to Next Topic
+            </Button>
+          )}
+          <div className="flex-1" />
           {!showResult ? (
-            <Button 
-              onClick={handleSubmitAnswer} 
+            <Button
+              onClick={handleSubmitAnswer}
               disabled={selectedAnswer === null}
             >
               Submit Answer
