@@ -16,6 +16,10 @@ from app.models.study_session import StudySession
 from app.core.cache import get_cache, set_cache
 from app.core.rate_limit import limiter
 from app.config import settings
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -50,15 +54,21 @@ async def get_app_data(
         - 30 requests per minute per user
         - 1000 requests per hour globally
     """
+    logger.info(f"📊 app-data request for user: {current_user.email} (ID: {current_user.id})")
+
     # Check cache first
     cache_key = f"app_data:{current_user.id}"
     cached_data = get_cache(cache_key)
 
     if cached_data:
+        logger.debug(f"📊 Returning cached data for user {current_user.id}")
         return cached_data
+
+    logger.debug(f"📊 No cache, fetching fresh data for user {current_user.id}")
 
     # Fetch all games (active only)
     games = db.query(Game).filter(Game.is_active == True).all()
+    logger.debug(f"📊 Found {len(games)} active games")
 
     # Fetch user's study sessions
     study_sessions = (
@@ -67,6 +77,7 @@ async def get_app_data(
         .order_by(StudySession.created_at.desc())
         .all()
     )
+    logger.debug(f"📊 Found {len(study_sessions)} study sessions for user {current_user.id}")
 
     # Build user profile using custom method
     user_profile = UserProfile.from_db_model(current_user)
@@ -108,7 +119,11 @@ async def get_app_data(
         stats=user_stats,
     )
 
+    logger.debug(f"📊 Built response with {len(games_response)} games, {len(sessions_response)} sessions")
+    logger.info(f"📊 Successfully fetched app data for user {current_user.email}")
+
     # Cache the response for 5 minutes
     set_cache(cache_key, response_data.model_dump(), ttl=settings.CACHE_TTL)
+    logger.debug(f"📊 Cached response for user {current_user.id}")
 
     return response_data

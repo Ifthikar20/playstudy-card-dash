@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.security import decode_access_token
 from app.models.user import User
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # HTTP Bearer token security
 security = HTTPBearer()
@@ -29,41 +33,66 @@ def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
+    logger.debug("👤 get_current_user called")
+
     token = credentials.credentials
+    logger.debug(f"👤 Received token (first 50 chars): {token[:50]}...")
 
     # Decode token
     payload = decode_access_token(token)
     if payload is None:
+        logger.error("👤 Token decode failed - payload is None")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract user ID from token
-    user_id: int = payload.get("sub")
-    if user_id is None:
+    logger.debug(f"👤 Token payload: {payload}")
+
+    # Extract user ID from token (convert string to int)
+    user_id_str = payload.get("sub")
+    if user_id_str is None:
+        logger.error("👤 No user ID in token payload")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    try:
+        user_id = int(user_id_str)
+    except (ValueError, TypeError):
+        logger.error(f"👤 Invalid user ID format in token: {user_id_str}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    logger.debug(f"👤 Looking up user with ID: {user_id}")
 
     # Get user from database
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        logger.error(f"👤 User not found in database with ID: {user_id}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    logger.debug(f"👤 User found: {user.email}, Active: {user.is_active}")
+
     # Check if user is active
     if not user.is_active:
+        logger.warning(f"👤 User {user.email} is inactive")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user",
         )
+
+    logger.info(f"👤 Authentication successful for: {user.email}")
 
     return user
 
