@@ -89,6 +89,14 @@ export const removeAuthToken = (): void => {
 };
 
 /**
+ * Logout user and clear token
+ */
+export const logout = (): void => {
+  removeAuthToken();
+  window.location.href = '/auth';
+};
+
+/**
  * Login user and store token
  */
 export const login = async (email: string, password: string): Promise<{success: boolean; error?: string}> => {

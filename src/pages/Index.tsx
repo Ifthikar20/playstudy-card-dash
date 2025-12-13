@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
+import UserMenu from "@/components/UserMenu";
 import { useAppStore } from "@/store/appStore";
 import {
   Flame,
@@ -38,14 +39,17 @@ export default function Index() {
                 Transform your study materials into engaging, competitive quizzes
               </p>
             </div>
-            <Button 
-              size="lg" 
-              className="gap-2 shadow-lg hover:shadow-xl transition-all"
-              onClick={() => setShowCreateSession(true)}
-            >
-              <Plus size={20} />
-              Create Study Session
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                size="lg"
+                className="gap-2 shadow-lg hover:shadow-xl transition-all"
+                onClick={() => setShowCreateSession(true)}
+              >
+                <Plus size={20} />
+                Create Study Session
+              </Button>
+              <UserMenu />
+            </div>
           </div>
 
           {/* How to Use Playstudy - 3 Steps */}
