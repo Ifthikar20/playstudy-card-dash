@@ -130,7 +130,7 @@ TopicSchema.model_rebuild()
 class CreateStudySessionRequest(BaseModel):
     """Request schema for creating a study session."""
     title: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=10, max_length=50000)
+    content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
     num_topics: int = Field(default=4, ge=2, le=10)
     questions_per_topic: int = Field(default=10, ge=5, le=20)
 
