@@ -479,56 +479,46 @@ export const useAppStore = create<AppState>((set, get) => ({
   }),
 
   deleteStudySession: async (sessionId) => {
-    try {
-      // Call API to delete from backend
-      await apiDeleteStudySession(sessionId);
+    // Optimistic update - remove from UI immediately
+    set((state) => {
+      const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+      };
+    });
 
-      // Update local state after successful API call
-      set((state) => {
-        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
-        return {
-          studySessions: updatedSessions,
-          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
-        };
-      });
+    // Then sync with backend
+    try {
+      await apiDeleteStudySession(sessionId);
+      console.log(`✓ Session ${sessionId} deleted successfully`);
     } catch (error) {
-      console.error('Failed to delete study session:', error);
-      // Still update local state even if API fails (for offline functionality)
-      set((state) => {
-        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
-        return {
-          studySessions: updatedSessions,
-          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
-        };
-      });
+      console.error('Failed to delete study session on server:', error);
+      // UI already updated, so user doesn't see the error
+      // Session will be gone from local state but may still exist on server
+      // It will re-appear on next page refresh if deletion failed
     }
   },
 
   archiveStudySession: async (sessionId) => {
-    try {
-      // Call API to archive on backend
-      await apiArchiveStudySession(sessionId);
+    // Optimistic update - remove from UI immediately
+    set((state) => {
+      const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
+      return {
+        studySessions: updatedSessions,
+        currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
+      };
+    });
 
-      // Update local state after successful API call
-      // For now, archive just removes from the list (similar to delete)
-      // The backend sets status to 'archived'
-      set((state) => {
-        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
-        return {
-          studySessions: updatedSessions,
-          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
-        };
-      });
+    // Then sync with backend
+    try {
+      await apiArchiveStudySession(sessionId);
+      console.log(`✓ Session ${sessionId} archived successfully`);
     } catch (error) {
-      console.error('Failed to archive study session:', error);
-      // Still update local state even if API fails (for offline functionality)
-      set((state) => {
-        const updatedSessions = state.studySessions.filter(s => s.id !== sessionId);
-        return {
-          studySessions: updatedSessions,
-          currentSession: state.currentSession?.id === sessionId ? null : state.currentSession
-        };
-      });
+      console.error('Failed to archive study session on server:', error);
+      // UI already updated, so user doesn't see the error
+      // Session will be gone from local state but may still exist on server
+      // It will re-appear on next page refresh if archival failed
     }
   },
 

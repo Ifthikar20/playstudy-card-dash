@@ -120,13 +120,11 @@ export function Sidebar() {
                     )}
                     <span className="text-xs font-semibold text-primary">{session.progress}%</span>
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
                         if (confirm(`Delete "${session.title}"?`)) {
-                          await deleteStudySession(session.id);
-                          if (currentSession?.id === session.id) {
-                            setCurrentSession(null);
-                          }
+                          // Optimistic delete - UI updates immediately
+                          deleteStudySession(session.id);
                         }
                       }}
                       className="ml-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-destructive/20 rounded transition-all"

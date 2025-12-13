@@ -307,6 +307,11 @@ export const deleteStudySession = async (sessionId: string): Promise<void> => {
     });
 
     if (!response.ok) {
+      // If session doesn't exist (404), consider it already deleted - don't throw error
+      if (response.status === 404) {
+        console.warn(`Session ${sessionId} not found on server - may have been already deleted`);
+        return; // Success - session is gone either way
+      }
       const errorData = await response.json();
       throw new Error(errorData.detail || 'Failed to delete study session');
     }
@@ -336,6 +341,11 @@ export const archiveStudySession = async (sessionId: string): Promise<void> => {
     });
 
     if (!response.ok) {
+      // If session doesn't exist (404), consider it already gone - don't throw error
+      if (response.status === 404) {
+        console.warn(`Session ${sessionId} not found on server - may have been already deleted`);
+        return; // Success - session is gone either way
+      }
       const errorData = await response.json();
       throw new Error(errorData.detail || 'Failed to archive study session');
     }
