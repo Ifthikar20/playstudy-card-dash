@@ -109,7 +109,7 @@ export default function FullStudyPage() {
     return flattenedTopics.filter(t => !t.isCategory);
   }, [flattenedTopics]);
 
-  // Generate nodes and edges from extracted topics (hierarchical structure)
+  // Generate nodes and edges from extracted topics (hierarchical structure) - RECURSIVE
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const topics = currentSession?.extractedTopics || [];
 
@@ -121,89 +121,93 @@ export default function FullStudyPage() {
     const generatedEdges: Edge[] = [];
     let yOffset = 0;
 
-    topics.forEach((category, catIndex) => {
-      const categoryCompleted = category.subtopics?.every((st: any) => st.completed) || false;
+    // Recursive function to process topics at any depth
+    const processTopicLevel = (
+      topicList: any[],
+      parentId: string | null,
+      depth: number,
+      xPosition: number
+    ) => {
+      topicList.forEach((topic: any, index: number) => {
+        const hasSubtopics = topic.subtopics && topic.subtopics.length > 0;
+        const isLeafTopic = !hasSubtopics && !topic.isCategory;
+        const isCompleted = topic.completed;
 
-      // Category node
-      let categoryStyle = nodeStyles.locked;
-      let categoryEmoji = "📁";
+        // Determine if all children are completed (for parent nodes)
+        const allChildrenCompleted = hasSubtopics
+          ? topic.subtopics.every((st: any) => st.completed)
+          : isCompleted;
 
-      if (categoryCompleted) {
-        categoryStyle = nodeStyles.completed;
-        categoryEmoji = "✅";
-      } else if (category.subtopics?.some((st: any) => !st.completed)) {
-        categoryStyle = nodeStyles.inProgress;
-        categoryEmoji = "📂";
-      }
+        // Style based on completion and type
+        let style = nodeStyles.locked;
+        let emoji = "📁";
 
-      generatedNodes.push({
-        id: category.id,
-        type: "default",
-        data: { label: `${categoryEmoji} ${category.title}` },
-        position: { x: 50, y: yOffset },
-        style: { ...categoryStyle, fontWeight: 600, fontSize: "13px" },
-      });
+        if (topic.isCategory) {
+          // Category node
+          emoji = allChildrenCompleted ? "✅" : hasSubtopics ? "📂" : "📁";
+          style = allChildrenCompleted ? nodeStyles.completed : nodeStyles.inProgress;
+        } else if (isLeafTopic) {
+          // Leaf topic (has questions)
+          emoji = isCompleted ? "✅" : "📚";
+          style = isCompleted ? nodeStyles.completed : nodeStyles.current;
+        } else {
+          // Parent topic (has subtopics but not a category)
+          emoji = allChildrenCompleted ? "✅" : "📋";
+          style = allChildrenCompleted ? nodeStyles.completed : nodeStyles.inProgress;
+        }
 
-      yOffset += 80;
+        // Add node
+        generatedNodes.push({
+          id: topic.id,
+          type: "default",
+          data: { label: `${emoji} ${topic.title}` },
+          position: { x: xPosition, y: yOffset },
+          style: { ...style, fontWeight: topic.isCategory ? 600 : 500, fontSize: topic.isCategory ? "13px" : "12px" },
+        });
 
-      // Subtopic nodes
-      if (category.subtopics && category.subtopics.length > 0) {
-        category.subtopics.forEach((subtopic: any, subIndex: number) => {
-          const isCompleted = subtopic.completed;
-
-          let style = nodeStyles.locked;
-          let emoji = "📝";
-
-          if (isCompleted) {
-            style = nodeStyles.completed;
-            emoji = "✅";
-          } else {
-            style = nodeStyles.current;
-            emoji = "📚";
-          }
-
-          generatedNodes.push({
-            id: subtopic.id,
-            type: "default",
-            data: { label: `${emoji} ${subtopic.title}` },
-            position: { x: 300, y: yOffset },
-            style,
-          });
-
-          // Edge from category to subtopic
+        // Edge from parent to this node
+        if (parentId) {
           generatedEdges.push({
-            id: `e-${category.id}-${subtopic.id}`,
-            source: category.id,
-            target: subtopic.id,
+            id: `e-${parentId}-${topic.id}`,
+            source: parentId,
+            target: topic.id,
             animated: !isCompleted,
             style: {
               stroke: isCompleted ? "#10b981" : "hsl(var(--border))",
               strokeWidth: isCompleted ? 3 : 2
             },
           });
+        }
 
-          // Edge to next subtopic (if exists)
-          if (subIndex < category.subtopics.length - 1) {
-            const nextSubtopic = category.subtopics[subIndex + 1];
-            generatedEdges.push({
-              id: `e-${subtopic.id}-${nextSubtopic.id}`,
-              source: subtopic.id,
-              target: nextSubtopic.id,
-              animated: !isCompleted,
-              style: {
-                stroke: isCompleted ? "#10b981" : "hsl(var(--border))",
-                strokeWidth: isCompleted ? 3 : 2,
-                strokeDasharray: "5, 5"
-              },
-            });
-          }
+        const currentY = yOffset;
+        yOffset += 90;
 
-          yOffset += 100;
-        });
-      }
+        // Recursively process subtopics
+        if (hasSubtopics) {
+          const childXPosition = xPosition + 250; // Indent each level by 250px
+          processTopicLevel(topic.subtopics, topic.id, depth + 1, childXPosition);
+        }
 
-      yOffset += 20; // Extra space between categories
-    });
+        // Edge to next sibling at same level (flow arrow)
+        if (index < topicList.length - 1 && !topic.isCategory) {
+          const nextTopic = topicList[index + 1];
+          generatedEdges.push({
+            id: `e-${topic.id}-${nextTopic.id}-sibling`,
+            source: topic.id,
+            target: nextTopic.id,
+            animated: !isCompleted,
+            style: {
+              stroke: isCompleted ? "#10b981" : "hsl(var(--border))",
+              strokeWidth: isCompleted ? 3 : 2,
+              strokeDasharray: "5, 5"
+            },
+          });
+        }
+      });
+    };
+
+    // Start processing from root level
+    processTopicLevel(topics, null, 0, 50);
 
     return { nodes: generatedNodes, edges: generatedEdges };
   }, [currentSession?.extractedTopics]);
