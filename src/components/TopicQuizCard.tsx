@@ -44,6 +44,7 @@ export function TopicQuizCard({
 
   // Reset state when question changes
   useEffect(() => {
+    console.log('🔄 Question index changed, resetting state. New index:', currentQuestionIndex);
     setSelectedAnswer(null);
     setShowResult(false);
     setResult(null);
@@ -51,22 +52,31 @@ export function TopicQuizCard({
 
   // Auto-advance to next question after showing result
   useEffect(() => {
+    console.log('⏰ Timer effect triggered', { showResult, isLastQuestion, currentQuestionIndex });
+
     if (showResult && !isLastQuestion) {
+      console.log('⏳ Starting 2-second timer to move to next question');
       const timer = setTimeout(() => {
+        console.log('🚀 Timer fired! Calling onMoveToNext');
         // Move to next question (which will trigger state reset via the other useEffect)
         onMoveToNext();
       }, 2000); // 2 second delay to read the explanation
 
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('🧹 Cleaning up timer');
+        clearTimeout(timer);
+      };
     } else if (showResult && isLastQuestion) {
+      console.log('🏁 Last question - starting timer to complete');
       // If last question, auto-complete after delay
       const timer = setTimeout(() => {
+        console.log('✅ Completing topic');
         onComplete();
       }, 2000);
 
       return () => clearTimeout(timer);
     }
-  }, [showResult, isLastQuestion, onMoveToNext, onComplete]);
+  }, [showResult, isLastQuestion, onMoveToNext, onComplete, currentQuestionIndex]);
 
   const handleSelectAnswer = (index: number) => {
     if (showResult) return; // Don't allow selecting after already answered
