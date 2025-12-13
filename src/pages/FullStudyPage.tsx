@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -80,6 +80,14 @@ export default function FullStudyPage() {
   const [showSummary, setShowSummary] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [localQuestionIndex, setLocalQuestionIndex] = useState(0);
+
+  // Reset question index when topic changes
+  useEffect(() => {
+    console.log('🔄 Topic changed, resetting question index to 0');
+    setLocalQuestionIndex(0);
+    setShowSummary(false);
+  }, [selectedTopicId]);
 
   // Flatten topics for easier access (includes both categories and subtopics)
   const flattenedTopics = useMemo(() => {
@@ -276,21 +284,44 @@ export default function FullStudyPage() {
     return topic;
   }, [flattenedTopics, selectedTopicId]);
 
-  // Create stable callbacks for the selected topic to prevent timer resets
+  // Simple local handlers that just iterate through the questions array
   const handleAnswerForSelected = useCallback((answerIndex: number) => {
-    if (!selectedTopicId) return { correct: false, explanation: '' };
-    return handleAnswerQuestion(selectedTopicId, answerIndex);
-  }, [selectedTopicId, handleAnswerQuestion]);
+    if (!selectedTopicId || !selectedTopic) return { correct: false, explanation: '' };
+
+    // Get the current question
+    const currentQuestion = selectedTopic.questions[localQuestionIndex];
+    const correct = currentQuestion.correctAnswer === answerIndex;
+
+    console.log(`📝 Answer ${answerIndex} - ${correct ? 'Correct!' : 'Wrong'}`, {
+      currentIndex: localQuestionIndex,
+      totalQuestions: selectedTopic.questions.length
+    });
+
+    // Also update the store for score tracking
+    return answerQuestion(sessionIdRef!, selectedTopicId, answerIndex);
+  }, [selectedTopicId, selectedTopic, localQuestionIndex, answerQuestion, sessionIdRef]);
 
   const handleMoveToNextForSelected = useCallback(() => {
-    if (!selectedTopicId) return;
-    handleMoveToNext(selectedTopicId);
-  }, [selectedTopicId, handleMoveToNext]);
+    if (!selectedTopic) return;
+
+    const nextIndex = localQuestionIndex + 1;
+    console.log(`➡️ Moving from question ${localQuestionIndex + 1} to ${nextIndex + 1} of ${selectedTopic.questions.length}`);
+
+    setLocalQuestionIndex(nextIndex);
+
+    // Also update the store
+    if (selectedTopicId && sessionIdRef) {
+      moveToNextQuestion(sessionIdRef, selectedTopicId);
+    }
+  }, [selectedTopic, localQuestionIndex, selectedTopicId, sessionIdRef, moveToNextQuestion]);
 
   const handleCompleteForSelected = useCallback(() => {
-    if (!selectedTopicId) return;
-    handleCompleteTopic(selectedTopicId);
-  }, [selectedTopicId, handleCompleteTopic]);
+    if (!selectedTopicId || !sessionIdRef) return;
+
+    console.log('✅ Completing topic:', selectedTopicId);
+    completeTopic(sessionIdRef, selectedTopicId);
+    setShowSummary(true);
+  }, [selectedTopicId, sessionIdRef, completeTopic]);
 
   const topics = currentSession?.extractedTopics || [];
 
@@ -465,10 +496,10 @@ export default function FullStudyPage() {
                     </Button>
                     
                     <TopicQuizCard
-                      key={`quiz-${selectedTopicId}-q${selectedTopic.currentQuestionIndex || 0}`}
+                      key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
                       topicTitle={selectedTopic.title}
                       questions={selectedTopic.questions || []}
-                      currentQuestionIndex={selectedTopic.currentQuestionIndex || 0}
+                      currentQuestionIndex={localQuestionIndex}
                       onAnswer={handleAnswerForSelected}
                       onMoveToNext={handleMoveToNextForSelected}
                       onComplete={handleCompleteForSelected}
