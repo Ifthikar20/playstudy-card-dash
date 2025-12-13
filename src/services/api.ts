@@ -223,6 +223,62 @@ export const generateQuestions = async (topic: string, numQuestions: number = 5,
 };
 
 /**
+ * Create study session with AI-generated topics and questions
+ */
+export const createStudySessionWithAI = async (
+  title: string,
+  content: string,
+  numTopics: number = 4,
+  questionsPerTopic: number = 10
+): Promise<StudySession> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/create-with-ai`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title,
+        content,
+        num_topics: numTopics,
+        questions_per_topic: questionsPerTopic,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to create study session');
+    }
+
+    const data = await response.json();
+
+    // Transform API response to match frontend StudySession interface
+    return {
+      id: String(data.id),
+      title: data.title,
+      progress: data.progress,
+      topics: data.topics,
+      time: 'Just now',
+      hasFullStudy: data.hasFullStudy,
+      hasSpeedRun: data.hasSpeedRun,
+      hasQuiz: false,
+      studyContent: data.studyContent,
+      extractedTopics: data.extractedTopics,
+    };
+  } catch (error) {
+    console.error('Failed to create study session:', error);
+    throw error;
+  }
+};
+
+/**
  * Mock data for development/fallback
  */
 const getMockAppData = (): AppData => {

@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
+import { createStudySessionWithAI } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
   open: boolean;
@@ -37,17 +39,19 @@ type StudyMode = "full-study" | "speed-run" | "game";
 
 export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySessionDialogProps) {
   const navigate = useNavigate();
-  const { createSession, processStudyContent, createSpeedRun } = useAppStore();
+  const { setCurrentSession, createSpeedRun } = useAppStore();
+  const { toast } = useToast();
   const [step, setStep] = useState<Step>("upload");
   const [uploadType, setUploadType] = useState<UploadType>("text");
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedMode, setSelectedMode] = useState<StudyMode | null>(null);
-  const [topicCount, setTopicCount] = useState([5]);
-  const [questionCount, setQuestionCount] = useState([20]);
+  const [topicCount, setTopicCount] = useState([4]);
+  const [questionCount, setQuestionCount] = useState([10]);
   const [speedRunDuration, setSpeedRunDuration] = useState([10]);
   const [sessionTitle, setSessionTitle] = useState("");
+  const [createdSession, setCreatedSession] = useState<any>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -66,27 +70,47 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
   const handleProcessContent = async () => {
     setIsProcessing(true);
-    // Simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsProcessing(false);
-    setStep("select-mode");
+
+    try {
+      const content = textContent.trim();
+      const title = sessionTitle.trim() || `Study Session ${new Date().toLocaleDateString()}`;
+
+      // Call backend API to create session with AI
+      const newSession = await createStudySessionWithAI(
+        title,
+        content,
+        topicCount[0],
+        questionCount[0]
+      );
+
+      setCreatedSession(newSession);
+      setCurrentSession(newSession);
+
+      toast({
+        title: "Session Created!",
+        description: `${newSession.topics} topics generated with ${questionCount[0]} questions each.`,
+      });
+
+      setIsProcessing(false);
+      setStep("select-mode");
+    } catch (error: any) {
+      setIsProcessing(false);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create study session. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleStartSession = () => {
-    // Use textContent which contains the file content if a file was uploaded
-    const content = textContent.trim();
-    const title = sessionTitle.trim() || `Study Session ${new Date().toLocaleDateString()}`;
+    if (!createdSession) return;
 
-    // Create the session with content
-    const newSession = createSession(title, content);
-
-    // Process content for full study mode
+    // Navigate to the selected mode
     if (selectedMode === "full-study") {
-      processStudyContent(newSession.id, content);
       navigate("/full-study");
     } else if (selectedMode === "speed-run") {
-      createSpeedRun(newSession.id);
-      processStudyContent(newSession.id, content);
+      createSpeedRun(createdSession.id);
       navigate("/speedrun");
     } else if (selectedMode === "game") {
       navigate("/browse-games");
@@ -100,6 +124,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     setSelectedFile(null);
     setSelectedMode(null);
     setSessionTitle("");
+    setCreatedSession(null);
   };
 
   const canProceed = uploadType === "text" ? textContent.trim().length > 0 : selectedFile !== null;
