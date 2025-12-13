@@ -253,7 +253,19 @@ export default function FullStudyPage() {
     // Reset would require store update - for now just close summary
   };
 
-  const selectedTopic = flattenedTopics.find(t => t.id === selectedTopicId);
+  const selectedTopic = useMemo(() => {
+    const topic = flattenedTopics.find(t => t.id === selectedTopicId);
+    if (topic && selectedTopicId) {
+      console.log('📍 Selected topic found:', {
+        id: topic.id,
+        title: topic.title,
+        currentQuestionIndex: topic.currentQuestionIndex,
+        totalQuestions: topic.questions?.length
+      });
+    }
+    return topic;
+  }, [flattenedTopics, selectedTopicId]);
+
   const topics = currentSession?.extractedTopics || [];
 
   // No session selected - show create new option

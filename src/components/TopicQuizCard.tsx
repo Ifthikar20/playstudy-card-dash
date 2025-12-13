@@ -52,7 +52,7 @@ export function TopicQuizCard({
 
   // Auto-advance to next question after showing result
   useEffect(() => {
-    console.log('⏰ Timer effect triggered', { showResult, isLastQuestion, currentQuestionIndex });
+    console.log('⏰ Timer effect triggered', { showResult, isLastQuestion });
 
     if (showResult && !isLastQuestion) {
       console.log('⏳ Starting 2-second timer to move to next question');
@@ -76,7 +76,7 @@ export function TopicQuizCard({
 
       return () => clearTimeout(timer);
     }
-  }, [showResult, isLastQuestion, onMoveToNext, onComplete, currentQuestionIndex]);
+  }, [showResult, isLastQuestion, onMoveToNext, onComplete]); // Removed currentQuestionIndex from deps
 
   const handleSelectAnswer = (index: number) => {
     if (showResult) return; // Don't allow selecting after already answered
