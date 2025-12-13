@@ -29,43 +29,81 @@ def extract_text_from_content(content: str) -> str:
     - Plain text
     - Word documents (.docx)
     - PDF files
+    - Base64 encoded content
 
     Args:
-        content: Raw content string (may be binary or text)
+        content: Raw content string (may be binary, text, or base64)
 
     Returns:
         Extracted text string
     """
-    # Check if content starts with binary markers
-    if content.startswith('PK\x03\x04'):
-        # This is a ZIP file (likely .docx)
-        try:
-            content_bytes = content.encode('latin-1')
-            doc = Document(io.BytesIO(content_bytes))
-            text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
-            if text.strip():
-                return text
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to extract text from Word document: {str(e)}"
-            )
+    import base64
 
-    elif content.startswith('%PDF'):
-        # This is a PDF file
-        try:
-            content_bytes = content.encode('latin-1')
-            pdf_reader = PdfReader(io.BytesIO(content_bytes))
-            text = '\n'.join([page.extract_text() for page in pdf_reader.pages])
-            if text.strip():
-                return text
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to extract text from PDF: {str(e)}"
-            )
+    # Try to detect and decode base64 content
+    content_bytes = None
 
-    # Assume it's plain text
+    # First, try base64 decode
+    try:
+        # Remove any whitespace and check if it looks like base64
+        clean_content = content.strip()
+        if len(clean_content) % 4 == 0 and all(c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=' for c in clean_content[:100]):
+            content_bytes = base64.b64decode(clean_content)
+    except Exception:
+        pass
+
+    # If base64 decode failed, try other methods
+    if content_bytes is None:
+        # Check if content starts with binary markers
+        if content.startswith('PK\x03\x04') or content.startswith('%PDF'):
+            # Try to convert string to bytes using different encodings
+            for encoding in ['latin-1', 'iso-8859-1', 'cp1252']:
+                try:
+                    content_bytes = content.encode(encoding)
+                    break
+                except UnicodeEncodeError:
+                    continue
+
+            if content_bytes is None:
+                # Last resort: use utf-8 with error handling
+                content_bytes = content.encode('utf-8', errors='ignore')
+
+    # Now try to extract text based on file type
+    if content_bytes:
+        # Check for Word document (ZIP/docx)
+        if content_bytes.startswith(b'PK\x03\x04'):
+            try:
+                doc = Document(io.BytesIO(content_bytes))
+                text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                if text.strip():
+                    return text
+                raise ValueError("No text content found in document")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to extract text from Word document: {str(e)}"
+                )
+
+        # Check for PDF
+        elif content_bytes.startswith(b'%PDF'):
+            try:
+                pdf_reader = PdfReader(io.BytesIO(content_bytes))
+                text = '\n'.join([page.extract_text() for page in pdf_reader.pages])
+                if text.strip():
+                    return text
+                raise ValueError("No text content found in PDF")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to extract text from PDF: {str(e)}"
+                )
+
+    # If we got here, assume it's plain text
+    # Clean up any Unicode replacement characters
+    cleaned_text = content.replace('\ufffd', '').strip()
+    if cleaned_text:
+        return cleaned_text
+
+    # If all else fails, return the original content
     return content
 
 
