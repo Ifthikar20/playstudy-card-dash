@@ -270,6 +270,22 @@ export default function FullStudyPage() {
     return topic;
   }, [flattenedTopics, selectedTopicId]);
 
+  // Create stable callbacks for the selected topic to prevent timer resets
+  const handleAnswerForSelected = useCallback((answerIndex: number) => {
+    if (!selectedTopicId) return { correct: false, explanation: '' };
+    return handleAnswerQuestion(selectedTopicId, answerIndex);
+  }, [selectedTopicId, handleAnswerQuestion]);
+
+  const handleMoveToNextForSelected = useCallback(() => {
+    if (!selectedTopicId) return;
+    handleMoveToNext(selectedTopicId);
+  }, [selectedTopicId, handleMoveToNext]);
+
+  const handleCompleteForSelected = useCallback(() => {
+    if (!selectedTopicId) return;
+    handleCompleteTopic(selectedTopicId);
+  }, [selectedTopicId, handleCompleteTopic]);
+
   const topics = currentSession?.extractedTopics || [];
 
   // No session selected - show create new option
@@ -446,9 +462,9 @@ export default function FullStudyPage() {
                       topicTitle={selectedTopic.title}
                       questions={selectedTopic.questions || []}
                       currentQuestionIndex={selectedTopic.currentQuestionIndex || 0}
-                      onAnswer={(answerIndex) => handleAnswerQuestion(selectedTopicId, answerIndex)}
-                      onMoveToNext={() => handleMoveToNext(selectedTopicId)}
-                      onComplete={() => handleCompleteTopic(selectedTopicId)}
+                      onAnswer={handleAnswerForSelected}
+                      onMoveToNext={handleMoveToNextForSelected}
+                      onComplete={handleCompleteForSelected}
                       onSkipToNext={handleSkipToNextTopic}
                       score={selectedTopic.score}
                       isCompleted={selectedTopic.completed || false}
