@@ -68,19 +68,115 @@ export interface AppData {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 /**
+ * Get authentication token from localStorage
+ */
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('auth_token');
+};
+
+/**
+ * Set authentication token in localStorage
+ */
+export const setAuthToken = (token: string): void => {
+  localStorage.setItem('auth_token', token);
+};
+
+/**
+ * Remove authentication token from localStorage
+ */
+export const removeAuthToken = (): void => {
+  localStorage.removeItem('auth_token');
+};
+
+/**
+ * Logout user and clear token
+ */
+export const logout = (): void => {
+  removeAuthToken();
+  window.location.href = '/auth';
+};
+
+/**
+ * Login user and store token
+ */
+export const login = async (email: string, password: string): Promise<{success: boolean; error?: string}> => {
+  try {
+    const response = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Login failed' };
+    }
+
+    const data = await response.json();
+    setAuthToken(data.access_token);
+    return { success: true };
+  } catch (error) {
+    console.error('Login error:', error);
+    return { success: false, error: 'Network error. Please try again.' };
+  }
+};
+
+/**
+ * Register new user and store token
+ */
+export const register = async (email: string, name: string, password: string): Promise<{success: boolean; error?: string}> => {
+  try {
+    const response = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, name, password }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Registration failed' };
+    }
+
+    const data = await response.json();
+    setAuthToken(data.access_token);
+    return { success: true };
+  } catch (error) {
+    console.error('Registration error:', error);
+    return { success: false, error: 'Network error. Please try again.' };
+  }
+};
+
+/**
  * Fetches all application data in a single API call
  */
 export const fetchAppData = async (): Promise<AppData> => {
   try {
+    const token = getAuthToken();
+
+    // If no token, try to use mock data
+    if (!token) {
+      console.warn('No authentication token found. Using mock data.');
+      return getMockAppData();
+    }
+
     const response = await fetch(`${API_URL}/app-data`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
-      credentials: 'include', // Include cookies for authentication
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired or invalid
+        removeAuthToken();
+        console.warn('Authentication failed. Using mock data.');
+      }
       throw new Error(`API request failed with status ${response.status}`);
     }
 
@@ -90,6 +186,39 @@ export const fetchAppData = async (): Promise<AppData> => {
     console.error('Failed to fetch app data:', error);
     // Return mock data as fallback for development
     return getMockAppData();
+  }
+};
+
+/**
+ * Generate questions using Anthropic AI
+ */
+export const generateQuestions = async (topic: string, numQuestions: number = 5, difficulty: string = 'medium'): Promise<any> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_URL}/generate-questions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ topic, num_questions: numQuestions, difficulty }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to generate questions');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to generate questions:', error);
+    throw error;
   }
 };
 

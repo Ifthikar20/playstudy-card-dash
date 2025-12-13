@@ -1,4 +1,6 @@
+# =====================
 # Logs
+# =====================
 logs
 *.log
 npm-debug.log*
@@ -7,16 +9,45 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# =====================
+# Node / React
+# =====================
 node_modules
 dist
 dist-ssr
+build
 *.local
+.eslintcache
 
-# Editor directories and files
+# =====================
+# Python
+# =====================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.cache/
+
+# =====================
+# OS files
+# =====================
+.DS_Store
+Thumbs.db
+
+# =====================
+# Editor / IDE
+# =====================
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj

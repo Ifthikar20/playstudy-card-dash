@@ -9,9 +9,11 @@ class GameBase(BaseModel):
     """Base game schema with common fields."""
     title: str = Field(..., min_length=1, max_length=200)
     description: str
-    icon: str
+    image: str  # URL to game image
     category: str
-    difficulty: str = Field(..., pattern="^(easy|medium|hard)$")
+    difficulty: str  # Easy, Medium, or Hard
+    likes: int = Field(default=0, ge=0)
+    rating: float = Field(default=0.0, ge=0, le=5)  # Rating out of 5
     estimated_time: int = Field(..., gt=0)  # in minutes
     xp_reward: int = Field(..., ge=0)
 
@@ -25,19 +27,43 @@ class GameUpdate(BaseModel):
     """Schema for updating a game."""
     title: str | None = None
     description: str | None = None
-    icon: str | None = None
+    image: str | None = None
     category: str | None = None
     difficulty: str | None = None
+    likes: int | None = None
+    rating: float | None = None
     estimated_time: int | None = None
     xp_reward: int | None = None
     is_active: bool | None = None
 
 
-class GameResponse(GameBase):
-    """Schema for game response."""
+class GameResponse(BaseModel):
+    """Schema for game response - matches frontend interface."""
     id: int
-    is_active: bool
-    created_at: datetime
+    title: str
+    description: str
+    category: str
+    likes: int
+    rating: float
+    image: str
+    difficulty: str
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_db_model(cls, game):
+        """Create response from database model."""
+        # Capitalize difficulty for frontend display
+        difficulty_display = game.difficulty.capitalize() if game.difficulty else "Medium"
+
+        return cls(
+            id=game.id,
+            title=game.title,
+            description=game.description,
+            category=game.category,
+            likes=game.likes,
+            rating=float(game.rating),
+            image=game.image,
+            difficulty=difficulty_display,
+        )

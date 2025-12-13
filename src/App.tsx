@@ -4,9 +4,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import AuthPage from "./pages/AuthPage";
 import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
 import QuizPage from "./pages/QuizPage";
@@ -19,6 +21,45 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const AppContent = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public route */}
+        <Route path="/auth" element={<AuthPage />} />
+
+        {/* Protected routes - require authentication */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <AuthenticatedApp />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Index />} />
+          <Route path="folders" element={<StudyFolders />} />
+          <Route path="quiz/:topic" element={<QuizPage />} />
+          <Route path="speedrun" element={<SpeedRunPage />} />
+          <Route path="speedrun/:topic" element={<SpeedRunPage />} />
+          <Route path="full-study" element={<FullStudyPage />} />
+          <Route path="browse-games" element={<BrowseGamesPage />} />
+          <Route path="achievements" element={<Index />} />
+          <Route path="analytics" element={<Index />} />
+          <Route path="timer" element={<Index />} />
+          <Route path="goals" element={<Index />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="settings" element={<Index />} />
+        </Route>
+
+        {/* 404 */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
+
+// Component that loads data only when authenticated
+const AuthenticatedApp = () => {
   const { data, isLoading, isError } = useAppData();
   const { initializeFromAPI, isInitialized } = useAppStore();
 
@@ -35,7 +76,7 @@ const AppContent = () => {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading Playstudy.ai...</p>
+          <p className="text-muted-foreground">Loading your dashboard...</p>
         </div>
       </div>
     );
@@ -58,26 +99,8 @@ const AppContent = () => {
     );
   }
 
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/folders" element={<StudyFolders />} />
-        <Route path="/quiz/:topic" element={<QuizPage />} />
-        <Route path="/speedrun" element={<SpeedRunPage />} />
-        <Route path="/speedrun/:topic" element={<SpeedRunPage />} />
-        <Route path="/full-study" element={<FullStudyPage />} />
-        <Route path="/browse-games" element={<BrowseGamesPage />} />
-        <Route path="/achievements" element={<Index />} />
-        <Route path="/analytics" element={<Index />} />
-        <Route path="/timer" element={<Index />} />
-        <Route path="/goals" element={<Index />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/settings" element={<Index />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  // Render the outlet for nested routes
+  return <Outlet />;
 };
 
 const App = () => (

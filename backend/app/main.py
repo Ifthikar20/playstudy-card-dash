@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.api import auth, app_data
+from app.api import auth, app_data, questions
 from app.database import Base, engine
 
 # Create database tables
@@ -92,6 +92,12 @@ app.include_router(
     app_data.router,
     prefix=settings.API_V1_PREFIX,
     tags=["App Data"],
+)
+
+app.include_router(
+    questions.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["Questions"],
 )
 
 
