@@ -60,9 +60,10 @@ interface AppState {
   createSpeedRun: (sessionId: string) => void;
   createQuiz: (sessionId: string) => void;
   processStudyContent: (sessionId: string, content: string) => void;
-  answerQuestion: (sessionId: string, topicId: string, answerIndex: number) => { correct: boolean; explanation: string };
+  answerQuestion: (sessionId: string, topicId: string, answerIndex: number, questionIndex?: number) => { correct: boolean; explanation: string };
   moveToNextQuestion: (sessionId: string, topicId: string) => void;
   completeTopic: (sessionId: string, topicId: string) => void;
+  resetTopic: (sessionId: string, topicId: string) => void;
   deleteStudySession: (sessionId: string) => Promise<void>;
   archiveStudySession: (sessionId: string) => Promise<void>;
 
@@ -307,7 +308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  answerQuestion: (sessionId, topicId, answerIndex) => {
+  answerQuestion: (sessionId, topicId, answerIndex, questionIndex) => {
     const state = get();
     const session = state.studySessions.find(s => s.id === sessionId);
     if (!session?.extractedTopics) return { correct: false, explanation: '' };
@@ -327,8 +328,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const topic = findTopic(session.extractedTopics, topicId);
     if (!topic) return { correct: false, explanation: '' };
 
-    const question = topic.questions[topic.currentQuestionIndex];
-    if (!question) return { correct: false, explanation: '' };
+    // Use provided questionIndex or fall back to topic's currentQuestionIndex
+    const indexToUse = questionIndex !== undefined ? questionIndex : topic.currentQuestionIndex;
+    const question = topic.questions[indexToUse];
+    if (!question) {
+      console.error('❌ Question not found at index:', indexToUse, 'Total questions:', topic.questions.length);
+      return { correct: false, explanation: '' };
+    }
+
+    console.log('📚 Checking answer for question', indexToUse + 1, 'of', topic.questions.length);
 
     // Debug logging
     console.log('Answer validation:', {
@@ -478,6 +486,48 @@ export const useAppStore = create<AppState>((set, get) => ({
     const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
 
     console.log('✅ Updated currentSession extractedTopics:', updatedCurrent?.extractedTopics);
+
+    return {
+      studySessions: updatedSessions,
+      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
+    };
+  }),
+
+  resetTopic: (sessionId, topicId) => set((state) => {
+    console.log('🔄 resetTopic called', { sessionId, topicId });
+
+    // Helper function to reset topic recursively
+    const resetTopicRecursively = (topics: Topic[]): Topic[] => {
+      return topics.map(t => {
+        if (t.id === topicId) {
+          console.log('🔄 Resetting topic:', t.title);
+          return {
+            ...t,
+            completed: false,
+            score: 0,
+            currentQuestionIndex: 0
+          };
+        }
+        if (t.subtopics) {
+          return {
+            ...t,
+            subtopics: resetTopicRecursively(t.subtopics)
+          };
+        }
+        return t;
+      });
+    };
+
+    const updatedSessions = state.studySessions.map((s) => {
+      if (s.id !== sessionId || !s.extractedTopics) return s;
+      return {
+        ...s,
+        extractedTopics: resetTopicRecursively(s.extractedTopics)
+      };
+    });
+    const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
+
+    console.log('🔄 Reset topic - new state:', updatedCurrent?.extractedTopics);
 
     return {
       studySessions: updatedSessions,

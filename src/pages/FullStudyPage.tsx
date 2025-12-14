@@ -75,6 +75,7 @@ export default function FullStudyPage() {
   const answerQuestion = useAppStore(state => state.answerQuestion);
   const moveToNextQuestion = useAppStore(state => state.moveToNextQuestion);
   const completeTopic = useAppStore(state => state.completeTopic);
+  const resetTopic = useAppStore(state => state.resetTopic);
 
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
@@ -286,9 +287,17 @@ export default function FullStudyPage() {
   }, [handleSkipToNextTopic]);
 
   const handleRetryTopic = useCallback(() => {
+    if (!selectedTopicId || !sessionIdRef) return;
+
+    console.log('🔄 Retrying topic:', selectedTopicId);
+
+    // Reset the topic in the store (score, completed, questionIndex)
+    resetTopic(sessionIdRef, selectedTopicId);
+
+    // Reset local state
+    setLocalQuestionIndex(0);
     setShowSummary(false);
-    // Reset would require store update - for now just close summary
-  }, []);
+  }, [selectedTopicId, sessionIdRef, resetTopic]);
 
   const selectedTopic = useMemo(() => {
     const topic = flattenedTopics.find(t => t.id === selectedTopicId);
@@ -305,20 +314,20 @@ export default function FullStudyPage() {
 
   // Simple local handlers that just iterate through the questions array
   const handleAnswerForSelected = useCallback((answerIndex: number) => {
-    if (!selectedTopicId || !selectedTopic) return { correct: false, explanation: '' };
+    if (!selectedTopicId || !selectedTopic || !sessionIdRef) return { correct: false, explanation: '' };
 
-    // Get the current question
-    const currentQuestion = selectedTopic.questions[localQuestionIndex];
-    const correct = currentQuestion.correctAnswer === answerIndex;
+    console.log(`📝 Answering question ${localQuestionIndex + 1} of ${selectedTopic.questions.length}`);
 
-    console.log(`📝 Answer ${answerIndex} - ${correct ? 'Correct!' : 'Wrong'}`, {
+    // Call answerQuestion with the LOCAL question index (not store's currentQuestionIndex)
+    const result = answerQuestion(sessionIdRef, selectedTopicId, answerIndex, localQuestionIndex);
+
+    console.log(`📝 Answer ${answerIndex} - ${result.correct ? '✅ Correct!' : '❌ Wrong'}`, {
       currentIndex: localQuestionIndex,
       totalQuestions: selectedTopic.questions.length
     });
 
-    // Also update the store for score tracking
-    return answerQuestion(sessionIdRef!, selectedTopicId, answerIndex);
-  }, [selectedTopicId, selectedTopic, localQuestionIndex, answerQuestion, sessionIdRef]);
+    return result;
+  }, [selectedTopicId, selectedTopic, localQuestionIndex, sessionIdRef, answerQuestion]);
 
   const handleMoveToNextForSelected = useCallback(() => {
     if (!selectedTopic) return;
