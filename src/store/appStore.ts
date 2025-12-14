@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { v4 as uuidv4 } from 'uuid';
 import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession } from '@/services/api';
 
 interface Game {
@@ -256,7 +257,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createSession: (title, content) => {
     const newSession: StudySession = {
-      id: `session-${Date.now()}`,
+      id: uuidv4(), // Generate UUID for globally unique session ID
       title,
       progress: 0,
       topics: 0,

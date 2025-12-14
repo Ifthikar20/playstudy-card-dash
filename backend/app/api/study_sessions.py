@@ -137,7 +137,7 @@ class CreateStudySessionRequest(BaseModel):
 
 class CreateStudySessionResponse(BaseModel):
     """Response schema for created study session."""
-    id: int
+    id: str  # UUID as string
     title: str
     studyContent: str
     extractedTopics: List[TopicSchema]
@@ -399,7 +399,7 @@ Return in this EXACT format:
         db.refresh(study_session)
 
         return CreateStudySessionResponse(
-            id=study_session.id,
+            id=str(study_session.id),  # Convert UUID to string
             title=study_session.title,
             studyContent=study_session.study_content,
             extractedTopics=all_topics,
@@ -419,7 +419,7 @@ Return in this EXACT format:
 
 @router.get("/{session_id}", response_model=CreateStudySessionResponse)
 async def get_study_session(
-    session_id: int,
+    session_id: str,  # UUID as string
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -504,7 +504,7 @@ async def get_study_session(
     progress = int((completed_subtopics / total_subtopics * 100) if total_subtopics > 0 else 0)
 
     return CreateStudySessionResponse(
-        id=session.id,
+        id=str(session.id),  # Convert UUID to string
         title=session.title,
         studyContent=session.study_content or "",
         extractedTopics=result_topics,
@@ -517,7 +517,7 @@ async def get_study_session(
 
 @router.delete("/{session_id}")
 async def delete_study_session(
-    session_id: int,
+    session_id: str,  # UUID as string
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -542,7 +542,7 @@ async def delete_study_session(
 
 @router.patch("/{session_id}/archive")
 async def archive_study_session(
-    session_id: int,
+    session_id: str,  # UUID as string
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
