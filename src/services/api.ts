@@ -406,6 +406,18 @@ export const createStudySessionWithAI = async (
 
     const data = await response.json();
 
+    // Normalize topics to ensure proper initialization
+    const normalizeTopics = (topicList: any[]): any[] => {
+      if (!topicList) return [];
+      return topicList.map((t: any) => ({
+        ...t,
+        score: t.score ?? 0, // Ensure score is 0, not null
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
+      }));
+    };
+
     // Transform API response to match frontend StudySession interface
     return {
       id: String(data.id),
@@ -417,7 +429,7 @@ export const createStudySessionWithAI = async (
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
       studyContent: data.studyContent,
-      extractedTopics: data.extractedTopics,
+      extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
   } catch (error) {
     console.error('Failed to create study session:', error);
@@ -462,6 +474,18 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 
     const data = await response.json();
 
+    // Normalize topics to ensure proper initialization
+    const normalizeTopics = (topicList: any[]): any[] => {
+      if (!topicList) return [];
+      return topicList.map((t: any) => ({
+        ...t,
+        score: t.score ?? 0, // Ensure score is 0, not null
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
+      }));
+    };
+
     // Transform backend response to frontend StudySession format
     const session: StudySession = {
       id: data.id.toString(),
@@ -473,7 +497,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
       studyContent: data.studyContent,
-      extractedTopics: data.extractedTopics,
+      extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
 
     // Save to browser storage for next time

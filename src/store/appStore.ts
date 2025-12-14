@@ -296,14 +296,39 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   processStudyContent: (sessionId, content) => {
     const topics = generateTopicsFromContent(content);
+
+    // Normalize topics to ensure all required fields are present and properly initialized
+    const normalizeTopics = (topicList: Topic[]): Topic[] => {
+      return topicList.map(t => ({
+        ...t,
+        score: t.score ?? 0, // Ensure score is 0, not null/undefined
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
+      }));
+    };
+
+    const normalizedTopics = normalizeTopics(topics);
+
+    console.log('📥 Processing study content with normalization:', {
+      sessionId,
+      topicsCount: normalizedTopics.length,
+      sampleTopic: normalizedTopics[0] ? {
+        id: normalizedTopics[0].id,
+        title: normalizedTopics[0].title,
+        score: normalizedTopics[0].score,
+        questionsCount: normalizedTopics[0].questions?.length
+      } : null
+    });
+
     set((state) => {
       const updatedSessions = state.studySessions.map((s) =>
-        s.id === sessionId 
-          ? { ...s, studyContent: content, extractedTopics: topics, hasFullStudy: true, topics: topics.length } 
+        s.id === sessionId
+          ? { ...s, studyContent: content, extractedTopics: normalizedTopics, hasFullStudy: true, topics: normalizedTopics.length }
           : s
       );
-      const updatedCurrent = state.currentSession?.id === sessionId 
-        ? { ...state.currentSession, studyContent: content, extractedTopics: topics, hasFullStudy: true, topics: topics.length }
+      const updatedCurrent = state.currentSession?.id === sessionId
+        ? { ...state.currentSession, studyContent: content, extractedTopics: normalizedTopics, hasFullStudy: true, topics: normalizedTopics.length }
         : state.currentSession;
       return { studySessions: updatedSessions, currentSession: updatedCurrent };
     });
@@ -339,18 +364,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     console.log('📚 Checking answer for question', indexToUse + 1, 'of', topic.questions.length);
 
-    // Debug logging
-    console.log('Answer validation:', {
+    // Enhanced debug logging
+    console.log('🔍 Answer validation details:', {
       answerIndex,
       correctAnswer: question.correctAnswer,
       answerIndexType: typeof answerIndex,
       correctAnswerType: typeof question.correctAnswer,
-      question: question.question,
-      options: question.options
+      answerIndexValue: answerIndex,
+      correctAnswerValue: question.correctAnswer,
+      currentScore: topic.score,
+      questionData: {
+        question: question.question,
+        options: question.options,
+        selectedOption: question.options[answerIndex],
+        correctOption: question.options[question.correctAnswer]
+      }
     });
 
-    // Ensure both are numbers for comparison
-    const correct = Number(answerIndex) === Number(question.correctAnswer);
+    // Ensure both are numbers for comparison (handle null/undefined)
+    const answerNum = Number(answerIndex);
+    const correctNum = Number(question.correctAnswer);
+    const correct = !isNaN(answerNum) && !isNaN(correctNum) && answerNum === correctNum;
+
+    console.log('✅ Comparison result:', {
+      answerNum,
+      correctNum,
+      correct,
+      willAddPoints: correct ? (100 / topic.questions.length) : 0,
+      newScore: (topic.score || 0) + (correct ? 100 / topic.questions.length : 0)
+    });
 
     // Helper function to update score recursively (WITHOUT incrementing index)
     const updateScoreRecursively = (topics: Topic[]): Topic[] => {

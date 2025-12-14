@@ -78,6 +78,15 @@ export function TopicQuizCard({
   if (isCompleted) {
     const totalQuestions = questions.length;
     const pointsEarned = Math.round((score || 0) * totalQuestions / 100);
+    const xpEarned = pointsEarned * 10; // 10 XP per correct answer
+
+    console.log('🏆 Topic completed:', {
+      score,
+      totalQuestions,
+      pointsEarned,
+      xpEarned,
+      scorePercentage: score
+    });
 
     return (
       <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20">
@@ -107,7 +116,7 @@ export function TopicQuizCard({
 
           <div className="pt-2">
             <p className="text-xs text-primary font-medium">
-              +{pointsEarned} XP added to your total learning points
+              +{xpEarned} XP added to your total learning points
             </p>
           </div>
         </CardContent>
