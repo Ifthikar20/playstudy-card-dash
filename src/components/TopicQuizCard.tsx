@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, XCircle, Trophy, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -50,58 +51,65 @@ export function TopicQuizCard({
     setResult(null);
   }, [currentQuestionIndex]);
 
-  // Auto-advance to next question after showing result
-  useEffect(() => {
-    console.log('⏰ Timer effect triggered', { showResult, isLastQuestion });
-
-    if (showResult && !isLastQuestion) {
-      console.log('⏳ Starting 2-second timer to move to next question');
-      const timer = setTimeout(() => {
-        console.log('🚀 Timer fired! Calling onMoveToNext');
-        // Move to next question (which will trigger state reset via the other useEffect)
-        onMoveToNext();
-      }, 2000); // 2 second delay to read the explanation
-
-      return () => {
-        console.log('🧹 Cleaning up timer');
-        clearTimeout(timer);
-      };
-    } else if (showResult && isLastQuestion) {
-      console.log('🏁 Last question - starting timer to complete');
-      // If last question, auto-complete after delay
-      const timer = setTimeout(() => {
-        console.log('✅ Completing topic');
-        onComplete();
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [showResult, isLastQuestion, onMoveToNext, onComplete]); // Removed currentQuestionIndex from deps
-
   const handleSelectAnswer = (index: number) => {
     if (showResult) return; // Don't allow selecting after already answered
 
+    console.log('📝 Answer selected:', index);
     setSelectedAnswer(index);
 
     // Immediately submit the answer
     const answerResult = onAnswer(index);
     setResult(answerResult);
     setShowResult(true);
+    console.log('✅ Answer result:', answerResult.correct ? 'Correct' : 'Wrong');
+  };
+
+  const handleNext = () => {
+    console.log('➡️ Next button clicked');
+    if (isLastQuestion) {
+      console.log('🏁 Last question - completing topic');
+      onComplete();
+    } else {
+      console.log('🔄 Moving to next question');
+      onMoveToNext();
+    }
   };
 
   if (isCompleted) {
+    const totalQuestions = questions.length;
+    const pointsEarned = Math.round((score || 0) * totalQuestions / 100);
+
     return (
       <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20">
-        <CardContent className="p-6 text-center">
+        <CardContent className="p-6 text-center space-y-4">
           <Trophy className="mx-auto text-green-600 dark:text-green-400 mb-4" size={48} />
-          <h3 className="text-xl font-bold text-foreground mb-2">Topic Completed!</h3>
+          <h3 className="text-xl font-bold text-foreground mb-2">Topic Complete!</h3>
           <p className="text-muted-foreground mb-4">{topicTitle}</p>
-          <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {Math.round(score || 0)}%
+
+          <div className="space-y-2">
+            <div className="text-5xl font-bold text-green-600 dark:text-green-400">
+              {pointsEarned} / {totalQuestions}
+            </div>
+            <p className="text-lg font-semibold text-foreground">
+              Points Earned
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            Great job! Move on to the next topic.
-          </p>
+
+          <div className="pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">
+              {pointsEarned === totalQuestions
+                ? "Perfect score! 🎉 Amazing work!"
+                : pointsEarned >= totalQuestions * 0.7
+                ? "Great job! Keep up the good work! 💪"
+                : "Keep practicing to improve your score! 📚"}
+            </p>
+          </div>
+
+          <div className="pt-2">
+            <p className="text-xs text-primary font-medium">
+              +{pointsEarned} XP added to your total learning points
+            </p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -120,9 +128,18 @@ export function TopicQuizCard({
   return (
     <Card>
       <CardContent className="p-6 space-y-4">
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{topicTitle}</span>
-          <span>Question {currentQuestionIndex + 1} of {questions.length}</span>
+        {/* Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{topicTitle}</span>
+            <span className="font-semibold text-foreground">
+              {currentQuestionIndex + 1} / {questions.length}
+            </span>
+          </div>
+          <Progress
+            value={((currentQuestionIndex + 1) / questions.length) * 100}
+            className="h-2"
+          />
         </div>
 
         <h3 className="text-lg font-semibold text-foreground">
@@ -164,19 +181,26 @@ export function TopicQuizCard({
         </div>
 
         {showResult && result && (
-          <div className={cn(
-            "p-4 rounded-lg text-sm animate-in fade-in slide-in-from-top-2 duration-300",
-            result.correct
-              ? "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200"
-              : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200"
-          )}>
-            <p className="font-medium mb-1">
-              {result.correct ? "Correct! 🎉" : "Not quite right"}
-            </p>
-            <p>{result.explanation}</p>
-            <p className="text-xs mt-2 opacity-70">
-              {isLastQuestion ? "Completing topic..." : "Next question in 2 seconds..."}
-            </p>
+          <div className="space-y-3">
+            <div className={cn(
+              "p-4 rounded-lg text-sm animate-in fade-in slide-in-from-top-2 duration-300",
+              result.correct
+                ? "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200"
+                : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200"
+            )}>
+              <p className="font-medium mb-1">
+                {result.correct ? "Correct! 🎉" : "Not quite right"}
+              </p>
+              <p>{result.explanation}</p>
+            </div>
+
+            <Button
+              onClick={handleNext}
+              className="w-full"
+              size="lg"
+            >
+              {isLastQuestion ? "Complete Topic ✓" : "Next Question →"}
+            </Button>
           </div>
         )}
 

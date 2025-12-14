@@ -2,6 +2,99 @@
  * Unified API service for making a single call to fetch all application data
  */
 
+// Browser storage keys
+const STORAGE_KEYS = {
+  SESSIONS: 'playstudy_sessions',
+  SESSIONS_TIMESTAMP: 'playstudy_sessions_timestamp',
+  SESSION_CACHE_DURATION: 5 * 60 * 1000, // 5 minutes
+};
+
+// Browser storage helpers
+const BrowserStorage = {
+  saveSessions: (sessions: StudySession[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+      localStorage.setItem(STORAGE_KEYS.SESSIONS_TIMESTAMP, Date.now().toString());
+      console.log('💾 Saved sessions to browser storage');
+    } catch (error) {
+      console.warn('Failed to save sessions to browser storage:', error);
+    }
+  },
+
+  loadSessions: (): StudySession[] | null => {
+    try {
+      const timestamp = localStorage.getItem(STORAGE_KEYS.SESSIONS_TIMESTAMP);
+      if (!timestamp) return null;
+
+      const age = Date.now() - parseInt(timestamp);
+      if (age > STORAGE_KEYS.SESSION_CACHE_DURATION) {
+        console.log('⏰ Browser storage cache expired');
+        return null;
+      }
+
+      const stored = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+      if (!stored) return null;
+
+      const sessions = JSON.parse(stored);
+      console.log('📂 Loaded sessions from browser storage');
+      return sessions;
+    } catch (error) {
+      console.warn('Failed to load sessions from browser storage:', error);
+      return null;
+    }
+  },
+
+  saveSession: (sessionId: string, session: StudySession) => {
+    try {
+      const key = `playstudy_session_${sessionId}`;
+      localStorage.setItem(key, JSON.stringify(session));
+      localStorage.setItem(`${key}_timestamp`, Date.now().toString());
+      console.log(`💾 Saved session ${sessionId} to browser storage`);
+    } catch (error) {
+      console.warn('Failed to save session to browser storage:', error);
+    }
+  },
+
+  loadSession: (sessionId: string): StudySession | null => {
+    try {
+      const key = `playstudy_session_${sessionId}`;
+      const timestamp = localStorage.getItem(`${key}_timestamp`);
+
+      if (!timestamp) return null;
+
+      const age = Date.now() - parseInt(timestamp);
+      if (age > STORAGE_KEYS.SESSION_CACHE_DURATION) {
+        console.log(`⏰ Session ${sessionId} cache expired`);
+        return null;
+      }
+
+      const stored = localStorage.getItem(key);
+      if (!stored) return null;
+
+      const session = JSON.parse(stored);
+      console.log(`📂 Loaded session ${sessionId} from browser storage`);
+      return session;
+    } catch (error) {
+      console.warn('Failed to load session from browser storage:', error);
+      return null;
+    }
+  },
+
+  clearCache: () => {
+    try {
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith('playstudy_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      console.log('🗑️ Cleared browser storage cache');
+    } catch (error) {
+      console.warn('Failed to clear browser storage:', error);
+    }
+  }
+};
+
 export interface Game {
   id: number;
   title: string;
@@ -163,6 +256,14 @@ export const fetchAppData = async (): Promise<AppData> => {
       return getMockAppData();
     }
 
+    // Try to load from browser storage first (instant load)
+    const cachedSessions = BrowserStorage.loadSessions();
+    if (cachedSessions && cachedSessions.length > 0) {
+      console.log('⚡ Using cached sessions from browser storage');
+      // Fetch in background to update cache
+      fetchAndCacheAppData(token);
+    }
+
     const response = await fetch(`${API_URL}/app-data`, {
       method: 'GET',
       headers: {
@@ -181,13 +282,50 @@ export const fetchAppData = async (): Promise<AppData> => {
     }
 
     const data: AppData = await response.json();
+
+    // Save sessions to browser storage for next time
+    BrowserStorage.saveSessions(data.studySessions);
+
     return data;
   } catch (error) {
     console.error('Failed to fetch app data:', error);
-    // Return mock data as fallback for development
+
+    // Try browser storage as fallback
+    const cachedSessions = BrowserStorage.loadSessions();
+    if (cachedSessions) {
+      console.log('📂 Using browser storage fallback');
+      const mockData = getMockAppData();
+      return {
+        ...mockData,
+        studySessions: cachedSessions,
+      };
+    }
+
+    // Return mock data as final fallback
     return getMockAppData();
   }
 };
+
+// Background fetch to update cache
+async function fetchAndCacheAppData(token: string) {
+  try {
+    const response = await fetch(`${API_URL}/app-data`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const data: AppData = await response.json();
+      BrowserStorage.saveSessions(data.studySessions);
+      console.log('🔄 Updated browser storage in background');
+    }
+  } catch (error) {
+    console.warn('Background cache update failed:', error);
+  }
+}
 
 /**
  * Generate questions using Anthropic AI
@@ -283,6 +421,67 @@ export const createStudySessionWithAI = async (
     };
   } catch (error) {
     console.error('Failed to create study session:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch a specific study session with all its topics and questions
+ */
+export const getStudySession = async (sessionId: string): Promise<StudySession> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required. Please log in again.');
+    }
+
+    // Try to load from browser storage first (instant load)
+    const cachedSession = BrowserStorage.loadSession(sessionId);
+    if (cachedSession) {
+      console.log(`⚡ Using cached session ${sessionId} from browser storage`);
+      return cachedSession;
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Study session not found');
+      }
+      if (response.status === 401) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      throw new Error('Failed to fetch study session');
+    }
+
+    const data = await response.json();
+
+    // Transform backend response to frontend StudySession format
+    const session: StudySession = {
+      id: data.id.toString(),
+      title: data.title,
+      progress: data.progress,
+      topics: data.topics,
+      time: 'Loaded',
+      hasFullStudy: data.hasFullStudy,
+      hasSpeedRun: data.hasSpeedRun,
+      hasQuiz: false,
+      studyContent: data.studyContent,
+      extractedTopics: data.extractedTopics,
+    };
+
+    // Save to browser storage for next time
+    BrowserStorage.saveSession(sessionId, session);
+
+    return session;
+  } catch (error) {
+    console.error('Error fetching study session:', error);
     throw error;
   }
 };

@@ -120,7 +120,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
     // Navigate to the selected mode
     if (selectedMode === "full-study") {
-      navigate("/full-study");
+      navigate(`/full-study/${createdSession.id}`);
     } else if (selectedMode === "speed-run") {
       createSpeedRun(createdSession.id);
       navigate("/speedrun");

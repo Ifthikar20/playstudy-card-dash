@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { useAppStore } from "@/store/appStore";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicQuizCard } from "@/components/TopicQuizCard";
 import { TopicSummary } from "@/components/TopicSummary";
+import { getStudySession } from "@/services/api";
 
 // Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
@@ -69,11 +71,74 @@ const nodeStyles = {
 };
 
 export default function FullStudyPage() {
-  const { currentSession, processStudyContent, answerQuestion, moveToNextQuestion, completeTopic } = useAppStore();
+  // Get sessionId from URL params
+  const { sessionId } = useParams<{ sessionId?: string }>();
+
+  // Use explicit selector to ensure re-renders on currentSession changes
+  const currentSession = useAppStore(state => state.currentSession);
+  const setCurrentSession = useAppStore(state => state.setCurrentSession);
+  const studySessions = useAppStore(state => state.studySessions);
+  const processStudyContent = useAppStore(state => state.processStudyContent);
+  const answerQuestion = useAppStore(state => state.answerQuestion);
+  const moveToNextQuestion = useAppStore(state => state.moveToNextQuestion);
+  const completeTopic = useAppStore(state => state.completeTopic);
+  const resetTopic = useAppStore(state => state.resetTopic);
+
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [localQuestionIndex, setLocalQuestionIndex] = useState(0);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
+
+  // Load session data based on URL parameter
+  useEffect(() => {
+    const loadSession = async () => {
+      // If sessionId is in URL, load that session
+      if (sessionId) {
+        console.log('📥 URL sessionId detected:', sessionId);
+
+        // Check if we already have this session in the store
+        const existingSession = studySessions.find(s => s.id === sessionId);
+
+        // If currentSession doesn't match URL, update it
+        if (!currentSession || currentSession.id !== sessionId) {
+          if (existingSession) {
+            console.log('📂 Setting session from store:', sessionId);
+            setCurrentSession(existingSession);
+          }
+        }
+
+        // Load full session data if not already loaded
+        if (!currentSession?.extractedTopics || currentSession.extractedTopics.length === 0 || currentSession.id !== sessionId) {
+          console.log('📥 Loading session data from backend:', sessionId);
+          setIsLoadingSession(true);
+
+          try {
+            const fullSession = await getStudySession(sessionId);
+            console.log('✅ Session data loaded:', fullSession);
+
+            // Update the current session with the full data
+            setCurrentSession(fullSession);
+          } catch (error: any) {
+            console.error('❌ Failed to load session:', error);
+            // If loading fails, stay on the current screen (will show upload)
+          } finally {
+            setIsLoadingSession(false);
+          }
+        }
+      }
+    };
+
+    loadSession();
+  }, [sessionId, currentSession?.id, studySessions]);
+
+  // Reset question index when topic changes
+  useEffect(() => {
+    console.log('🔄 Topic changed, resetting question index to 0');
+    setLocalQuestionIndex(0);
+    setShowSummary(false);
+  }, [selectedTopicId]);
 
   // Flatten topics for easier access (includes both categories and subtopics)
   const flattenedTopics = useMemo(() => {
@@ -95,9 +160,23 @@ export default function FullStudyPage() {
     return flattenedTopics.filter(t => !t.isCategory);
   }, [flattenedTopics]);
 
-  // Generate nodes and edges from extracted topics (hierarchical structure)
+  // Create a completion hash to trigger re-renders when any topic is completed
+  const completionHash = useMemo(() => {
+    const topics = currentSession?.extractedTopics || [];
+    const generateHash = (topicList: any[]): string => {
+      return topicList.map(t => {
+        const subtopicsHash = t.subtopics ? generateHash(t.subtopics) : '';
+        return `${t.id}:${t.completed ? '1' : '0'}:${t.currentQuestionIndex}${subtopicsHash}`;
+      }).join('|');
+    };
+    return generateHash(topics);
+  }, [currentSession?.extractedTopics]);
+
+  // Generate nodes and edges from extracted topics (hierarchical structure) - RECURSIVE
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const topics = currentSession?.extractedTopics || [];
+
+    console.log('🎨 Regenerating tree nodes - completion hash:', completionHash);
 
     if (topics.length === 0) {
       return { nodes: [], edges: [] };
@@ -107,105 +186,110 @@ export default function FullStudyPage() {
     const generatedEdges: Edge[] = [];
     let yOffset = 0;
 
-    topics.forEach((category, catIndex) => {
-      const categoryCompleted = category.subtopics?.every((st: any) => st.completed) || false;
+    // Recursive function to process topics at any depth
+    const processTopicLevel = (
+      topicList: any[],
+      parentId: string | null,
+      depth: number,
+      xPosition: number
+    ) => {
+      topicList.forEach((topic: any, index: number) => {
+        const hasSubtopics = topic.subtopics && topic.subtopics.length > 0;
+        const isLeafTopic = !hasSubtopics && !topic.isCategory;
+        const isCompleted = topic.completed;
 
-      // Category node
-      let categoryStyle = nodeStyles.locked;
-      let categoryEmoji = "📁";
+        // Determine if all children are completed (for parent nodes)
+        const allChildrenCompleted = hasSubtopics
+          ? topic.subtopics.every((st: any) => st.completed)
+          : isCompleted;
 
-      if (categoryCompleted) {
-        categoryStyle = nodeStyles.completed;
-        categoryEmoji = "✅";
-      } else if (category.subtopics?.some((st: any) => !st.completed)) {
-        categoryStyle = nodeStyles.inProgress;
-        categoryEmoji = "📂";
-      }
+        // Style based on completion and type
+        let style = nodeStyles.locked;
+        let emoji = "📁";
 
-      generatedNodes.push({
-        id: category.id,
-        type: "default",
-        data: { label: `${categoryEmoji} ${category.title}` },
-        position: { x: 50, y: yOffset },
-        style: { ...categoryStyle, fontWeight: 600, fontSize: "13px" },
-      });
+        if (topic.isCategory) {
+          // Category node
+          emoji = allChildrenCompleted ? "✅" : hasSubtopics ? "📂" : "📁";
+          style = allChildrenCompleted ? nodeStyles.completed : nodeStyles.inProgress;
+        } else if (isLeafTopic) {
+          // Leaf topic (has questions)
+          emoji = isCompleted ? "✅" : "📚";
+          style = isCompleted ? nodeStyles.completed : nodeStyles.current;
+        } else {
+          // Parent topic (has subtopics but not a category)
+          emoji = allChildrenCompleted ? "✅" : "📋";
+          style = allChildrenCompleted ? nodeStyles.completed : nodeStyles.inProgress;
+        }
 
-      yOffset += 80;
+        // Add node
+        generatedNodes.push({
+          id: topic.id,
+          type: "default",
+          data: { label: `${emoji} ${topic.title}` },
+          position: { x: xPosition, y: yOffset },
+          style: { ...style, fontWeight: topic.isCategory ? 600 : 500, fontSize: topic.isCategory ? "13px" : "12px" },
+        });
 
-      // Subtopic nodes
-      if (category.subtopics && category.subtopics.length > 0) {
-        category.subtopics.forEach((subtopic: any, subIndex: number) => {
-          const isCompleted = subtopic.completed;
-
-          let style = nodeStyles.locked;
-          let emoji = "📝";
-
-          if (isCompleted) {
-            style = nodeStyles.completed;
-            emoji = "✅";
-          } else {
-            style = nodeStyles.current;
-            emoji = "📚";
-          }
-
-          generatedNodes.push({
-            id: subtopic.id,
-            type: "default",
-            data: { label: `${emoji} ${subtopic.title}` },
-            position: { x: 300, y: yOffset },
-            style,
-          });
-
-          // Edge from category to subtopic
+        // Edge from parent to this node
+        if (parentId) {
           generatedEdges.push({
-            id: `e-${category.id}-${subtopic.id}`,
-            source: category.id,
-            target: subtopic.id,
+            id: `e-${parentId}-${topic.id}`,
+            source: parentId,
+            target: topic.id,
             animated: !isCompleted,
             style: {
               stroke: isCompleted ? "#10b981" : "hsl(var(--border))",
               strokeWidth: isCompleted ? 3 : 2
             },
           });
+        }
 
-          // Edge to next subtopic (if exists)
-          if (subIndex < category.subtopics.length - 1) {
-            const nextSubtopic = category.subtopics[subIndex + 1];
-            generatedEdges.push({
-              id: `e-${subtopic.id}-${nextSubtopic.id}`,
-              source: subtopic.id,
-              target: nextSubtopic.id,
-              animated: !isCompleted,
-              style: {
-                stroke: isCompleted ? "#10b981" : "hsl(var(--border))",
-                strokeWidth: isCompleted ? 3 : 2,
-                strokeDasharray: "5, 5"
-              },
-            });
-          }
+        const currentY = yOffset;
+        yOffset += 90;
 
-          yOffset += 100;
-        });
-      }
+        // Recursively process subtopics
+        if (hasSubtopics) {
+          const childXPosition = xPosition + 250; // Indent each level by 250px
+          processTopicLevel(topic.subtopics, topic.id, depth + 1, childXPosition);
+        }
 
-      yOffset += 20; // Extra space between categories
-    });
+        // Edge to next sibling at same level (flow arrow)
+        if (index < topicList.length - 1 && !topic.isCategory) {
+          const nextTopic = topicList[index + 1];
+          generatedEdges.push({
+            id: `e-${topic.id}-${nextTopic.id}-sibling`,
+            source: topic.id,
+            target: nextTopic.id,
+            animated: !isCompleted,
+            style: {
+              stroke: isCompleted ? "#10b981" : "hsl(var(--border))",
+              strokeWidth: isCompleted ? 3 : 2,
+              strokeDasharray: "5, 5"
+            },
+          });
+        }
+      });
+    };
+
+    // Start processing from root level
+    processTopicLevel(topics, null, 0, 50);
 
     return { nodes: generatedNodes, edges: generatedEdges };
-  }, [currentSession?.extractedTopics]);
+  }, [currentSession?.extractedTopics, completionHash]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Update nodes when topics change
-  useMemo(() => {
+  // Update nodes and edges when topics change
+  useEffect(() => {
+    console.log('🔄 Updating tree nodes and edges - topics changed');
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(() => {}, []);
 
-  const handleContentSubmit = (content: string) => {
+  const handleContentSubmit = useCallback((content: string) => {
     if (!currentSession) return;
     setIsProcessing(true);
     // Simulate processing delay
@@ -213,25 +297,29 @@ export default function FullStudyPage() {
       processStudyContent(currentSession.id, content);
       setIsProcessing(false);
     }, 1500);
-  };
+  }, [currentSession, processStudyContent]);
 
-  const handleAnswerQuestion = (topicId: string, answerIndex: number) => {
-    if (!currentSession) return { correct: false, explanation: '' };
-    return answerQuestion(currentSession.id, topicId, answerIndex);
-  };
+  // Store session ID in a ref to avoid recreating callbacks
+  const sessionIdRef = useMemo(() => currentSession?.id, [currentSession?.id]);
 
-  const handleMoveToNext = (topicId: string) => {
-    if (!currentSession) return;
-    moveToNextQuestion(currentSession.id, topicId);
-  };
+  const handleAnswerQuestion = useCallback((topicId: string, answerIndex: number) => {
+    if (!sessionIdRef) return { correct: false, explanation: '' };
+    return answerQuestion(sessionIdRef, topicId, answerIndex);
+  }, [sessionIdRef, answerQuestion]);
 
-  const handleCompleteTopic = (topicId: string) => {
-    if (!currentSession) return;
-    completeTopic(currentSession.id, topicId);
+  const handleMoveToNext = useCallback((topicId: string) => {
+    if (!sessionIdRef) return;
+    console.log('🎯 handleMoveToNext called for topic:', topicId);
+    moveToNextQuestion(sessionIdRef, topicId);
+  }, [sessionIdRef, moveToNextQuestion]);
+
+  const handleCompleteTopic = useCallback((topicId: string) => {
+    if (!sessionIdRef) return;
+    completeTopic(sessionIdRef, topicId);
     setShowSummary(true);
-  };
+  }, [sessionIdRef, completeTopic]);
 
-  const handleSkipToNextTopic = () => {
+  const handleSkipToNextTopic = useCallback(() => {
     const currentIndex = leafTopics.findIndex(t => t.id === selectedTopicId);
     const nextTopic = leafTopics[currentIndex + 1];
 
@@ -242,16 +330,24 @@ export default function FullStudyPage() {
       // No more topics, go back to topic list
       setSelectedTopicId(null);
     }
-  };
+  }, [leafTopics, selectedTopicId]);
 
-  const handleContinueToNextTopic = () => {
+  const handleContinueToNextTopic = useCallback(() => {
     handleSkipToNextTopic();
-  };
+  }, [handleSkipToNextTopic]);
 
-  const handleRetryTopic = () => {
+  const handleRetryTopic = useCallback(() => {
+    if (!selectedTopicId || !sessionIdRef) return;
+
+    console.log('🔄 Retrying topic:', selectedTopicId);
+
+    // Reset the topic in the store (score, completed, questionIndex)
+    resetTopic(sessionIdRef, selectedTopicId);
+
+    // Reset local state
+    setLocalQuestionIndex(0);
     setShowSummary(false);
-    // Reset would require store update - for now just close summary
-  };
+  }, [selectedTopicId, sessionIdRef, resetTopic]);
 
   const selectedTopic = useMemo(() => {
     const topic = flattenedTopics.find(t => t.id === selectedTopicId);
@@ -265,6 +361,45 @@ export default function FullStudyPage() {
     }
     return topic;
   }, [flattenedTopics, selectedTopicId]);
+
+  // Simple local handlers that just iterate through the questions array
+  const handleAnswerForSelected = useCallback((answerIndex: number) => {
+    if (!selectedTopicId || !selectedTopic || !sessionIdRef) return { correct: false, explanation: '' };
+
+    console.log(`📝 Answering question ${localQuestionIndex + 1} of ${selectedTopic.questions.length}`);
+
+    // Call answerQuestion with the LOCAL question index (not store's currentQuestionIndex)
+    const result = answerQuestion(sessionIdRef, selectedTopicId, answerIndex, localQuestionIndex);
+
+    console.log(`📝 Answer ${answerIndex} - ${result.correct ? '✅ Correct!' : '❌ Wrong'}`, {
+      currentIndex: localQuestionIndex,
+      totalQuestions: selectedTopic.questions.length
+    });
+
+    return result;
+  }, [selectedTopicId, selectedTopic, localQuestionIndex, sessionIdRef, answerQuestion]);
+
+  const handleMoveToNextForSelected = useCallback(() => {
+    if (!selectedTopic) return;
+
+    const nextIndex = localQuestionIndex + 1;
+    console.log(`➡️ Moving from question ${localQuestionIndex + 1} to ${nextIndex + 1} of ${selectedTopic.questions.length}`);
+
+    setLocalQuestionIndex(nextIndex);
+
+    // Also update the store
+    if (selectedTopicId && sessionIdRef) {
+      moveToNextQuestion(sessionIdRef, selectedTopicId);
+    }
+  }, [selectedTopic, localQuestionIndex, selectedTopicId, sessionIdRef, moveToNextQuestion]);
+
+  const handleCompleteForSelected = useCallback(() => {
+    if (!selectedTopicId || !sessionIdRef) return;
+
+    console.log('✅ Completing topic:', selectedTopicId);
+    completeTopic(sessionIdRef, selectedTopicId);
+    setShowSummary(true);
+  }, [selectedTopicId, sessionIdRef, completeTopic]);
 
   const topics = currentSession?.extractedTopics || [];
 
@@ -301,11 +436,27 @@ export default function FullStudyPage() {
 
   // Session selected but no content uploaded yet
   if (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0) {
+    // Show loading state while fetching session data
+    if (isLoadingSession) {
+      return (
+        <div className="flex min-h-screen bg-background">
+          <Sidebar />
+          <main className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              <p className="mt-4 text-muted-foreground">Loading your study session...</p>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    // Show upload screen if no topics after loading
     return (
       <div className="flex min-h-screen bg-background">
         <Sidebar />
         <main className="flex-1 flex items-center justify-center p-6">
-          <StudyContentUpload 
+          <StudyContentUpload
             onContentSubmit={handleContentSubmit}
             isProcessing={isProcessing}
           />
@@ -331,6 +482,9 @@ export default function FullStudyPage() {
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     {leafTopics.filter(t => t.completed).length} of {leafTopics.length} subtopics completed
+                    {selectedTopicId && !showSummary && (
+                      <span className="text-primary font-medium"> • Currently studying</span>
+                    )}
                   </p>
                 </div>
 
@@ -411,7 +565,7 @@ export default function FullStudyPage() {
                                         </div>
                                         {isCompleted && subtopic.score !== null && (
                                           <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                                            {Math.round(subtopic.score)}%
+                                            {Math.round((subtopic.score || 0) * (subtopic.questions?.length || 0) / 100)}/{subtopic.questions?.length || 0} pts
                                           </span>
                                         )}
                                       </div>
@@ -439,12 +593,13 @@ export default function FullStudyPage() {
                     </Button>
                     
                     <TopicQuizCard
+                      key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
                       topicTitle={selectedTopic.title}
                       questions={selectedTopic.questions || []}
-                      currentQuestionIndex={selectedTopic.currentQuestionIndex || 0}
-                      onAnswer={(answerIndex) => handleAnswerQuestion(selectedTopicId, answerIndex)}
-                      onMoveToNext={() => handleMoveToNext(selectedTopicId)}
-                      onComplete={() => handleCompleteTopic(selectedTopicId)}
+                      currentQuestionIndex={localQuestionIndex}
+                      onAnswer={handleAnswerForSelected}
+                      onMoveToNext={handleMoveToNextForSelected}
+                      onComplete={handleCompleteForSelected}
                       onSkipToNext={handleSkipToNextTopic}
                       score={selectedTopic.score}
                       isCompleted={selectedTopic.completed || false}

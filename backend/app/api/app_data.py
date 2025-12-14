@@ -13,6 +13,7 @@ from app.schemas.study_session import StudySessionResponse
 from app.models.user import User
 from app.models.game import Game
 from app.models.study_session import StudySession
+from app.models.topic import Topic
 from app.core.cache import get_cache, set_cache
 from app.core.rate_limit import limiter
 from app.config import settings
@@ -70,14 +71,46 @@ async def get_app_data(
     games = db.query(Game).filter(Game.is_active == True).all()
     logger.debug(f"📊 Found {len(games)} active games")
 
-    # Fetch user's study sessions
+    # Fetch user's study sessions - ordered by title (content-based) instead of date
     study_sessions = (
         db.query(StudySession)
         .filter(StudySession.user_id == current_user.id)
-        .order_by(StudySession.created_at.desc())
+        .order_by(StudySession.title.asc())
         .all()
     )
     logger.debug(f"📊 Found {len(study_sessions)} study sessions for user {current_user.id}")
+
+    # Fix generic session titles by using topic data
+    for session in study_sessions:
+        # Check if this is a generic title (contains "Study Session" and digits)
+        if "Study Session" in session.title and any(char.isdigit() for char in session.title):
+            # Fetch the first topic/category for this session
+            first_topic = (
+                db.query(Topic)
+                .filter(Topic.study_session_id == session.id)
+                .filter(Topic.is_category == True)
+                .order_by(Topic.order_index)
+                .first()
+            )
+
+            if first_topic:
+                # Count total categories for this session
+                total_categories = (
+                    db.query(Topic)
+                    .filter(Topic.study_session_id == session.id)
+                    .filter(Topic.is_category == True)
+                    .count()
+                )
+
+                # Generate meaningful title
+                if total_categories > 1:
+                    session.title = f"{first_topic.title} + {total_categories - 1} more"
+                else:
+                    session.title = first_topic.title
+
+                # Update in database
+                db.commit()
+                logger.debug(f"📝 Updated session {session.id} title to: {session.title}")
 
     # Build user profile using custom method
     user_profile = UserProfile.from_db_model(current_user)

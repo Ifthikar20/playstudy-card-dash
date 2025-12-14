@@ -137,7 +137,7 @@ class CreateStudySessionRequest(BaseModel):
 
 class CreateStudySessionResponse(BaseModel):
     """Response schema for created study session."""
-    id: int
+    id: str  # UUID as string
     title: str
     studyContent: str
     extractedTopics: List[TopicSchema]
@@ -232,10 +232,22 @@ Return ONLY a valid JSON object in this EXACT format:
         # Count total subtopics for the session
         total_subtopics = sum(len(cat.get("subtopics", [])) for cat in categories_data)
 
+        # Generate a smart title if the provided title is generic (contains "Study Session" and a date)
+        session_title = data.title
+        if "Study Session" in session_title and any(char.isdigit() for char in session_title):
+            # Use the first category as the title for better organization
+            if categories_data and len(categories_data) > 0:
+                first_category = categories_data[0]["title"]
+                # If multiple categories, add a subtitle
+                if len(categories_data) > 1:
+                    session_title = f"{first_category} + {len(categories_data) - 1} more"
+                else:
+                    session_title = first_category
+
         # Step 2: Create study session
         study_session = StudySession(
             user_id=current_user.id,
-            title=data.title,
+            title=session_title,
             topic=categories_data[0]["title"] if categories_data else "General Study",
             study_content=extracted_text,  # Store the extracted text, not binary
             topics_count=total_subtopics,
@@ -387,7 +399,7 @@ Return in this EXACT format:
         db.refresh(study_session)
 
         return CreateStudySessionResponse(
-            id=study_session.id,
+            id=str(study_session.id),  # Convert UUID to string
             title=study_session.title,
             studyContent=study_session.study_content,
             extractedTopics=all_topics,
@@ -405,9 +417,107 @@ Return in this EXACT format:
         raise HTTPException(status_code=500, detail=f"Failed to create study session: {str(e)}")
 
 
+@router.get("/{session_id}", response_model=CreateStudySessionResponse)
+async def get_study_session(
+    session_id: str,  # UUID as string
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get a study session with all its topics and questions.
+
+    Returns the complete session data including the hierarchical topic structure
+    with all questions, allowing users to resume their study progress.
+    """
+    # Fetch session with eager loading of topics and questions
+    session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    # Fetch all topics for this session
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == session_id
+    ).order_by(Topic.order_index).all()
+
+    # Build hierarchical structure
+    categories = [t for t in all_topics if t.is_category and t.parent_topic_id is None]
+
+    result_topics = []
+
+    for cat_idx, category in enumerate(categories):
+        # Get subtopics for this category
+        subtopics = [t for t in all_topics if t.parent_topic_id == category.id]
+
+        category_schema = TopicSchema(
+            id=f"category-{cat_idx+1}",
+            title=category.title,
+            description=category.description or "",
+            isCategory=True,
+            parentTopicId=None,
+            questions=[],
+            subtopics=[]
+        )
+
+        for sub_idx, subtopic in enumerate(subtopics):
+            # Fetch questions for this subtopic
+            questions = db.query(Question).filter(
+                Question.topic_id == subtopic.id
+            ).order_by(Question.order_index).all()
+
+            questions_list = [
+                QuestionSchema(
+                    id=f"topic-{sub_idx+1}-q{q.order_index+1}",
+                    question=q.question,
+                    options=q.options,
+                    correctAnswer=q.correct_answer,
+                    explanation=q.explanation
+                )
+                for q in questions
+            ]
+
+            subtopic_schema = TopicSchema(
+                id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                title=subtopic.title,
+                description=subtopic.description or "",
+                questions=questions_list,
+                completed=subtopic.completed or False,
+                score=subtopic.score,
+                currentQuestionIndex=subtopic.current_question_index or 0,
+                isCategory=False,
+                parentTopicId=f"category-{cat_idx+1}",
+                subtopics=[]
+            )
+            category_schema.subtopics.append(subtopic_schema)
+
+        result_topics.append(category_schema)
+
+    # Calculate progress
+    total_subtopics = sum(len(cat.subtopics) for cat in result_topics)
+    completed_subtopics = sum(
+        sum(1 for st in cat.subtopics if st.completed)
+        for cat in result_topics
+    )
+    progress = int((completed_subtopics / total_subtopics * 100) if total_subtopics > 0 else 0)
+
+    return CreateStudySessionResponse(
+        id=str(session.id),  # Convert UUID to string
+        title=session.title,
+        studyContent=session.study_content or "",
+        extractedTopics=result_topics,
+        progress=progress,
+        topics=total_subtopics,
+        hasFullStudy=session.has_full_study or False,
+        hasSpeedRun=session.has_speed_run or False
+    )
+
+
 @router.delete("/{session_id}")
 async def delete_study_session(
-    session_id: int,
+    session_id: str,  # UUID as string
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -432,7 +542,7 @@ async def delete_study_session(
 
 @router.patch("/{session_id}/archive")
 async def archive_study_session(
-    session_id: int,
+    session_id: str,  # UUID as string
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):

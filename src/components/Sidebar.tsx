@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   BookOpen,
   FolderPlus,
@@ -33,6 +33,7 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
 ];
 
 export function Sidebar() {
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { studySessions, currentSession, setCurrentSession, deleteStudySession, archiveStudySession } = useAppStore();
   return (
@@ -88,12 +89,12 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Recent Study Sessions Section */}
+      {/* Study Sessions Section - Grouped by Content */}
       {!isCollapsed && (
         <div className="flex-1 px-4 pt-4 pb-2 overflow-hidden">
           <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Clock size={16} />
-            Recent Study Sessions
+            <BookOpen size={16} />
+            Study Sessions by Content
           </h3>
           <ScrollArea className="h-[calc(100%-2rem)]">
             <div className="space-y-1 pr-2">
@@ -109,16 +110,18 @@ export function Sidebar() {
                 >
                   <div
                     className="min-w-0 flex-1 cursor-pointer"
-                    onClick={() => setCurrentSession(session)}
+                    onClick={() => {
+                      setCurrentSession(session);
+                      navigate(`/full-study/${session.id}`);
+                    }}
                   >
                     <p className="text-xs font-medium text-foreground truncate">{session.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{session.time} • {session.topics} topics</p>
+                    <p className="text-[10px] text-muted-foreground">{session.topics} topics • {session.progress}% complete</p>
                   </div>
                   <div className="flex items-center gap-1">
                     {currentSession?.id === session.id && (
                       <Check size={12} className="text-primary" />
                     )}
-                    <span className="text-xs font-semibold text-primary">{session.progress}%</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
