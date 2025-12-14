@@ -288,6 +288,55 @@ export const createStudySessionWithAI = async (
 };
 
 /**
+ * Fetch a specific study session with all its topics and questions
+ */
+export const getStudySession = async (sessionId: string): Promise<StudySession> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Study session not found');
+      }
+      if (response.status === 401) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      throw new Error('Failed to fetch study session');
+    }
+
+    const data = await response.json();
+
+    // Transform backend response to frontend StudySession format
+    return {
+      id: data.id.toString(),
+      title: data.title,
+      progress: data.progress,
+      topics: data.topics,
+      time: 'Loaded',
+      hasFullStudy: data.hasFullStudy,
+      hasSpeedRun: data.hasSpeedRun,
+      hasQuiz: false,
+      studyContent: data.studyContent,
+      extractedTopics: data.extractedTopics,
+    };
+  } catch (error) {
+    console.error('Error fetching study session:', error);
+    throw error;
+  }
+};
+
+/**
  * Delete a study session
  */
 export const deleteStudySession = async (sessionId: string): Promise<void> => {

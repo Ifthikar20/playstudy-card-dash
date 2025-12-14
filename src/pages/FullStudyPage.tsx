@@ -24,6 +24,7 @@ import { useAppStore } from "@/store/appStore";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicQuizCard } from "@/components/TopicQuizCard";
 import { TopicSummary } from "@/components/TopicSummary";
+import { getStudySession } from "@/services/api";
 
 // Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
@@ -82,6 +83,32 @@ export default function FullStudyPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [localQuestionIndex, setLocalQuestionIndex] = useState(0);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
+
+  // Load session data when selected from sidebar
+  useEffect(() => {
+    const loadSession = async () => {
+      if (currentSession && currentSession.id && (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0)) {
+        console.log('📥 Loading session data from backend:', currentSession.id);
+        setIsLoadingSession(true);
+
+        try {
+          const fullSession = await getStudySession(currentSession.id);
+          console.log('✅ Session data loaded:', fullSession);
+
+          // Update the current session with the full data
+          setCurrentSession(fullSession);
+        } catch (error: any) {
+          console.error('❌ Failed to load session:', error);
+          // If loading fails, stay on the current screen (will show upload)
+        } finally {
+          setIsLoadingSession(false);
+        }
+      }
+    };
+
+    loadSession();
+  }, [currentSession?.id]);
 
   // Reset question index when topic changes
   useEffect(() => {
@@ -386,11 +413,27 @@ export default function FullStudyPage() {
 
   // Session selected but no content uploaded yet
   if (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0) {
+    // Show loading state while fetching session data
+    if (isLoadingSession) {
+      return (
+        <div className="flex min-h-screen bg-background">
+          <Sidebar />
+          <main className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              <p className="mt-4 text-muted-foreground">Loading your study session...</p>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    // Show upload screen if no topics after loading
     return (
       <div className="flex min-h-screen bg-background">
         <Sidebar />
         <main className="flex-1 flex items-center justify-center p-6">
-          <StudyContentUpload 
+          <StudyContentUpload
             onContentSubmit={handleContentSubmit}
             isProcessing={isProcessing}
           />
