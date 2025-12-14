@@ -4,6 +4,7 @@ Topic database model.
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.models.study_session import GUID
 
 
 class Topic(Base):
@@ -12,7 +13,7 @@ class Topic(Base):
     __tablename__ = "topics"
 
     id = Column(Integer, primary_key=True, index=True)
-    study_session_id = Column(Integer, ForeignKey("study_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    study_session_id = Column(GUID(), ForeignKey("study_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
     parent_topic_id = Column(Integer, ForeignKey("topics.id", ondelete="CASCADE"), nullable=True, index=True)  # For hierarchical structure
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
