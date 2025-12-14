@@ -361,6 +361,58 @@ export const generateQuestions = async (topic: string, numQuestions: number = 5,
 };
 
 /**
+ * Content analysis response interface
+ */
+export interface ContentAnalysis {
+  word_count: number;
+  estimated_reading_time: number;
+  recommended_topics: number;
+  recommended_questions: number;
+  complexity_score: number;
+  content_summary: string;
+}
+
+/**
+ * Analyze content and get recommendations for topics/questions
+ */
+export const analyzeContent = async (content: string): Promise<ContentAnalysis> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/analyze-content`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        removeAuthToken();
+        setTimeout(() => {
+          window.location.href = '/auth';
+        }, 2000);
+        throw new Error('Your session has expired. Please log in again.');
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to analyze content');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to analyze content:', error);
+    throw error;
+  }
+};
+
+/**
  * Create study session with AI-generated topics and questions
  */
 export const createStudySessionWithAI = async (
