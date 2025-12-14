@@ -449,10 +449,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   completeTopic: (sessionId, topicId) => set((state) => {
+    console.log('✅ completeTopic called', { sessionId, topicId });
+
     // Helper function to update topic recursively
     const markCompleteRecursively = (topics: Topic[]): Topic[] => {
       return topics.map(t => {
         if (t.id === topicId) {
+          console.log('✅ Marking topic as completed:', t.title);
           return { ...t, completed: true };
         }
         if (t.subtopics) {
@@ -473,6 +476,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     });
     const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
+
+    console.log('✅ Updated currentSession extractedTopics:', updatedCurrent?.extractedTopics);
+
     return {
       studySessions: updatedSessions,
       currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession

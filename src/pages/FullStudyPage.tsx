@@ -109,9 +109,23 @@ export default function FullStudyPage() {
     return flattenedTopics.filter(t => !t.isCategory);
   }, [flattenedTopics]);
 
+  // Create a completion hash to trigger re-renders when any topic is completed
+  const completionHash = useMemo(() => {
+    const topics = currentSession?.extractedTopics || [];
+    const generateHash = (topicList: any[]): string => {
+      return topicList.map(t => {
+        const subtopicsHash = t.subtopics ? generateHash(t.subtopics) : '';
+        return `${t.id}:${t.completed ? '1' : '0'}:${t.currentQuestionIndex}${subtopicsHash}`;
+      }).join('|');
+    };
+    return generateHash(topics);
+  }, [currentSession?.extractedTopics]);
+
   // Generate nodes and edges from extracted topics (hierarchical structure) - RECURSIVE
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const topics = currentSession?.extractedTopics || [];
+
+    console.log('🎨 Regenerating tree nodes - completion hash:', completionHash);
 
     if (topics.length === 0) {
       return { nodes: [], edges: [] };
@@ -210,7 +224,7 @@ export default function FullStudyPage() {
     processTopicLevel(topics, null, 0, 50);
 
     return { nodes: generatedNodes, edges: generatedEdges };
-  }, [currentSession?.extractedTopics]);
+  }, [currentSession?.extractedTopics, completionHash]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
