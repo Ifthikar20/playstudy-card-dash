@@ -232,10 +232,22 @@ Return ONLY a valid JSON object in this EXACT format:
         # Count total subtopics for the session
         total_subtopics = sum(len(cat.get("subtopics", [])) for cat in categories_data)
 
+        # Generate a smart title if the provided title is generic (contains "Study Session" and a date)
+        session_title = data.title
+        if "Study Session" in session_title and any(char.isdigit() for char in session_title):
+            # Use the first category as the title for better organization
+            if categories_data and len(categories_data) > 0:
+                first_category = categories_data[0]["title"]
+                # If multiple categories, add a subtitle
+                if len(categories_data) > 1:
+                    session_title = f"{first_category} + {len(categories_data) - 1} more"
+                else:
+                    session_title = first_category
+
         # Step 2: Create study session
         study_session = StudySession(
             user_id=current_user.id,
-            title=data.title,
+            title=session_title,
             topic=categories_data[0]["title"] if categories_data else "General Study",
             study_content=extracted_text,  # Store the extracted text, not binary
             topics_count=total_subtopics,
