@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from datetime import datetime
 import anthropic
 import json
 import io
@@ -195,6 +196,7 @@ class QuestionSchema(BaseModel):
 class TopicSchema(BaseModel):
     """Schema for a study topic."""
     id: str
+    db_id: Optional[int] = None  # Database ID for syncing progress
     title: str
     description: str
     questions: List[QuestionSchema] = []
@@ -448,6 +450,7 @@ Return ONLY a valid JSON object in this EXACT format:
             # Create category schema for response
             category_schema = TopicSchema(
                 id=f"category-{cat_idx+1}",
+                db_id=category_topic.id,  # Include database ID
                 title=category_data["title"],
                 description=category_data.get("description", ""),
                 isCategory=True,
@@ -548,6 +551,7 @@ Return in this EXACT format:
                 # Build subtopic response
                 subtopic_schema = TopicSchema(
                     id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                    db_id=subtopic.id,  # Include database ID for progress sync
                     title=subtopic_data["title"],
                     description=subtopic_data.get("description", ""),
                     questions=questions_list,
@@ -624,6 +628,7 @@ async def get_study_session(
 
         category_schema = TopicSchema(
             id=f"category-{cat_idx+1}",
+            db_id=category.id,  # Include database ID
             title=category.title,
             description=category.description or "",
             isCategory=True,
@@ -651,6 +656,7 @@ async def get_study_session(
 
             subtopic_schema = TopicSchema(
                 id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                db_id=subtopic.id,  # Include database ID for progress sync
                 title=subtopic.title,
                 description=subtopic.description or "",
                 questions=questions_list,
@@ -734,3 +740,114 @@ async def archive_study_session(
     db.refresh(session)
 
     return {"message": "Study session archived successfully", "id": session_id}
+
+
+class UpdateTopicProgressRequest(BaseModel):
+    """Request schema for updating topic progress."""
+    score: int = Field(..., ge=0, le=100)  # Score as percentage 0-100
+    current_question_index: int = Field(..., ge=0)
+    completed: bool = False
+
+
+class UpdateUserXPRequest(BaseModel):
+    """Request schema for updating user XP."""
+    xp_to_add: int = Field(..., ge=0, le=1000)  # XP to add (capped at 1000 per call)
+
+
+@router.patch("/{session_id}/topics/{topic_id}/progress")
+@limiter.limit("60/minute")
+async def update_topic_progress(
+    request: Request,
+    session_id: str,
+    topic_id: int,  # Database topic ID
+    data: UpdateTopicProgressRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update topic progress (score, current question index, completion status).
+
+    This endpoint is called after each answer to persist user progress.
+
+    Rate Limits:
+        - 60 requests per minute per user
+    """
+    # Verify session belongs to user
+    session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    # Find the topic
+    topic = db.query(Topic).filter(
+        Topic.id == topic_id,
+        Topic.study_session_id == session_id
+    ).first()
+
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    # Update topic progress
+    topic.score = data.score
+    topic.current_question_index = data.current_question_index
+    topic.completed = data.completed
+
+    # Update session progress (percentage of completed subtopics)
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == session_id,
+        Topic.is_category == False  # Only count leaf topics
+    ).all()
+
+    completed_topics = sum(1 for t in all_topics if t.completed)
+    total_topics = len(all_topics)
+    session.progress = int((completed_topics / total_topics * 100) if total_topics > 0 else 0)
+
+    db.commit()
+    db.refresh(topic)
+
+    return {
+        "message": "Topic progress updated successfully",
+        "topic_id": topic_id,
+        "score": topic.score,
+        "current_question_index": topic.current_question_index,
+        "completed": topic.completed,
+        "session_progress": session.progress
+    }
+
+
+@router.patch("/user/xp")
+@limiter.limit("100/minute")
+async def update_user_xp(
+    request: Request,
+    data: UpdateUserXPRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Add XP to the current user's total.
+
+    This endpoint is called after each correct answer.
+
+    Rate Limits:
+        - 100 requests per minute per user
+    """
+    # Update user XP
+    current_user.xp += data.xp_to_add
+    current_user.updated_at = datetime.utcnow()
+
+    # Calculate level (simple formula: level = floor(xp / 100) + 1)
+    # Every 100 XP = 1 level
+    current_user.level = (current_user.xp // 100) + 1
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "message": "XP updated successfully",
+        "xp": current_user.xp,
+        "xp_added": data.xp_to_add,
+        "level": current_user.level
+    }

@@ -563,6 +563,86 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 };
 
 /**
+ * Update topic progress (score, current question index, completion status)
+ */
+export const updateTopicProgress = async (
+  sessionId: string,
+  topicId: number,
+  score: number,
+  currentQuestionIndex: number,
+  completed: boolean
+): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      console.warn('No auth token - progress update skipped');
+      return; // Gracefully fail - user can continue working offline
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicId}/progress`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        score: Math.round(score), // Round to integer (0-100)
+        current_question_index: currentQuestionIndex,
+        completed,
+      }),
+    });
+
+    if (!response.ok) {
+      // Log but don't throw - allow offline usage
+      console.warn('Failed to sync topic progress:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+    console.log('✅ Topic progress synced:', data);
+  } catch (error) {
+    // Gracefully handle network errors - don't block user
+    console.warn('Network error syncing topic progress:', error);
+  }
+};
+
+/**
+ * Update user XP
+ */
+export const updateUserXP = async (xpToAdd: number): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      console.warn('No auth token - XP update skipped');
+      return; // Gracefully fail
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/user/xp`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        xp_to_add: xpToAdd,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to sync XP:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+    console.log('✅ XP synced:', data);
+  } catch (error) {
+    console.warn('Network error syncing XP:', error);
+  }
+};
+
+/**
  * Delete a study session
  */
 export const deleteStudySession = async (sessionId: string): Promise<void> => {
