@@ -42,6 +42,7 @@ const AppContent = () => {
           <Route path="speedrun" element={<SpeedRunPage />} />
           <Route path="speedrun/:topic" element={<SpeedRunPage />} />
           <Route path="full-study" element={<FullStudyPage />} />
+          <Route path="full-study/:sessionId" element={<FullStudyPage />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
           <Route path="achievements" element={<Index />} />
           <Route path="analytics" element={<Index />} />

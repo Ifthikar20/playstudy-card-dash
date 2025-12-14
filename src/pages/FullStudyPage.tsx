@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,8 +71,13 @@ const nodeStyles = {
 };
 
 export default function FullStudyPage() {
+  // Get sessionId from URL params
+  const { sessionId } = useParams<{ sessionId?: string }>();
+
   // Use explicit selector to ensure re-renders on currentSession changes
   const currentSession = useAppStore(state => state.currentSession);
+  const setCurrentSession = useAppStore(state => state.setCurrentSession);
+  const studySessions = useAppStore(state => state.studySessions);
   const processStudyContent = useAppStore(state => state.processStudyContent);
   const answerQuestion = useAppStore(state => state.answerQuestion);
   const moveToNextQuestion = useAppStore(state => state.moveToNextQuestion);
@@ -85,30 +91,47 @@ export default function FullStudyPage() {
   const [localQuestionIndex, setLocalQuestionIndex] = useState(0);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
 
-  // Load session data when selected from sidebar
+  // Load session data based on URL parameter
   useEffect(() => {
     const loadSession = async () => {
-      if (currentSession && currentSession.id && (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0)) {
-        console.log('📥 Loading session data from backend:', currentSession.id);
-        setIsLoadingSession(true);
+      // If sessionId is in URL, load that session
+      if (sessionId) {
+        console.log('📥 URL sessionId detected:', sessionId);
 
-        try {
-          const fullSession = await getStudySession(currentSession.id);
-          console.log('✅ Session data loaded:', fullSession);
+        // Check if we already have this session in the store
+        const existingSession = studySessions.find(s => s.id === sessionId);
 
-          // Update the current session with the full data
-          setCurrentSession(fullSession);
-        } catch (error: any) {
-          console.error('❌ Failed to load session:', error);
-          // If loading fails, stay on the current screen (will show upload)
-        } finally {
-          setIsLoadingSession(false);
+        // If currentSession doesn't match URL, update it
+        if (!currentSession || currentSession.id !== sessionId) {
+          if (existingSession) {
+            console.log('📂 Setting session from store:', sessionId);
+            setCurrentSession(existingSession);
+          }
+        }
+
+        // Load full session data if not already loaded
+        if (!currentSession?.extractedTopics || currentSession.extractedTopics.length === 0 || currentSession.id !== sessionId) {
+          console.log('📥 Loading session data from backend:', sessionId);
+          setIsLoadingSession(true);
+
+          try {
+            const fullSession = await getStudySession(sessionId);
+            console.log('✅ Session data loaded:', fullSession);
+
+            // Update the current session with the full data
+            setCurrentSession(fullSession);
+          } catch (error: any) {
+            console.error('❌ Failed to load session:', error);
+            // If loading fails, stay on the current screen (will show upload)
+          } finally {
+            setIsLoadingSession(false);
+          }
         }
       }
     };
 
     loadSession();
-  }, [currentSession?.id]);
+  }, [sessionId, currentSession?.id, studySessions]);
 
   // Reset question index when topic changes
   useEffect(() => {

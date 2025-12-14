@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   BookOpen,
   FolderPlus,
@@ -33,6 +33,7 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
 ];
 
 export function Sidebar() {
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { studySessions, currentSession, setCurrentSession, deleteStudySession, archiveStudySession } = useAppStore();
   return (
@@ -109,7 +110,10 @@ export function Sidebar() {
                 >
                   <div
                     className="min-w-0 flex-1 cursor-pointer"
-                    onClick={() => setCurrentSession(session)}
+                    onClick={() => {
+                      setCurrentSession(session);
+                      navigate(`/full-study/${session.id}`);
+                    }}
                   >
                     <p className="text-xs font-medium text-foreground truncate">{session.title}</p>
                     <p className="text-[10px] text-muted-foreground">{session.topics} topics • {session.progress}% complete</p>
