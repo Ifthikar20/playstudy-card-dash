@@ -215,8 +215,9 @@ export default function FullStudyPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Update nodes when topics change
-  useMemo(() => {
+  // Update nodes and edges when topics change
+  useEffect(() => {
+    console.log('🔄 Updating tree nodes and edges - topics changed');
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
@@ -392,6 +393,9 @@ export default function FullStudyPage() {
                   </h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     {leafTopics.filter(t => t.completed).length} of {leafTopics.length} subtopics completed
+                    {selectedTopicId && !showSummary && (
+                      <span className="text-primary font-medium"> • Currently studying</span>
+                    )}
                   </p>
                 </div>
 
