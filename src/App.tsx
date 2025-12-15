@@ -22,6 +22,7 @@ import FullStudyPage from "./pages/FullStudyPage";
 import BrowseGamesPage from "./pages/BrowseGamesPage";
 import GameModePage from "./pages/GameModePage";
 import PlatformerGamePage from "./pages/PlatformerGamePage";
+import MentorModePage from "./pages/MentorModePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,6 +56,7 @@ const AppContent = () => {
           {/* Session-specific routes */}
           <Route path=":sessionId/full-study" element={<FullStudyPage />} />
           <Route path=":sessionId/speedrun" element={<SpeedRunPage />} />
+          <Route path=":sessionId/mentor" element={<MentorModePage />} />
           <Route path=":sessionId/browse-games" element={<BrowseGamesPage />} />
           <Route path=":sessionId/platformer-game" element={<PlatformerGamePage />} />
 

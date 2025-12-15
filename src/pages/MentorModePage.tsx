@@ -1,0 +1,410 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Sidebar } from "@/components/Sidebar";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { useAppStore } from "@/store/appStore";
+import { aiVoiceService, useBrowserTTS } from "@/services/aiVoice";
+import {
+  Play,
+  Pause,
+  SkipForward,
+  SkipBack,
+  Volume2,
+  VolumeX,
+  User,
+  BookOpen,
+  ArrowLeft,
+  Mic,
+  Settings
+} from "lucide-react";
+
+export default function MentorModePage() {
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const { currentSession, studySessions } = useAppStore();
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTopicIndex, setCurrentTopicIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [isReading, setIsReading] = useState(false);
+  const [useAIVoice, setUseAIVoice] = useState(true); // Use AI voice by default if configured
+  const [currentVoice, setCurrentVoice] = useState<'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'>('nova');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const session = sessionId
+    ? studySessions.find(s => s.id === sessionId) || currentSession
+    : currentSession;
+
+  useEffect(() => {
+    if (!session) {
+      navigate('/dashboard');
+    }
+  }, [session, navigate]);
+
+  if (!session) {
+    return null;
+  }
+
+  const topics = session.extractedTopics || [];
+  const currentTopic = topics[currentTopicIndex];
+
+  const handlePlayPause = () => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        aiVoiceService.pause();
+      } else if ('speechSynthesis' in window) {
+        window.speechSynthesis.pause();
+      }
+    } else {
+      setIsPlaying(true);
+      if (currentTopic && !isReading) {
+        speakContent(currentTopic);
+      } else {
+        if (useAIVoice && aiVoiceService.isConfigured()) {
+          aiVoiceService.resume();
+        } else if ('speechSynthesis' in window) {
+          window.speechSynthesis.resume();
+        }
+      }
+    }
+  };
+
+  const speakContent = async (topic: any) => {
+    setIsReading(true);
+    setIsLoading(true);
+    setError(null);
+
+    // Create narrative from topic
+    const narrative = `
+      Welcome to ${topic.title}.
+      ${topic.description}
+
+      Let's explore this topic together. I'll guide you through the key concepts and help you understand the material.
+
+      ${topic.questions.map((q: any, idx: number) => `
+        Question ${idx + 1}: ${q.question}
+
+        The answer is: ${q.options[q.correctAnswer]}.
+
+        ${q.explanation}
+      `).join('\n\n')}
+
+      That covers ${topic.title}. Let's move on when you're ready!
+    `;
+
+    const handleEnd = () => {
+      setIsReading(false);
+      setIsPlaying(false);
+      if (currentTopicIndex < topics.length - 1) {
+        setProgress(((currentTopicIndex + 1) / topics.length) * 100);
+      } else {
+        setProgress(100);
+      }
+    };
+
+    const handleError = (error: Error) => {
+      setError(error.message);
+      setIsReading(false);
+      setIsPlaying(false);
+      setIsLoading(false);
+    };
+
+    try {
+      // Try to use AI voice if configured and enabled
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        setIsLoading(true);
+        await aiVoiceService.speak(
+          narrative,
+          {
+            voice: currentVoice,
+            speed: 1.0,
+            model: 'tts-1' // Use standard quality for faster generation
+          },
+          handleEnd,
+          handleError
+        );
+        setIsLoading(false);
+      } else {
+        // Fallback to browser TTS
+        if (!('speechSynthesis' in window)) {
+          throw new Error('Text-to-speech is not supported in your browser');
+        }
+
+        const utterance = useBrowserTTS(narrative, {
+          rate: 0.9,
+          pitch: 1.0,
+          volume: isMuted ? 0 : 1
+        });
+
+        if (utterance) {
+          utterance.onend = handleEnd;
+          utterance.onerror = () => handleError(new Error('Browser TTS error'));
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        }
+        setIsLoading(false);
+      }
+    } catch (error) {
+      handleError(error as Error);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentTopicIndex < topics.length - 1) {
+      // Stop any playing audio
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        aiVoiceService.stop();
+      } else {
+        window.speechSynthesis.cancel();
+      }
+      setCurrentTopicIndex(currentTopicIndex + 1);
+      setIsPlaying(false);
+      setIsReading(false);
+      setProgress(((currentTopicIndex + 1) / topics.length) * 100);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (currentTopicIndex > 0) {
+      // Stop any playing audio
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        aiVoiceService.stop();
+      } else {
+        window.speechSynthesis.cancel();
+      }
+      setCurrentTopicIndex(currentTopicIndex - 1);
+      setIsPlaying(false);
+      setIsReading(false);
+      setProgress(((currentTopicIndex - 1) / topics.length) * 100);
+    }
+  };
+
+  const toggleMute = () => {
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    if (useAIVoice && aiVoiceService.isConfigured()) {
+      aiVoiceService.setVolume(newMutedState ? 0 : 1);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex">
+      <Sidebar />
+
+      <div className="flex-1 p-4 md:p-8 overflow-auto">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="mb-6">
+            <Button
+              variant="ghost"
+              className="mb-4"
+              onClick={() => navigate('/dashboard')}
+            >
+              <ArrowLeft size={18} className="mr-2" />
+              Back to Dashboard
+            </Button>
+
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-xl bg-primary/10">
+                <Mic className="text-primary" size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                  Mentor Mode
+                </h1>
+                <p className="text-muted-foreground">{session.title}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-6">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-muted-foreground">
+                Topic {currentTopicIndex + 1} of {topics.length}
+              </span>
+              <span className="font-medium text-foreground">
+                {Math.round(progress)}% Complete
+              </span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+
+          {/* Voice Settings */}
+          {aiVoiceService.isConfigured() && (
+            <Card className="p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings size={18} className="text-primary" />
+                  <span className="text-sm font-medium">AI Voice Settings</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useAIVoice}
+                      onChange={(e) => setUseAIVoice(e.target.checked)}
+                      className="rounded"
+                    />
+                    Use AI Voice
+                  </label>
+                  {useAIVoice && (
+                    <select
+                      value={currentVoice}
+                      onChange={(e) => setCurrentVoice(e.target.value as any)}
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                    >
+                      {aiVoiceService.getAvailableVoices().map(voice => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} - {voice.description}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <Card className="p-4 mb-6 border-destructive bg-destructive/10">
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-destructive">
+                  ⚠️ {error}
+                </span>
+              </div>
+            </Card>
+          )}
+
+          {/* Configuration Notice */}
+          {!aiVoiceService.isConfigured() && (
+            <Card className="p-4 mb-6 border-yellow-500 bg-yellow-500/10">
+              <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                <strong>Note:</strong> Using browser TTS. For higher quality AI narration, add your OpenAI API key to <code className="bg-black/10 px-1 rounded">.env</code> file.
+              </div>
+            </Card>
+          )}
+
+          {/* Teacher Avatar & Content */}
+          <Card className="p-6 mb-6">
+            <div className="flex items-start gap-4 mb-6">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <User className="text-primary" size={32} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  Your AI Mentor
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  I'll guide you through the material step by step
+                </p>
+              </div>
+            </div>
+
+            {currentTopic && (
+              <div className="space-y-4">
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <BookOpen size={18} className="text-primary" />
+                    <h4 className="font-semibold text-foreground">
+                      {currentTopic.title}
+                    </h4>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {currentTopic.description}
+                  </p>
+                </div>
+
+                <div className="prose prose-sm max-w-none">
+                  <h5 className="text-sm font-semibold text-foreground mb-3">
+                    Key Concepts ({currentTopic.questions.length} topics to cover)
+                  </h5>
+                  <div className="space-y-3">
+                    {currentTopic.questions.map((question: any, idx: number) => (
+                      <div key={idx} className="bg-accent/50 rounded-lg p-3">
+                        <p className="text-sm font-medium text-foreground mb-2">
+                          {idx + 1}. {question.question}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-primary">Answer:</span>{' '}
+                          {question.options[question.correctAnswer]}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {question.explanation}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Controls */}
+          <Card className="p-6">
+            <div className="flex items-center justify-center gap-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handlePrevious}
+                disabled={currentTopicIndex === 0}
+              >
+                <SkipBack size={20} />
+              </Button>
+
+              <Button
+                size="lg"
+                className="w-16 h-16 rounded-full"
+                onClick={handlePlayPause}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <div className="animate-spin">⏳</div>
+                ) : isPlaying ? (
+                  <Pause size={24} />
+                ) : (
+                  <Play size={24} className="ml-1" />
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleNext}
+                disabled={currentTopicIndex === topics.length - 1}
+              >
+                <SkipForward size={20} />
+              </Button>
+
+              <div className="ml-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleMute}
+                >
+                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="text-center mt-4 text-sm text-muted-foreground">
+              {isLoading ? (
+                'Generating AI narration...'
+              ) : isPlaying ? (
+                `Playing with ${useAIVoice && aiVoiceService.isConfigured() ? 'AI voice' : 'browser TTS'}...`
+              ) : (
+                'Click play to start the lesson'
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
