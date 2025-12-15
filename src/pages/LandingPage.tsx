@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ShootingStars from "@/components/ShootingStars";
-import { Brain, ArrowRight } from "lucide-react";
+import { Brain, ArrowRight, Upload, Gamepad2, TrendingUp, Zap, Users, Clock } from "lucide-react";
 
 const LandingPage = () => {
   return (
@@ -32,55 +32,134 @@ const LandingPage = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-24 pb-20 lg:pt-32">
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white max-w-3xl leading-tight">
+      <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 lg:pt-28">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-6">
+          <Zap className="w-4 h-4 text-primary" />
+          <span className="text-sm text-white/60">AI-Powered Learning</span>
+        </div>
+        
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white max-w-4xl leading-tight">
           Study smarter.
           <span className="block text-primary mt-1">Play harder.</span>
         </h1>
         
-        <p className="mt-6 text-base md:text-lg text-white/50 max-w-lg">
+        <p className="mt-6 text-base md:text-lg text-white/50 max-w-xl">
           Transform your notes into interactive games. Upload anything and start learning in seconds.
         </p>
         
-        <div className="mt-8">
+        <div className="mt-8 flex flex-col sm:flex-row gap-3">
           <Link to="/auth">
             <Button size="lg" className="bg-primary hover:bg-primary/90 px-8 py-6 gap-2">
               Start Free
               <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
+          <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 px-8 py-6">
+            Watch Demo
+          </Button>
+        </div>
+
+        {/* Social Proof */}
+        <div className="mt-12 flex items-center gap-6 text-white/40 text-sm">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            <span>10K+ students</span>
+          </div>
+          <div className="w-px h-4 bg-white/20" />
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            <span>500K+ study hours</span>
+          </div>
         </div>
       </section>
 
-      {/* Simple Feature Cards */}
+      {/* How It Works */}
       <section className="relative z-10 px-6 py-16 lg:px-12">
-        <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-4">
-          <SimpleCard title="Upload" description="PDFs, notes, or text" />
-          <SimpleCard title="Play" description="Quizzes & flashcards" />
-          <SimpleCard title="Learn" description="Track your progress" />
+        <div className="max-w-5xl mx-auto">
+          <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-10">How It Works</p>
+          <div className="grid md:grid-cols-3 gap-6">
+            <FeatureCard 
+              icon={<Upload className="w-5 h-5" />}
+              step="01"
+              title="Upload Content" 
+              description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
+            />
+            <FeatureCard 
+              icon={<Gamepad2 className="w-5 h-5" />}
+              step="02"
+              title="Choose Your Game" 
+              description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
+            />
+            <FeatureCard 
+              icon={<TrendingUp className="w-5 h-5" />}
+              step="03"
+              title="Track Progress" 
+              description="Watch your knowledge grow. Earn XP, unlock achievements, and master every topic."
+            />
+          </div>
         </div>
       </section>
 
-      {/* Games Preview */}
+      {/* Manifesto Section */}
+      <section className="relative z-10 px-6 py-20 lg:px-12">
+        <div className="max-w-3xl mx-auto">
+          <div className="p-8 md:p-12 rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10">
+            <p className="text-primary text-sm uppercase tracking-wider mb-4">Our Manifesto</p>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-6 leading-relaxed">
+              Learning shouldn't feel like a chore.
+            </h2>
+            <div className="space-y-4 text-white/60 leading-relaxed">
+              <p>
+                We believe the best learning happens when you're having fun. When curiosity takes over and studying feels like playing your favorite game.
+              </p>
+              <p>
+                Traditional studying is broken. Highlighting textbooks. Rereading notes. Hoping it sticks. We knew there had to be a better way.
+              </p>
+              <p>
+                So we built PlayStudy — a place where your notes become quizzes, your slides become flashcards, and your textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning becomes something you actually want to do.
+              </p>
+              <p className="text-white font-medium pt-2">
+                This is studying, reimagined. This is PlayStudy.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Game Modes */}
       <section className="relative z-10 px-6 py-16 lg:px-12">
-        <div className="max-w-3xl mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-center">
           <p className="text-white/40 text-sm uppercase tracking-wider mb-8">Game Modes</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <GamePill emoji="❓" label="Quiz" />
-            <GamePill emoji="🃏" label="Flashcards" />
-            <GamePill emoji="⚡" label="Speed Run" />
-            <GamePill emoji="🧠" label="Memory" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <GameCard emoji="❓" label="Quiz Mode" description="Test your knowledge" />
+            <GameCard emoji="🃏" label="Flashcards" description="Quick recall training" />
+            <GameCard emoji="⚡" label="Speed Run" description="Race against time" />
+            <GameCard emoji="🧠" label="Memory" description="Deep retention" />
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="relative z-10 px-6 py-16 lg:px-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <StatCard value="95%" label="Retention Rate" />
+            <StatCard value="3x" label="Faster Learning" />
+            <StatCard value="50K+" label="Topics Covered" />
+            <StatCard value="4.9" label="User Rating" />
           </div>
         </div>
       </section>
 
       {/* CTA */}
       <section className="relative z-10 px-6 py-20 lg:px-12">
-        <div className="max-w-md mx-auto text-center">
-          <p className="text-white/50 mb-4">Ready to start?</p>
+        <div className="max-w-xl mx-auto text-center">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">Ready to transform how you study?</h2>
+          <p className="text-white/50 mb-8">Join thousands of students who've made learning fun again.</p>
           <Link to="/auth">
-            <Button className="bg-primary hover:bg-primary/90">
-              Create Free Account
+            <Button size="lg" className="bg-primary hover:bg-primary/90 px-10 py-6 gap-2">
+              Get Started Free
+              <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
         </div>
@@ -106,17 +185,31 @@ const LandingPage = () => {
   );
 };
 
-const SimpleCard = ({ title, description }: { title: string; description: string }) => (
-  <div className="p-6 rounded-xl bg-white/5 border border-white/10">
-    <h3 className="text-white font-medium mb-1">{title}</h3>
-    <p className="text-white/40 text-sm">{description}</p>
+const FeatureCard = ({ icon, step, title, description }: { icon: React.ReactNode; step: string; title: string; description: string }) => (
+  <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors">
+    <div className="flex items-center gap-3 mb-4">
+      <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+        {icon}
+      </div>
+      <span className="text-white/30 text-sm font-mono">{step}</span>
+    </div>
+    <h3 className="text-white font-semibold mb-2">{title}</h3>
+    <p className="text-white/50 text-sm leading-relaxed">{description}</p>
   </div>
 );
 
-const GamePill = ({ emoji, label }: { emoji: string; label: string }) => (
-  <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 flex items-center gap-2">
-    <span>{emoji}</span>
-    <span className="text-white/60 text-sm">{label}</span>
+const GameCard = ({ emoji, label, description }: { emoji: string; label: string; description: string }) => (
+  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors text-center">
+    <span className="text-2xl mb-3 block">{emoji}</span>
+    <h3 className="text-white font-medium text-sm mb-1">{label}</h3>
+    <p className="text-white/40 text-xs">{description}</p>
+  </div>
+);
+
+const StatCard = ({ value, label }: { value: string; label: string }) => (
+  <div>
+    <p className="text-2xl md:text-3xl font-bold text-primary mb-1">{value}</p>
+    <p className="text-white/50 text-sm">{label}</p>
   </div>
 );
 

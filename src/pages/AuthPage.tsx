@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Mail, Sparkles } from 'lucide-react';
-import ShootingStars from '@/components/ShootingStars';
+import NorthernLights from '@/components/NorthernLights';
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -71,13 +71,13 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[hsl(262,83%,12%)] via-[hsl(262,70%,18%)] to-[hsl(280,60%,8%)]">
-      {/* Shooting Stars Animation */}
-      <ShootingStars />
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-[hsl(220,40%,8%)] via-[hsl(210,35%,12%)] to-[hsl(200,30%,6%)]">
+      {/* Northern Lights Animation */}
+      <NorthernLights />
       
-      {/* Ambient glow effects */}
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl" />
+      {/* Subtle ambient glow effects */}
+      <div className="absolute top-1/3 -left-32 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-1/3 -right-32 w-96 h-96 bg-cyan-500/8 rounded-full blur-3xl" />
       
       {/* Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
