@@ -11,6 +11,8 @@ interface Game {
   rating: number;
   image: string;
   difficulty: string;
+  questionCount: number;
+  points: number;
 }
 
 interface Question {
