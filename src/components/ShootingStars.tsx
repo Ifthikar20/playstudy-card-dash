@@ -95,13 +95,30 @@ export default function ShootingStars() {
 
     const drawStaticStars = (time: number) => {
       staticStars.forEach((star) => {
-        const twinkle = Math.sin(time * star.twinkleSpeed + star.twinkleOffset) * 0.3 + 0.7;
-        const currentOpacity = star.opacity * twinkle;
+        // More pronounced twinkling effect
+        const twinkle = Math.sin(time * star.twinkleSpeed + star.twinkleOffset);
+        const twinkle2 = Math.sin(time * star.twinkleSpeed * 1.7 + star.twinkleOffset * 0.5);
+        const combined = (twinkle + twinkle2 * 0.5) / 1.5;
+        const currentOpacity = star.opacity * (0.4 + combined * 0.6);
+        
+        // Add occasional bright flash for some stars
+        const flash = Math.sin(time * star.twinkleSpeed * 3 + star.twinkleOffset) > 0.95 ? 0.3 : 0;
         
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, currentOpacity + flash)})`;
         ctx.fill();
+        
+        // Add subtle glow for brighter moments
+        if (currentOpacity > 0.6 || flash > 0) {
+          const glow = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, star.size * 3);
+          glow.addColorStop(0, `rgba(255, 255, 255, ${(currentOpacity + flash) * 0.3})`);
+          glow.addColorStop(1, 'transparent');
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.size * 3, 0, Math.PI * 2);
+          ctx.fillStyle = glow;
+          ctx.fill();
+        }
       });
     };
 
