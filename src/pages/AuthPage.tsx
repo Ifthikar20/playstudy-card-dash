@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Mail, Sparkles } from 'lucide-react';
-import NorthernLights from '@/components/NorthernLights';
+import ShootingStars from '@/components/ShootingStars';
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -71,13 +71,13 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-[hsl(220,40%,8%)] via-[hsl(210,35%,12%)] to-[hsl(200,30%,6%)]">
-      {/* Northern Lights Animation */}
-      <NorthernLights />
+    <div className="min-h-screen relative overflow-hidden bg-[hsl(220,20%,4%)]">
+      {/* Space Background with Shooting Stars */}
+      <ShootingStars />
       
       {/* Subtle ambient glow effects */}
-      <div className="absolute top-1/3 -left-32 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/3 -right-32 w-96 h-96 bg-cyan-500/8 rounded-full blur-3xl" />
+      <div className="absolute top-1/3 -left-32 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-1/3 -right-32 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
       
       {/* Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
