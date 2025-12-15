@@ -71,13 +71,13 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[hsl(262,83%,12%)] via-[hsl(262,70%,18%)] to-[hsl(280,60%,8%)]">
-      {/* Shooting Stars Animation */}
+    <div className="min-h-screen relative overflow-hidden bg-[hsl(220,20%,4%)]">
+      {/* Space Background with Shooting Stars */}
       <ShootingStars />
       
-      {/* Ambient glow effects */}
-      <div className="absolute top-1/4 -left-32 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl" />
+      {/* Subtle ambient glow effects */}
+      <div className="absolute top-1/3 -left-32 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-1/3 -right-32 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
       
       {/* Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4">

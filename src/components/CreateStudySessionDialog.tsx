@@ -155,12 +155,12 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
     // Navigate to the selected mode
     if (selectedMode === "full-study") {
-      navigate(`/full-study/${createdSession.id}`);
+      navigate(`/dashboard/full-study/${createdSession.id}`);
     } else if (selectedMode === "speed-run") {
       createSpeedRun(createdSession.id);
-      navigate("/speedrun");
+      navigate("/dashboard/speedrun");
     } else if (selectedMode === "game") {
-      navigate(`/game-mode/${createdSession.id}`);
+      navigate("/dashboard/browse-games");
     }
 
     // Reset state
