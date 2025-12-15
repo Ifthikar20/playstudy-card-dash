@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
-import anthropic
+from openai import OpenAI
 import json
 import io
 from docx import Document
@@ -342,8 +342,11 @@ async def create_study_session_with_ai(
         num_categories = max(2, min(5, (data.num_topics + 3) // 4))
         subtopics_per_category = max(2, data.num_topics // num_categories)
 
-        # Initialize Anthropic client
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        # Initialize DeepSeek client (OpenAI-compatible)
+        client = OpenAI(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
         topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories and subtopics.
@@ -383,14 +386,14 @@ Return ONLY a valid JSON object in this EXACT format:
 }}"""
 
         # Call AI to extract topics
-        topics_message = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+        topics_response = client.chat.completions.create(
+            model="deepseek-chat",
             max_tokens=2048,
             temperature=0.7,
             messages=[{"role": "user", "content": topics_prompt}]
         )
 
-        topics_text = topics_message.content[0].text
+        topics_text = topics_response.choices[0].message.content
 
         # Parse hierarchical topics
         try:
@@ -504,14 +507,14 @@ Return in this EXACT format:
 }}"""
 
                 # Call AI to generate questions
-                questions_message = client.messages.create(
-                    model="claude-sonnet-4-5-20250929",
+                questions_response = client.chat.completions.create(
+                    model="deepseek-chat",
                     max_tokens=4096,
                     temperature=0.7,
                     messages=[{"role": "user", "content": questions_prompt}]
                 )
 
-                questions_text = questions_message.content[0].text
+                questions_text = questions_response.choices[0].message.content
 
                 # Parse questions
                 try:
@@ -583,9 +586,11 @@ Return in this EXACT format:
             hasSpeedRun=True
         )
 
-    except anthropic.APIError as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"AI API error: {str(e)}")
+    except Exception as api_error:
+        if "openai" in str(type(api_error).__module__):
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"DeepSeek API error: {str(api_error)}")
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create study session: {str(e)}")
