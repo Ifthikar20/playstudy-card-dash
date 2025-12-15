@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAppStore } from "@/store/appStore";
+import { aiVoiceService, useBrowserTTS } from "@/services/aiVoice";
 import {
   Play,
   Pause,
@@ -15,7 +16,8 @@ import {
   User,
   BookOpen,
   ArrowLeft,
-  Mic
+  Mic,
+  Settings
 } from "lucide-react";
 
 export default function MentorModePage() {
@@ -28,6 +30,10 @@ export default function MentorModePage() {
   const [currentTopicIndex, setCurrentTopicIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isReading, setIsReading] = useState(false);
+  const [useAIVoice, setUseAIVoice] = useState(true); // Use AI voice by default if configured
+  const [currentVoice, setCurrentVoice] = useState<'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'>('nova');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
@@ -49,26 +55,29 @@ export default function MentorModePage() {
   const handlePlayPause = () => {
     if (isPlaying) {
       setIsPlaying(false);
-      if ('speechSynthesis' in window) {
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        aiVoiceService.pause();
+      } else if ('speechSynthesis' in window) {
         window.speechSynthesis.pause();
       }
     } else {
       setIsPlaying(true);
       if (currentTopic && !isReading) {
         speakContent(currentTopic);
-      } else if ('speechSynthesis' in window) {
-        window.speechSynthesis.resume();
+      } else {
+        if (useAIVoice && aiVoiceService.isConfigured()) {
+          aiVoiceService.resume();
+        } else if ('speechSynthesis' in window) {
+          window.speechSynthesis.resume();
+        }
       }
     }
   };
 
-  const speakContent = (topic: any) => {
-    if (!('speechSynthesis' in window)) {
-      alert('Text-to-speech is not supported in your browser');
-      return;
-    }
-
+  const speakContent = async (topic: any) => {
     setIsReading(true);
+    setIsLoading(true);
+    setError(null);
 
     // Create narrative from topic
     const narrative = `
@@ -88,12 +97,7 @@ export default function MentorModePage() {
       That covers ${topic.title}. Let's move on when you're ready!
     `;
 
-    const utterance = new SpeechSynthesisUtterance(narrative);
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
-    utterance.volume = isMuted ? 0 : 1;
-
-    utterance.onend = () => {
+    const handleEnd = () => {
       setIsReading(false);
       setIsPlaying(false);
       if (currentTopicIndex < topics.length - 1) {
@@ -103,13 +107,61 @@ export default function MentorModePage() {
       }
     };
 
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    const handleError = (error: Error) => {
+      setError(error.message);
+      setIsReading(false);
+      setIsPlaying(false);
+      setIsLoading(false);
+    };
+
+    try {
+      // Try to use AI voice if configured and enabled
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        setIsLoading(true);
+        await aiVoiceService.speak(
+          narrative,
+          {
+            voice: currentVoice,
+            speed: 1.0,
+            model: 'tts-1' // Use standard quality for faster generation
+          },
+          handleEnd,
+          handleError
+        );
+        setIsLoading(false);
+      } else {
+        // Fallback to browser TTS
+        if (!('speechSynthesis' in window)) {
+          throw new Error('Text-to-speech is not supported in your browser');
+        }
+
+        const utterance = useBrowserTTS(narrative, {
+          rate: 0.9,
+          pitch: 1.0,
+          volume: isMuted ? 0 : 1
+        });
+
+        if (utterance) {
+          utterance.onend = handleEnd;
+          utterance.onerror = () => handleError(new Error('Browser TTS error'));
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        }
+        setIsLoading(false);
+      }
+    } catch (error) {
+      handleError(error as Error);
+    }
   };
 
   const handleNext = () => {
     if (currentTopicIndex < topics.length - 1) {
-      window.speechSynthesis.cancel();
+      // Stop any playing audio
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        aiVoiceService.stop();
+      } else {
+        window.speechSynthesis.cancel();
+      }
       setCurrentTopicIndex(currentTopicIndex + 1);
       setIsPlaying(false);
       setIsReading(false);
@@ -119,7 +171,12 @@ export default function MentorModePage() {
 
   const handlePrevious = () => {
     if (currentTopicIndex > 0) {
-      window.speechSynthesis.cancel();
+      // Stop any playing audio
+      if (useAIVoice && aiVoiceService.isConfigured()) {
+        aiVoiceService.stop();
+      } else {
+        window.speechSynthesis.cancel();
+      }
       setCurrentTopicIndex(currentTopicIndex - 1);
       setIsPlaying(false);
       setIsReading(false);
@@ -128,10 +185,10 @@ export default function MentorModePage() {
   };
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
-    if ('speechSynthesis' in window && isReading) {
-      const utterances = window.speechSynthesis.getVoices();
-      // Volume will be applied on next play
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState);
+    if (useAIVoice && aiVoiceService.isConfigured()) {
+      aiVoiceService.setVolume(newMutedState ? 0 : 1);
     }
   };
 
@@ -177,6 +234,62 @@ export default function MentorModePage() {
             </div>
             <Progress value={progress} className="h-2" />
           </div>
+
+          {/* Voice Settings */}
+          {aiVoiceService.isConfigured() && (
+            <Card className="p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Settings size={18} className="text-primary" />
+                  <span className="text-sm font-medium">AI Voice Settings</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useAIVoice}
+                      onChange={(e) => setUseAIVoice(e.target.checked)}
+                      className="rounded"
+                    />
+                    Use AI Voice
+                  </label>
+                  {useAIVoice && (
+                    <select
+                      value={currentVoice}
+                      onChange={(e) => setCurrentVoice(e.target.value as any)}
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                    >
+                      {aiVoiceService.getAvailableVoices().map(voice => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} - {voice.description}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <Card className="p-4 mb-6 border-destructive bg-destructive/10">
+              <div className="flex items-start gap-2">
+                <span className="text-sm text-destructive">
+                  ⚠️ {error}
+                </span>
+              </div>
+            </Card>
+          )}
+
+          {/* Configuration Notice */}
+          {!aiVoiceService.isConfigured() && (
+            <Card className="p-4 mb-6 border-yellow-500 bg-yellow-500/10">
+              <div className="text-sm text-yellow-700 dark:text-yellow-300">
+                <strong>Note:</strong> Using browser TTS. For higher quality AI narration, add your OpenAI API key to <code className="bg-black/10 px-1 rounded">.env</code> file.
+              </div>
+            </Card>
+          )}
 
           {/* Teacher Avatar & Content */}
           <Card className="p-6 mb-6">
@@ -249,8 +362,15 @@ export default function MentorModePage() {
                 size="lg"
                 className="w-16 h-16 rounded-full"
                 onClick={handlePlayPause}
+                disabled={isLoading}
               >
-                {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
+                {isLoading ? (
+                  <div className="animate-spin">⏳</div>
+                ) : isPlaying ? (
+                  <Pause size={24} />
+                ) : (
+                  <Play size={24} className="ml-1" />
+                )}
               </Button>
 
               <Button
@@ -274,7 +394,13 @@ export default function MentorModePage() {
             </div>
 
             <div className="text-center mt-4 text-sm text-muted-foreground">
-              {isPlaying ? 'Playing narration...' : 'Click play to start the lesson'}
+              {isLoading ? (
+                'Generating AI narration...'
+              ) : isPlaying ? (
+                `Playing with ${useAIVoice && aiVoiceService.isConfigured() ? 'AI voice' : 'browser TTS'}...`
+              ) : (
+                'Click play to start the lesson'
+              )}
             </div>
           </Card>
         </div>
