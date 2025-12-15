@@ -3,9 +3,10 @@ Text-to-Speech Service
 Handles TTS generation with caching and provider management
 """
 import hashlib
+import redis
 from typing import Optional, Dict, List
 from app.services.tts_providers import TTSProviderFactory, TTSProvider
-from app.core.cache import get_redis_client
+from app.config import settings
 import json
 
 
@@ -13,7 +14,12 @@ class TTSService:
     """Service for managing TTS generation with caching."""
 
     def __init__(self):
-        self.redis_client = get_redis_client()
+        # Use a separate Redis client for binary data (no decode_responses)
+        try:
+            self.redis_client = redis.from_url(settings.REDIS_URL, decode_responses=False)
+        except Exception as e:
+            print(f"Warning: Redis not available for TTS caching: {e}")
+            self.redis_client = None
         self.cache_ttl = 3600 * 24  # 24 hours cache for audio
 
     def _generate_cache_key(self, provider: str, text: str, voice: str, **kwargs) -> str:
@@ -58,17 +64,25 @@ class TTSService:
 
         # Check cache first
         cache_key = self._generate_cache_key(provider_name, text, voice, **kwargs)
-        if self.redis_client:
-            cached_audio = self.redis_client.get(cache_key)
-            if cached_audio:
-                return cached_audio
+        try:
+            if self.redis_client:
+                cached_audio = self.redis_client.get(cache_key)
+                if cached_audio:
+                    return cached_audio  # Binary data as bytes
+        except Exception:
+            # Cache miss or error - continue to generate
+            pass
 
         # Generate audio
         audio_data = await provider.generate_speech(text, voice, **kwargs)
 
-        # Cache the result
-        if self.redis_client:
-            self.redis_client.setex(cache_key, self.cache_ttl, audio_data)
+        # Cache the result (binary data)
+        try:
+            if self.redis_client:
+                self.redis_client.setex(cache_key, self.cache_ttl, audio_data)
+        except Exception:
+            # Cache write failed - continue without caching
+            pass
 
         return audio_data
 
