@@ -132,6 +132,7 @@ export interface StudySession {
   progress: number;
   topics: number;
   time: string;
+  createdAt: number; // Timestamp in milliseconds
   hasFullStudy: boolean;
   hasSpeedRun: boolean;
   hasQuiz: boolean;
@@ -479,6 +480,7 @@ export const createStudySessionWithAI = async (
       progress: data.progress,
       topics: data.topics,
       time: 'Just now',
+      createdAt: Date.now(),
       hasFullStudy: data.hasFullStudy,
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
@@ -547,6 +549,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       progress: data.progress,
       topics: data.topics,
       time: 'Loaded',
+      createdAt: data.createdAt || Date.now(),
       hasFullStudy: data.hasFullStudy,
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
@@ -745,12 +748,14 @@ const getMockAppData = (): AppData => {
       { id: 12, title: "Economics 101", description: "Understand market principles, supply & demand, and financial concepts through gameplay.", category: "Business", likes: 450, rating: 4.3, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=300&fit=crop", difficulty: "Hard", questionCount: 20, points: 50 },
     ],
     studySessions: [
-      { id: '1', title: "Calculus Fundamentals", progress: 92, topics: 12, time: "2 hours ago", hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
-      { id: '2', title: "Organic Chemistry", progress: 85, topics: 8, time: "5 hours ago", hasFullStudy: false, hasSpeedRun: true, hasQuiz: false },
-      { id: '3', title: "World War II History", progress: 78, topics: 15, time: "Yesterday", hasFullStudy: true, hasSpeedRun: false, hasQuiz: true },
-      { id: '4', title: "Spanish Vocabulary", progress: 95, topics: 20, time: "Yesterday", hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
-      { id: '5', title: "Geography Capitals", progress: 88, topics: 10, time: "2 days ago", hasFullStudy: false, hasSpeedRun: false, hasQuiz: true },
-      { id: '6', title: "Python Basics", progress: 91, topics: 14, time: "2 days ago", hasFullStudy: true, hasSpeedRun: true, hasQuiz: false },
+      { id: '1', title: "Calculus Fundamentals", progress: 92, topics: 12, time: "2 hours ago", createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
+      { id: '2', title: "Distribution & Channel Strategy Fundamentals", progress: 0, topics: 7, time: "Just now", createdAt: Date.now() - 1 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: false },
+      { id: '3', title: "Foundations of Marketing Ethics", progress: 0, topics: 6, time: "30 mins ago", createdAt: Date.now() - 2 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: false },
+      { id: '4', title: "Geography Capitals", progress: 88, topics: 10, time: "2 days ago", createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
+      { id: '5', title: "Organic Chemistry", progress: 85, topics: 8, time: "5 hours ago", createdAt: Date.now() - 6 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: false },
+      { id: '6', title: "Python Basics", progress: 91, topics: 14, time: "2 days ago", createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: false },
+      { id: '7', title: "Spanish Vocabulary", progress: 95, topics: 20, time: "Yesterday", createdAt: Date.now() - 3 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
+      { id: '8', title: "World War II History", progress: 78, topics: 15, time: "Yesterday", createdAt: Date.now() - 8 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
     ],
   };
 };

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 import UserMenu from "@/components/UserMenu";
 import { useAppStore } from "@/store/appStore";
@@ -63,14 +64,23 @@ export default function Index() {
                       )
                     : session.progress;
 
+                  const isNew = session.createdAt && (Date.now() - session.createdAt) < 24 * 60 * 60 * 1000;
+
                   return (
                     <div
                       key={session.id}
                       className="cursor-pointer hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border"
                       onClick={() => handleSessionClick(session)}
                     >
-                      <div className="font-semibold text-foreground">
-                        {session.title}
+                      <div className="flex items-center gap-2">
+                        <div className="font-semibold text-foreground">
+                          {session.title}
+                        </div>
+                        {isNew && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                            New
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {session.topics} topic{session.topics !== 1 ? 's' : ''} • {completionPercentage}% complete

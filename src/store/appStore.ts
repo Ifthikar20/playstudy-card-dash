@@ -43,6 +43,7 @@ interface StudySession {
   progress: number;
   topics: number;
   time: string;
+  createdAt: number; // Timestamp in milliseconds
   hasFullStudy: boolean;
   hasSpeedRun: boolean;
   hasQuiz: boolean;
@@ -265,6 +266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       progress: 0,
       topics: 0,
       time: 'Just now',
+      createdAt: Date.now(),
       hasFullStudy: false,
       hasSpeedRun: false,
       hasQuiz: false,
