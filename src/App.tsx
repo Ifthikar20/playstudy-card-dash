@@ -48,21 +48,22 @@ const AppContent = () => {
         >
           <Route index element={<Index />} />
           <Route path="folders" element={<StudyFolders />} />
-          <Route path="quiz/:topic" element={<QuizPage />} />
-          <Route path="speedrun" element={<SpeedRunPage />} />
-          <Route path="speedrun/:topic" element={<SpeedRunPage />} />
-          <Route path="full-study" element={<FullStudyPage />} />
-          <Route path="full-study/:sessionId" element={<FullStudyPage />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
-          <Route path="game-mode" element={<GameModePage />} />
-          <Route path="game-mode/:sessionId" element={<GameModePage />} />
-          <Route path="platformer-game" element={<PlatformerGamePage />} />
-          <Route path="achievements" element={<Index />} />
-          <Route path="analytics" element={<Index />} />
-          <Route path="timer" element={<Index />} />
-          <Route path="goals" element={<Index />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="settings" element={<Index />} />
+
+          {/* Session-specific routes */}
+          <Route path=":sessionId/full-study" element={<FullStudyPage />} />
+          <Route path=":sessionId/speedrun" element={<SpeedRunPage />} />
+          <Route path=":sessionId/browse-games" element={<BrowseGamesPage />} />
+          <Route path=":sessionId/platformer-game" element={<PlatformerGamePage />} />
+
+          {/* Legacy routes for backward compatibility */}
+          <Route path="quiz/:topic" element={<QuizPage />} />
+          <Route path="speedrun" element={<SpeedRunPage />} />
+          <Route path="full-study" element={<FullStudyPage />} />
+          <Route path="game-mode" element={<GameModePage />} />
+          <Route path="platformer-game" element={<PlatformerGamePage />} />
         </Route>
 
         {/* 404 */}
