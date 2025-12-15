@@ -124,23 +124,43 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
-    // Create narrative from topic
+    // Create a teacher-style narrative explaining the content
     const narrative = `
-      Welcome to ${topic.title}.
-      ${topic.description}
+Hello! I'm your AI mentor, and I'm here to help you understand ${topic.title}.
 
-      Let's explore this topic together. I'll guide you through the key concepts and help you understand the material.
+${topic.description ? `Let me explain what this topic is about. ${topic.description}` : ''}
 
-      ${topic.questions.map((q: any, idx: number) => `
-        Question ${idx + 1}: ${q.question}
+Now, let me break this down into key concepts that you need to understand.
 
-        The answer is: ${q.options[q.correctAnswer]}.
+${topic.questions && topic.questions.length > 0 ? topic.questions.map((q: any, idx: number) => {
+  const questionNumber = idx + 1;
+  const correctAnswer = q.options[q.correctAnswer];
 
-        ${q.explanation}
-      `).join('\n\n')}
+  return `
+Concept ${questionNumber}: ${q.question}
 
-      That covers ${topic.title}. Let's move on when you're ready!
-    `;
+${q.explanation ? `Here's what you need to know: ${q.explanation}` : ''}
+
+The key point to remember is: ${correctAnswer}.
+
+${q.options && q.options.length > 1 ? `
+Let me explain why the other options aren't correct.
+${q.options.map((opt: string, optIdx: number) => {
+  if (optIdx !== q.correctAnswer) {
+    return `${opt} - This is not the best answer because it doesn't fully capture the concept.`;
+  }
+  return '';
+}).filter(Boolean).join(' ')}
+` : ''}
+  `;
+}).join('\n\n') : 'This topic contains important concepts for you to learn.'}
+
+That's everything you need to know about ${topic.title}.
+
+Take a moment to think about what we've covered. When you're ready, you can move on to the next topic.
+
+Remember, learning is a journey. Don't hesitate to replay this if you need to hear it again!
+    `.trim();
 
     const handleEnd = () => {
       setIsReading(false);
@@ -153,7 +173,8 @@ export default function MentorModePage() {
     };
 
     const handleError = (error: Error) => {
-      setError(error.message);
+      console.error('TTS Error:', error);
+      setError(`Failed to play audio: ${error.message}. Try using Browser TTS instead.`);
       setIsReading(false);
       setIsPlaying(false);
       setIsLoading(false);
@@ -165,9 +186,9 @@ export default function MentorModePage() {
         narrative,
         {
           voice: currentVoice,
-          speed: 1.0,
-          model: currentProvider === 'openai' ? 'tts-1' : undefined, // Use standard quality for faster generation (OpenAI only)
-          pitch: 0, // Neutral pitch for Google Cloud
+          speed: 0.95, // Slightly slower for better comprehension
+          model: currentProvider === 'openai' ? 'tts-1' : undefined,
+          pitch: 0,
           provider: currentProvider
         },
         {
@@ -381,12 +402,12 @@ export default function MentorModePage() {
 
               <Button
                 size="lg"
-                className="w-16 h-16 rounded-full"
+                className="w-16 h-16 rounded-full relative"
                 onClick={handlePlayPause}
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <div className="animate-spin">⏳</div>
+                  <span className="text-xs">Loading...</span>
                 ) : isPlaying ? (
                   <Pause size={24} />
                 ) : (
@@ -416,11 +437,16 @@ export default function MentorModePage() {
 
             <div className="text-center mt-4 text-sm text-muted-foreground">
               {isLoading ? (
-                `Generating narration with ${availableProviders.find(p => p.id === currentProvider)?.name}...`
+                <div className="flex items-center justify-center gap-2">
+                  <span>Preparing your lesson...</span>
+                </div>
               ) : isPlaying ? (
-                `Playing with ${availableProviders.find(p => p.id === currentProvider)?.name}...`
+                <div className="flex items-center justify-center gap-2">
+                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span>Listening to your AI mentor</span>
+                </div>
               ) : (
-                'Click play to start the lesson'
+                <span className="font-medium">🎙️ Click play to start the lesson</span>
               )}
             </div>
           </Card>
