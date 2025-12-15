@@ -10,6 +10,9 @@ import { useAppStore } from "@/store/appStore";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
+import ContactPage from "./pages/ContactPage";
 import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
 import QuizPage from "./pages/QuizPage";
@@ -28,6 +31,9 @@ const AppContent = () => {
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/contact" element={<ContactPage />} />
 
         {/* Protected routes - require authentication */}
         <Route
