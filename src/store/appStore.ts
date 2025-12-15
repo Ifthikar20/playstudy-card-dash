@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession } from '@/services/api';
+import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession, updateTopicProgress, updateUserXP } from '@/services/api';
 
 interface Game {
   id: number;
@@ -23,6 +23,7 @@ interface Question {
 
 interface Topic {
   id: string;
+  db_id?: number | null;  // Database ID for syncing progress to backend
   title: string;
   description: string;
   questions: Question[];
@@ -296,14 +297,39 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   processStudyContent: (sessionId, content) => {
     const topics = generateTopicsFromContent(content);
+
+    // Normalize topics to ensure all required fields are present and properly initialized
+    const normalizeTopics = (topicList: Topic[]): Topic[] => {
+      return topicList.map(t => ({
+        ...t,
+        score: t.score ?? 0, // Ensure score is 0, not null/undefined
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
+      }));
+    };
+
+    const normalizedTopics = normalizeTopics(topics);
+
+    console.log('📥 Processing study content with normalization:', {
+      sessionId,
+      topicsCount: normalizedTopics.length,
+      sampleTopic: normalizedTopics[0] ? {
+        id: normalizedTopics[0].id,
+        title: normalizedTopics[0].title,
+        score: normalizedTopics[0].score,
+        questionsCount: normalizedTopics[0].questions?.length
+      } : null
+    });
+
     set((state) => {
       const updatedSessions = state.studySessions.map((s) =>
-        s.id === sessionId 
-          ? { ...s, studyContent: content, extractedTopics: topics, hasFullStudy: true, topics: topics.length } 
+        s.id === sessionId
+          ? { ...s, studyContent: content, extractedTopics: normalizedTopics, hasFullStudy: true, topics: normalizedTopics.length }
           : s
       );
-      const updatedCurrent = state.currentSession?.id === sessionId 
-        ? { ...state.currentSession, studyContent: content, extractedTopics: topics, hasFullStudy: true, topics: topics.length }
+      const updatedCurrent = state.currentSession?.id === sessionId
+        ? { ...state.currentSession, studyContent: content, extractedTopics: normalizedTopics, hasFullStudy: true, topics: normalizedTopics.length }
         : state.currentSession;
       return { studySessions: updatedSessions, currentSession: updatedCurrent };
     });
@@ -339,18 +365,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     console.log('📚 Checking answer for question', indexToUse + 1, 'of', topic.questions.length);
 
-    // Debug logging
-    console.log('Answer validation:', {
+    // Enhanced debug logging
+    console.log('🔍 Answer validation details:', {
       answerIndex,
       correctAnswer: question.correctAnswer,
       answerIndexType: typeof answerIndex,
       correctAnswerType: typeof question.correctAnswer,
-      question: question.question,
-      options: question.options
+      answerIndexValue: answerIndex,
+      correctAnswerValue: question.correctAnswer,
+      currentScore: topic.score,
+      questionData: {
+        question: question.question,
+        options: question.options,
+        selectedOption: question.options[answerIndex],
+        correctOption: question.options[question.correctAnswer]
+      }
     });
 
-    // Ensure both are numbers for comparison
-    const correct = Number(answerIndex) === Number(question.correctAnswer);
+    // Ensure both are numbers for comparison (handle null/undefined)
+    const answerNum = Number(answerIndex);
+    const correctNum = Number(question.correctAnswer);
+    const correct = !isNaN(answerNum) && !isNaN(correctNum) && answerNum === correctNum;
+
+    console.log('✅ Comparison result:', {
+      answerNum,
+      correctNum,
+      correct,
+      willAddPoints: correct ? (100 / topic.questions.length) : 0,
+      newScore: (topic.score || 0) + (correct ? 100 / topic.questions.length : 0)
+    });
 
     // Helper function to update score recursively (WITHOUT incrementing index)
     const updateScoreRecursively = (topics: Topic[]): Topic[] => {
@@ -371,6 +414,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     };
 
+    // Calculate new score
+    const newScore = (topic.score || 0) + (correct ? 100 / topic.questions.length : 0);
+
     // Update score (but don't move to next question yet)
     set((state) => {
       const updatedSessions = state.studySessions.map((s) => {
@@ -388,8 +434,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     });
 
+    // Sync to backend if topic has database ID
+    if (topic.db_id) {
+      updateTopicProgress(
+        sessionId,
+        topic.db_id,
+        newScore,
+        topic.currentQuestionIndex,
+        false // Not completed yet
+      ).catch(err => console.warn('Failed to sync progress:', err));
+    }
+
     if (correct) {
       get().addXp(10);
+      // Sync XP to backend
+      updateUserXP(10).catch(err => console.warn('Failed to sync XP:', err));
     }
 
     return { correct, explanation: question.explanation };
@@ -397,6 +456,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   moveToNextQuestion: (sessionId, topicId) => {
     console.log('🔄 moveToNextQuestion called', { sessionId, topicId });
+
+    // Find the topic first to get its db_id
+    const state = get();
+    const session = state.studySessions.find(s => s.id === sessionId);
+    const findTopic = (topics: Topic[], id: string): Topic | null => {
+      for (const topic of topics) {
+        if (topic.id === id) return topic;
+        if (topic.subtopics) {
+          const found = findTopic(topic.subtopics, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const topic = session?.extractedTopics ? findTopic(session.extractedTopics, topicId) : null;
 
     // Helper function to find and update topic in hierarchical structure
     const updateIndexRecursively = (topics: Topic[]): Topic[] => {
@@ -407,12 +481,25 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           console.log('➡️ Moving from index', t.currentQuestionIndex, 'to', newIndex, '/', t.questions.length);
 
-          return {
+          const updatedTopic = {
             ...t,
             currentQuestionIndex: newIndex,
             completed: isComplete,
             score: isComplete ? Math.round(t.score || 0) : t.score,
           };
+
+          // Sync to backend if topic has database ID
+          if (t.db_id) {
+            updateTopicProgress(
+              sessionId,
+              t.db_id,
+              Math.round(updatedTopic.score || 0),
+              updatedTopic.currentQuestionIndex,
+              updatedTopic.completed
+            ).catch(err => console.warn('Failed to sync progress on move:', err));
+          }
+
+          return updatedTopic;
         }
         if (t.subtopics && t.subtopics.length > 0) {
           return {

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from datetime import datetime
 import anthropic
 import json
 import io
@@ -20,6 +21,88 @@ from app.models.question import Question
 from app.core.rate_limit import limiter
 
 router = APIRouter()
+
+
+def analyze_content_complexity(text: str) -> dict:
+    """
+    Analyze content complexity and recommend topic/question counts.
+
+    Args:
+        text: Extracted text content
+
+    Returns:
+        Dictionary with analysis results including:
+        - word_count: Total number of words
+        - estimated_reading_time: Time to read in minutes
+        - recommended_topics: Suggested number of topics
+        - recommended_questions: Suggested questions per topic
+        - complexity_score: 0-1 score of content complexity
+        - unique_word_ratio: Vocabulary richness
+    """
+    words = text.split()
+    word_count = len(words)
+
+    # Calculate unique words ratio (vocabulary richness)
+    unique_words = len(set(word.lower() for word in words if word.isalnum()))
+    unique_word_ratio = unique_words / max(word_count, 1)
+
+    # Average word length (longer words = more complex)
+    avg_word_length = sum(len(word) for word in words) / max(word_count, 1)
+
+    # Sentence count (approximate by counting periods, exclamation, question marks)
+    sentences = len([c for c in text if c in '.!?'])
+    avg_sentence_length = word_count / max(sentences, 1)
+
+    # Calculate complexity score (0-1 scale)
+    # Based on: vocabulary richness, average word length, sentence complexity
+    complexity_score = min(1.0, (
+        (unique_word_ratio * 0.4) +  # 40% weight on vocabulary
+        (min(avg_word_length / 8, 1.0) * 0.3) +  # 30% weight on word length
+        (min(avg_sentence_length / 25, 1.0) * 0.3)  # 30% weight on sentence length
+    ))
+
+    # Reading time (average reading speed: 200-250 words/minute)
+    estimated_reading_time = max(1, round(word_count / 225))
+
+    # Recommend topics based on word count and complexity
+    # Short content (< 500 words): 2-4 topics
+    # Medium content (500-2000 words): 4-8 topics
+    # Long content (2000-5000 words): 8-12 topics
+    # Very long content (5000+ words): 12-20 topics
+    if word_count < 500:
+        base_topics = 3
+    elif word_count < 2000:
+        base_topics = 6
+    elif word_count < 5000:
+        base_topics = 10
+    else:
+        base_topics = 15
+
+    # Adjust based on complexity
+    recommended_topics = max(2, min(20, round(base_topics * (0.7 + complexity_score * 0.6))))
+
+    # Recommend questions per topic based on content depth
+    # More complex content = more questions to test understanding
+    if word_count < 1000:
+        base_questions = 8
+    elif word_count < 3000:
+        base_questions = 12
+    else:
+        base_questions = 15
+
+    # Adjust based on complexity
+    recommended_questions = max(5, min(50, round(base_questions * (0.8 + complexity_score * 0.4))))
+
+    return {
+        'word_count': word_count,
+        'estimated_reading_time': estimated_reading_time,
+        'recommended_topics': recommended_topics,
+        'recommended_questions': recommended_questions,
+        'complexity_score': round(complexity_score, 2),
+        'unique_word_ratio': round(unique_word_ratio, 2),
+        'avg_word_length': round(avg_word_length, 1),
+        'avg_sentence_length': round(avg_sentence_length, 1)
+    }
 
 
 def extract_text_from_content(content: str) -> str:
@@ -113,6 +196,7 @@ class QuestionSchema(BaseModel):
 class TopicSchema(BaseModel):
     """Schema for a study topic."""
     id: str
+    db_id: Optional[int] = None  # Database ID for syncing progress
     title: str
     description: str
     questions: List[QuestionSchema] = []
@@ -131,8 +215,23 @@ class CreateStudySessionRequest(BaseModel):
     """Request schema for creating a study session."""
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
-    num_topics: int = Field(default=4, ge=2, le=10)
-    questions_per_topic: int = Field(default=10, ge=5, le=20)
+    num_topics: int = Field(default=4, ge=2, le=20)  # Increased from 10 to 20
+    questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
+
+
+class AnalyzeContentRequest(BaseModel):
+    """Request schema for analyzing content before creating a session."""
+    content: str = Field(..., min_length=10, max_length=10000000)
+
+
+class ContentAnalysisResponse(BaseModel):
+    """Response schema for content analysis."""
+    word_count: int
+    estimated_reading_time: int  # in minutes
+    recommended_topics: int
+    recommended_questions: int
+    complexity_score: float  # 0-1 scale
+    content_summary: str
 
 
 class CreateStudySessionResponse(BaseModel):
@@ -145,6 +244,61 @@ class CreateStudySessionResponse(BaseModel):
     topics: int
     hasFullStudy: bool
     hasSpeedRun: bool
+
+
+@router.post("/analyze-content", response_model=ContentAnalysisResponse)
+@limiter.limit("10/minute")
+async def analyze_content(
+    request: Request,
+    data: AnalyzeContentRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Analyze content and provide recommendations for topics and questions.
+
+    This endpoint analyzes the uploaded content and returns:
+    - Word count and estimated reading time
+    - Recommended number of topics
+    - Recommended questions per topic
+    - Complexity score
+
+    Rate Limits:
+        - 10 requests per minute per user
+    """
+    try:
+        # Extract text from content (handles Word docs, PDFs, plain text)
+        extracted_text = extract_text_from_content(data.content)
+
+        if not extracted_text or len(extracted_text.strip()) < 50:
+            raise HTTPException(
+                status_code=400,
+                detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
+            )
+
+        # Analyze content complexity
+        analysis = analyze_content_complexity(extracted_text)
+
+        # Generate a brief summary (first 200 characters)
+        content_preview = extracted_text[:200].strip()
+        if len(extracted_text) > 200:
+            content_preview += "..."
+
+        return ContentAnalysisResponse(
+            word_count=analysis['word_count'],
+            estimated_reading_time=analysis['estimated_reading_time'],
+            recommended_topics=analysis['recommended_topics'],
+            recommended_questions=analysis['recommended_questions'],
+            complexity_score=analysis['complexity_score'],
+            content_summary=content_preview
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze content: {str(e)}"
+        )
 
 
 @router.post("/create-with-ai", response_model=CreateStudySessionResponse)
@@ -160,7 +314,7 @@ async def create_study_session_with_ai(
 
     This endpoint:
     1. Analyzes the provided content
-    2. Extracts major topics using AI
+    2. Extracts major topics using AI (dynamically based on content)
     3. Generates quiz questions for each topic
     4. Saves everything to the database
 
@@ -177,22 +331,40 @@ async def create_study_session_with_ai(
                 detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
             )
 
+        # Analyze content to get smart recommendations
+        analysis = analyze_content_complexity(extracted_text)
+
+        # Calculate number of categories based on total topics requested
+        # For 2-5 topics: 2 categories
+        # For 6-10 topics: 3 categories
+        # For 11-15 topics: 4 categories
+        # For 16-20 topics: 5 categories
+        num_categories = max(2, min(5, (data.num_topics + 3) // 4))
+        subtopics_per_category = max(2, data.num_topics // num_categories)
+
         # Initialize Anthropic client
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
-        # Step 1: Extract topics from content with hierarchical structure
+        # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
         topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories and subtopics.
 
 Study Material:
 {extracted_text}
 
+Content Analysis:
+- Word Count: {analysis['word_count']}
+- Complexity Score: {analysis['complexity_score']}
+- Estimated Reading Time: {analysis['estimated_reading_time']} minutes
+
 Requirements:
-1. Create 2-4 major categories that organize the content at a high level
-2. Within each category, identify 2-4 specific subtopics that can have quiz questions
+1. Create approximately {num_categories} major categories that organize the content at a high level
+2. Within each category, identify {subtopics_per_category}-{subtopics_per_category + 2} specific subtopics that can have quiz questions
 3. Each subtopic should be substantial enough for {data.questions_per_topic} questions
 4. Provide clear titles and brief descriptions for both categories and subtopics
-5. Organize logically (foundational concepts first)
-6. Aim for approximately {data.num_topics} total subtopics across all categories
+5. Organize logically (foundational concepts first, building to advanced topics)
+6. Aim for EXACTLY {data.num_topics} total subtopics across all categories
+7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
+8. Ensure subtopics are distinct and cover different aspects of the material
 
 Return ONLY a valid JSON object in this EXACT format:
 {{
@@ -278,6 +450,7 @@ Return ONLY a valid JSON object in this EXACT format:
             # Create category schema for response
             category_schema = TopicSchema(
                 id=f"category-{cat_idx+1}",
+                db_id=category_topic.id,  # Include database ID
                 title=category_data["title"],
                 description=category_data.get("description", ""),
                 isCategory=True,
@@ -378,6 +551,7 @@ Return in this EXACT format:
                 # Build subtopic response
                 subtopic_schema = TopicSchema(
                     id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                    db_id=subtopic.id,  # Include database ID for progress sync
                     title=subtopic_data["title"],
                     description=subtopic_data.get("description", ""),
                     questions=questions_list,
@@ -454,6 +628,7 @@ async def get_study_session(
 
         category_schema = TopicSchema(
             id=f"category-{cat_idx+1}",
+            db_id=category.id,  # Include database ID
             title=category.title,
             description=category.description or "",
             isCategory=True,
@@ -481,6 +656,7 @@ async def get_study_session(
 
             subtopic_schema = TopicSchema(
                 id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                db_id=subtopic.id,  # Include database ID for progress sync
                 title=subtopic.title,
                 description=subtopic.description or "",
                 questions=questions_list,
@@ -564,3 +740,114 @@ async def archive_study_session(
     db.refresh(session)
 
     return {"message": "Study session archived successfully", "id": session_id}
+
+
+class UpdateTopicProgressRequest(BaseModel):
+    """Request schema for updating topic progress."""
+    score: int = Field(..., ge=0, le=100)  # Score as percentage 0-100
+    current_question_index: int = Field(..., ge=0)
+    completed: bool = False
+
+
+class UpdateUserXPRequest(BaseModel):
+    """Request schema for updating user XP."""
+    xp_to_add: int = Field(..., ge=0, le=1000)  # XP to add (capped at 1000 per call)
+
+
+@router.patch("/{session_id}/topics/{topic_id}/progress")
+@limiter.limit("60/minute")
+async def update_topic_progress(
+    request: Request,
+    session_id: str,
+    topic_id: int,  # Database topic ID
+    data: UpdateTopicProgressRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update topic progress (score, current question index, completion status).
+
+    This endpoint is called after each answer to persist user progress.
+
+    Rate Limits:
+        - 60 requests per minute per user
+    """
+    # Verify session belongs to user
+    session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    # Find the topic
+    topic = db.query(Topic).filter(
+        Topic.id == topic_id,
+        Topic.study_session_id == session_id
+    ).first()
+
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    # Update topic progress
+    topic.score = data.score
+    topic.current_question_index = data.current_question_index
+    topic.completed = data.completed
+
+    # Update session progress (percentage of completed subtopics)
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == session_id,
+        Topic.is_category == False  # Only count leaf topics
+    ).all()
+
+    completed_topics = sum(1 for t in all_topics if t.completed)
+    total_topics = len(all_topics)
+    session.progress = int((completed_topics / total_topics * 100) if total_topics > 0 else 0)
+
+    db.commit()
+    db.refresh(topic)
+
+    return {
+        "message": "Topic progress updated successfully",
+        "topic_id": topic_id,
+        "score": topic.score,
+        "current_question_index": topic.current_question_index,
+        "completed": topic.completed,
+        "session_progress": session.progress
+    }
+
+
+@router.patch("/user/xp")
+@limiter.limit("100/minute")
+async def update_user_xp(
+    request: Request,
+    data: UpdateUserXPRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Add XP to the current user's total.
+
+    This endpoint is called after each correct answer.
+
+    Rate Limits:
+        - 100 requests per minute per user
+    """
+    # Update user XP
+    current_user.xp += data.xp_to_add
+    current_user.updated_at = datetime.utcnow()
+
+    # Calculate level (simple formula: level = floor(xp / 100) + 1)
+    # Every 100 XP = 1 level
+    current_user.level = (current_user.xp // 100) + 1
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "message": "XP updated successfully",
+        "xp": current_user.xp,
+        "xp_added": data.xp_to_add,
+        "level": current_user.level
+    }

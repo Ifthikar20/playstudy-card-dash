@@ -62,22 +62,31 @@ export function TopicQuizCard({
     setResult(answerResult);
     setShowResult(true);
     console.log('✅ Answer result:', answerResult.correct ? 'Correct' : 'Wrong');
-  };
 
-  const handleNext = () => {
-    console.log('➡️ Next button clicked');
-    if (isLastQuestion) {
-      console.log('🏁 Last question - completing topic');
-      onComplete();
-    } else {
-      console.log('🔄 Moving to next question');
-      onMoveToNext();
-    }
+    // Auto-advance after 2 seconds
+    setTimeout(() => {
+      if (isLastQuestion) {
+        console.log('🏁 Last question - completing topic');
+        onComplete();
+      } else {
+        console.log('🔄 Auto-advancing to next question');
+        onMoveToNext();
+      }
+    }, 2000); // 2 second delay to show feedback
   };
 
   if (isCompleted) {
     const totalQuestions = questions.length;
     const pointsEarned = Math.round((score || 0) * totalQuestions / 100);
+    const xpEarned = pointsEarned * 10; // 10 XP per correct answer
+
+    console.log('🏆 Topic completed:', {
+      score,
+      totalQuestions,
+      pointsEarned,
+      xpEarned,
+      scorePercentage: score
+    });
 
     return (
       <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20">
@@ -107,7 +116,7 @@ export function TopicQuizCard({
 
           <div className="pt-2">
             <p className="text-xs text-primary font-medium">
-              +{pointsEarned} XP added to your total learning points
+              +{xpEarned} XP added to your total learning points
             </p>
           </div>
         </CardContent>
@@ -194,13 +203,9 @@ export function TopicQuizCard({
               <p>{result.explanation}</p>
             </div>
 
-            <Button
-              onClick={handleNext}
-              className="w-full"
-              size="lg"
-            >
-              {isLastQuestion ? "Complete Topic ✓" : "Next Question →"}
-            </Button>
+            <div className="text-center text-sm text-muted-foreground">
+              {isLastQuestion ? "Completing topic..." : "Loading next question..."}
+            </div>
           </div>
         )}
 

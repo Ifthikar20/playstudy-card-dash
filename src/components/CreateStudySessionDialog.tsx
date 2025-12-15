@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
-import { createStudySessionWithAI } from "@/services/api";
+import { createStudySessionWithAI, analyzeContent, ContentAnalysis } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
@@ -46,12 +46,42 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedMode, setSelectedMode] = useState<StudyMode | null>(null);
   const [topicCount, setTopicCount] = useState([4]);
   const [questionCount, setQuestionCount] = useState([10]);
   const [speedRunDuration, setSpeedRunDuration] = useState([10]);
   const [sessionTitle, setSessionTitle] = useState("");
   const [createdSession, setCreatedSession] = useState<any>(null);
+  const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
+
+  const handleAnalyzeContent = async (content: string) => {
+    if (!content || content.length < 50) return;
+
+    setIsAnalyzing(true);
+    try {
+      const analysis = await analyzeContent(content);
+      setContentAnalysis(analysis);
+
+      // Update default values based on recommendations
+      setTopicCount([analysis.recommended_topics]);
+      setQuestionCount([analysis.recommended_questions]);
+
+      toast({
+        title: "Content Analyzed!",
+        description: `${analysis.word_count} words • ${analysis.estimated_reading_time} min read • ${analysis.recommended_topics} topics recommended`,
+      });
+    } catch (error: any) {
+      console.error('Analysis failed:', error);
+      toast({
+        title: "Analysis Failed",
+        description: "Using default settings. You can still create the session.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -60,18 +90,23 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
       // Read file content
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const result = event.target?.result as string;
 
         // For binary files (Word docs, PDFs), extract base64
         // For text files, use as-is
+        let content = '';
         if (result.startsWith('data:')) {
           // Remove the "data:...;base64," prefix
-          const base64Content = result.split(',')[1];
-          setTextContent(base64Content);
+          content = result.split(',')[1];
+          setTextContent(content);
         } else {
+          content = result;
           setTextContent(result);
         }
+
+        // Automatically analyze content after upload
+        await handleAnalyzeContent(content);
       };
 
       // Use readAsDataURL for proper binary handling
@@ -203,12 +238,32 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
             {/* Content Area */}
             {uploadType === "text" ? (
-              <Textarea
-                placeholder="Paste your study material here... (notes, textbook content, articles, etc.)"
-                className="min-h-[200px] resize-none"
-                value={textContent}
-                onChange={(e) => setTextContent(e.target.value)}
-              />
+              <div className="space-y-2">
+                <Textarea
+                  placeholder="Paste your study material here... (notes, textbook content, articles, etc.)"
+                  className="min-h-[200px] resize-none"
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                />
+                {textContent.trim().length >= 50 && !contentAnalysis && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleAnalyzeContent(textContent)}
+                    disabled={isAnalyzing}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin mr-2" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      'Analyze Content'
+                    )}
+                  </Button>
+                )}
+              </div>
             ) : (
               <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
                 <Input
@@ -232,11 +287,35 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               </div>
             )}
 
+            {/* Content Analysis Info */}
+            {contentAnalysis && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Word Count:</span>
+                    <span className="ml-2 font-medium">{contentAnalysis.word_count}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Reading Time:</span>
+                    <span className="ml-2 font-medium">{contentAnalysis.estimated_reading_time} min</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Complexity:</span>
+                    <span className="ml-2 font-medium">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Recommended:</span>
+                    <span className="ml-2 font-medium">{contentAnalysis.recommended_topics} topics</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Process Button */}
-            <Button 
-              className="w-full gap-2" 
+            <Button
+              className="w-full gap-2"
               size="lg"
-              disabled={!canProceed || isProcessing}
+              disabled={!canProceed || isProcessing || isAnalyzing}
               onClick={handleProcessContent}
             >
               {isProcessing ? (
@@ -279,16 +358,32 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                           <div>
                             <div className="flex justify-between text-sm mb-2">
                               <span className="text-muted-foreground">Topics to generate</span>
-                              <span className="font-medium">{topicCount[0]}</span>
+                              <span className="font-medium">
+                                {topicCount[0]}
+                                {contentAnalysis && topicCount[0] === contentAnalysis.recommended_topics && (
+                                  <span className="ml-1 text-xs text-primary">(recommended)</span>
+                                )}
+                              </span>
                             </div>
-                            <Slider value={topicCount} onValueChange={setTopicCount} min={3} max={15} step={1} />
+                            <Slider value={topicCount} onValueChange={setTopicCount} min={2} max={20} step={1} />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              More topics = more comprehensive coverage
+                            </p>
                           </div>
                           <div>
                             <div className="flex justify-between text-sm mb-2">
                               <span className="text-muted-foreground">Questions per topic</span>
-                              <span className="font-medium">{questionCount[0]}</span>
+                              <span className="font-medium">
+                                {questionCount[0]}
+                                {contentAnalysis && questionCount[0] === contentAnalysis.recommended_questions && (
+                                  <span className="ml-1 text-xs text-primary">(recommended)</span>
+                                )}
+                              </span>
                             </div>
                             <Slider value={questionCount} onValueChange={setQuestionCount} min={5} max={50} step={5} />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              More questions = deeper understanding
+                            </p>
                           </div>
                         </div>
                       )}

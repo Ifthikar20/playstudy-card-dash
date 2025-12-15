@@ -361,6 +361,58 @@ export const generateQuestions = async (topic: string, numQuestions: number = 5,
 };
 
 /**
+ * Content analysis response interface
+ */
+export interface ContentAnalysis {
+  word_count: number;
+  estimated_reading_time: number;
+  recommended_topics: number;
+  recommended_questions: number;
+  complexity_score: number;
+  content_summary: string;
+}
+
+/**
+ * Analyze content and get recommendations for topics/questions
+ */
+export const analyzeContent = async (content: string): Promise<ContentAnalysis> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Authentication required. Please log in again.');
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/analyze-content`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        removeAuthToken();
+        setTimeout(() => {
+          window.location.href = '/auth';
+        }, 2000);
+        throw new Error('Your session has expired. Please log in again.');
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to analyze content');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to analyze content:', error);
+    throw error;
+  }
+};
+
+/**
  * Create study session with AI-generated topics and questions
  */
 export const createStudySessionWithAI = async (
@@ -406,6 +458,18 @@ export const createStudySessionWithAI = async (
 
     const data = await response.json();
 
+    // Normalize topics to ensure proper initialization
+    const normalizeTopics = (topicList: any[]): any[] => {
+      if (!topicList) return [];
+      return topicList.map((t: any) => ({
+        ...t,
+        score: t.score ?? 0, // Ensure score is 0, not null
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
+      }));
+    };
+
     // Transform API response to match frontend StudySession interface
     return {
       id: String(data.id),
@@ -417,7 +481,7 @@ export const createStudySessionWithAI = async (
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
       studyContent: data.studyContent,
-      extractedTopics: data.extractedTopics,
+      extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
   } catch (error) {
     console.error('Failed to create study session:', error);
@@ -462,6 +526,18 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 
     const data = await response.json();
 
+    // Normalize topics to ensure proper initialization
+    const normalizeTopics = (topicList: any[]): any[] => {
+      if (!topicList) return [];
+      return topicList.map((t: any) => ({
+        ...t,
+        score: t.score ?? 0, // Ensure score is 0, not null
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
+      }));
+    };
+
     // Transform backend response to frontend StudySession format
     const session: StudySession = {
       id: data.id.toString(),
@@ -473,7 +549,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
       studyContent: data.studyContent,
-      extractedTopics: data.extractedTopics,
+      extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
 
     // Save to browser storage for next time
@@ -483,6 +559,86 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
   } catch (error) {
     console.error('Error fetching study session:', error);
     throw error;
+  }
+};
+
+/**
+ * Update topic progress (score, current question index, completion status)
+ */
+export const updateTopicProgress = async (
+  sessionId: string,
+  topicId: number,
+  score: number,
+  currentQuestionIndex: number,
+  completed: boolean
+): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      console.warn('No auth token - progress update skipped');
+      return; // Gracefully fail - user can continue working offline
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicId}/progress`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        score: Math.round(score), // Round to integer (0-100)
+        current_question_index: currentQuestionIndex,
+        completed,
+      }),
+    });
+
+    if (!response.ok) {
+      // Log but don't throw - allow offline usage
+      console.warn('Failed to sync topic progress:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+    console.log('✅ Topic progress synced:', data);
+  } catch (error) {
+    // Gracefully handle network errors - don't block user
+    console.warn('Network error syncing topic progress:', error);
+  }
+};
+
+/**
+ * Update user XP
+ */
+export const updateUserXP = async (xpToAdd: number): Promise<void> => {
+  try {
+    const token = getAuthToken();
+
+    if (!token) {
+      console.warn('No auth token - XP update skipped');
+      return; // Gracefully fail
+    }
+
+    const response = await fetch(`${API_URL}/study-sessions/user/xp`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        xp_to_add: xpToAdd,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to sync XP:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+    console.log('✅ XP synced:', data);
+  } catch (error) {
+    console.warn('Network error syncing XP:', error);
   }
 };
 
