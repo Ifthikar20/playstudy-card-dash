@@ -126,8 +126,8 @@ export default function BrowseGamesPage() {
                       <h3 className="font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
                         {game.title}
                       </h3>
-                      <p className="text-xs text-muted-foreground line-clamp-2">
-                        {game.description}
+                      <p className="text-xs text-muted-foreground">
+                        {game.questionCount} MCQ • Level: {game.difficulty} • {game.points}+ points
                       </p>
                     </div>
 

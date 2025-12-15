@@ -11,6 +11,8 @@ interface Game {
   rating: number;
   image: string;
   difficulty: string;
+  questionCount: number;
+  points: number;
 }
 
 interface Question {
@@ -41,6 +43,7 @@ interface StudySession {
   progress: number;
   topics: number;
   time: string;
+  createdAt: number; // Timestamp in milliseconds
   hasFullStudy: boolean;
   hasSpeedRun: boolean;
   hasQuiz: boolean;
@@ -57,6 +60,7 @@ interface AppState {
   currentSession: StudySession | null;
   studySessions: StudySession[];
   setCurrentSession: (session: StudySession | null) => void;
+  addSession: (session: StudySession) => void;
   createSession: (title: string, content: string) => StudySession;
   createFullStudy: (sessionId: string) => void;
   createSpeedRun: (sessionId: string) => void;
@@ -256,6 +260,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setCurrentSession: (session) => set({ currentSession: session }),
 
+  addSession: (session) => set((state) => ({
+    studySessions: [session, ...state.studySessions],
+  })),
+
   createSession: (title, content) => {
     const newSession: StudySession = {
       id: uuidv4(), // Generate UUID for globally unique session ID
@@ -263,6 +271,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       progress: 0,
       topics: 0,
       time: 'Just now',
+      createdAt: Date.now(),
       hasFullStudy: false,
       hasSpeedRun: false,
       hasQuiz: false,

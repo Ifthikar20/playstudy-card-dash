@@ -39,7 +39,7 @@ type StudyMode = "full-study" | "speed-run" | "game";
 
 export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySessionDialogProps) {
   const navigate = useNavigate();
-  const { setCurrentSession, createSpeedRun } = useAppStore();
+  const { setCurrentSession, addSession, createSpeedRun } = useAppStore();
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("upload");
   const [uploadType, setUploadType] = useState<UploadType>("text");
@@ -132,6 +132,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
       setCreatedSession(newSession);
       setCurrentSession(newSession);
+      addSession(newSession);
 
       toast({
         title: "Session Created!",
@@ -155,12 +156,12 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
     // Navigate to the selected mode
     if (selectedMode === "full-study") {
-      navigate(`/dashboard/full-study/${createdSession.id}`);
+      navigate(`/dashboard/${createdSession.id}/full-study`);
     } else if (selectedMode === "speed-run") {
       createSpeedRun(createdSession.id);
-      navigate("/dashboard/speedrun");
+      navigate(`/dashboard/${createdSession.id}/speedrun`);
     } else if (selectedMode === "game") {
-      navigate(`/dashboard/game-mode/${createdSession.id}`);
+      navigate(`/dashboard/${createdSession.id}/browse-games`);
     }
 
     // Reset state
