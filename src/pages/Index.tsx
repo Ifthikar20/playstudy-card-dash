@@ -94,20 +94,20 @@ export default function Index() {
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-primary">{stats.totalSessions}</div>
-              <div className="text-xs md:text-sm text-muted-foreground">Study Sessions</div>
+              <div className="text-lg md:text-xl font-bold text-primary">{stats.totalSessions}</div>
+              <div className="text-[13px] text-muted-foreground">Study Sessions</div>
             </div>
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">{stats.averageAccuracy}%</div>
-              <div className="text-xs md:text-sm text-muted-foreground">Average Accuracy</div>
+              <div className="text-lg md:text-xl font-bold text-green-600 dark:text-green-400">{stats.averageAccuracy}%</div>
+              <div className="text-[13px] text-muted-foreground">Average Accuracy</div>
             </div>
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-purple-600 dark:text-purple-400">{stats.questionsAnswered}</div>
-              <div className="text-xs md:text-sm text-muted-foreground">Questions Answered</div>
+              <div className="text-lg md:text-xl font-bold text-purple-600 dark:text-purple-400">{stats.questionsAnswered}</div>
+              <div className="text-[13px] text-muted-foreground">Questions Answered</div>
             </div>
             <div className="bg-card rounded-xl border border-border p-4 md:p-6">
-              <div className="text-xl md:text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.totalStudyTime}</div>
-              <div className="text-xs md:text-sm text-muted-foreground">Total Study Time</div>
+              <div className="text-lg md:text-xl font-bold text-orange-600 dark:text-orange-400">{stats.totalStudyTime}</div>
+              <div className="text-[13px] text-muted-foreground">Total Study Time</div>
             </div>
           </div>
 

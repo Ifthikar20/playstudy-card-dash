@@ -436,7 +436,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                     </div>
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground">Game Mode</h3>
-                      <p className="text-sm text-muted-foreground">Play a single competitive study game</p>
+                      <p className="text-sm text-muted-foreground">Battle enemies while answering questions to survive!</p>
                     </div>
                   </div>
                 </CardContent>

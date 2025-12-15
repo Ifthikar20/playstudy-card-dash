@@ -1,16 +1,19 @@
-import { User, Mail, Calendar, Award, BookOpen, Zap } from "lucide-react";
+import { User, Mail, Calendar, Award, BookOpen, Zap, Settings, Bell, Shield, Globe } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
 export default function ProfilePage() {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
-      
+
       <main className="flex-1 p-4 md:p-8">
         <div className="max-w-4xl mx-auto space-y-6">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Profile</h1>
-          
+
           {/* Profile Header */}
           <Card>
             <CardContent className="p-6">
@@ -71,6 +74,93 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Settings Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Settings size={20} />
+                Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Notifications */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Bell size={18} className="text-muted-foreground" />
+                  <h3 className="font-medium text-foreground">Notifications</h3>
+                </div>
+                <div className="space-y-3 ml-7">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="email-notifications" className="text-sm font-normal">Email notifications</Label>
+                      <p className="text-xs text-muted-foreground">Receive study reminders and updates</p>
+                    </div>
+                    <Switch id="email-notifications" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="achievement-alerts" className="text-sm font-normal">Achievement alerts</Label>
+                      <p className="text-xs text-muted-foreground">Get notified when you unlock achievements</p>
+                    </div>
+                    <Switch id="achievement-alerts" defaultChecked />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Privacy */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Shield size={18} className="text-muted-foreground" />
+                  <h3 className="font-medium text-foreground">Privacy</h3>
+                </div>
+                <div className="space-y-3 ml-7">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="profile-visibility" className="text-sm font-normal">Public profile</Label>
+                      <p className="text-xs text-muted-foreground">Make your profile visible to other users</p>
+                    </div>
+                    <Switch id="profile-visibility" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="show-activity" className="text-sm font-normal">Show activity</Label>
+                      <p className="text-xs text-muted-foreground">Display your study activity on your profile</p>
+                    </div>
+                    <Switch id="show-activity" defaultChecked />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Preferences */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Globe size={18} className="text-muted-foreground" />
+                  <h3 className="font-medium text-foreground">Preferences</h3>
+                </div>
+                <div className="space-y-3 ml-7">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auto-advance" className="text-sm font-normal">Auto-advance questions</Label>
+                      <p className="text-xs text-muted-foreground">Automatically move to next question after answering</p>
+                    </div>
+                    <Switch id="auto-advance" defaultChecked />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="sound-effects" className="text-sm font-normal">Sound effects</Label>
+                      <p className="text-xs text-muted-foreground">Play sounds for correct/incorrect answers</p>
+                    </div>
+                    <Switch id="sound-effects" />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Recent Activity */}
           <Card>

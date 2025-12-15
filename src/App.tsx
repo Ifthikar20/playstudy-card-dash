@@ -20,6 +20,7 @@ import SpeedRunPage from "./pages/SpeedRunPage";
 import ProfilePage from "./pages/ProfilePage";
 import FullStudyPage from "./pages/FullStudyPage";
 import BrowseGamesPage from "./pages/BrowseGamesPage";
+import GameModePage from "./pages/GameModePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,8 @@ const AppContent = () => {
           <Route path="full-study" element={<FullStudyPage />} />
           <Route path="full-study/:sessionId" element={<FullStudyPage />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
+          <Route path="game-mode" element={<GameModePage />} />
+          <Route path="game-mode/:sessionId" element={<GameModePage />} />
           <Route path="achievements" element={<Index />} />
           <Route path="analytics" element={<Index />} />
           <Route path="timer" element={<Index />} />
