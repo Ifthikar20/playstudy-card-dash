@@ -62,17 +62,17 @@ export function TopicQuizCard({
     setResult(answerResult);
     setShowResult(true);
     console.log('✅ Answer result:', answerResult.correct ? 'Correct' : 'Wrong');
-  };
 
-  const handleNext = () => {
-    console.log('➡️ Next button clicked');
-    if (isLastQuestion) {
-      console.log('🏁 Last question - completing topic');
-      onComplete();
-    } else {
-      console.log('🔄 Moving to next question');
-      onMoveToNext();
-    }
+    // Auto-advance after 2 seconds
+    setTimeout(() => {
+      if (isLastQuestion) {
+        console.log('🏁 Last question - completing topic');
+        onComplete();
+      } else {
+        console.log('🔄 Auto-advancing to next question');
+        onMoveToNext();
+      }
+    }, 2000); // 2 second delay to show feedback
   };
 
   if (isCompleted) {
@@ -203,13 +203,9 @@ export function TopicQuizCard({
               <p>{result.explanation}</p>
             </div>
 
-            <Button
-              onClick={handleNext}
-              className="w-full"
-              size="lg"
-            >
-              {isLastQuestion ? "Complete Topic ✓" : "Next Question →"}
-            </Button>
+            <div className="text-center text-sm text-muted-foreground">
+              {isLastQuestion ? "Completing topic..." : "Loading next question..."}
+            </div>
           </div>
         )}
 

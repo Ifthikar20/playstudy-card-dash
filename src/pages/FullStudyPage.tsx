@@ -70,6 +70,121 @@ const nodeStyles = {
   },
 };
 
+// Recursive component to display topics at any depth
+interface TopicTreeItemProps {
+  topic: any;
+  level: number;
+  expandedCategories: Set<string>;
+  setExpandedCategories: (categories: Set<string>) => void;
+  onTopicSelect: (topicId: string) => void;
+}
+
+const TopicTreeItem: React.FC<TopicTreeItemProps> = ({
+  topic,
+  level,
+  expandedCategories,
+  setExpandedCategories,
+  onTopicSelect,
+}) => {
+  const hasSubtopics = topic.subtopics && topic.subtopics.length > 0;
+  const isExpanded = expandedCategories.has(topic.id);
+  const isLeafTopic = topic.questions && topic.questions.length > 0;
+
+  // Recursive function to check if all subtopics are completed
+  const isFullyCompleted = (t: any): boolean => {
+    if (t.questions && t.questions.length > 0) {
+      return t.completed || false;
+    }
+    if (t.subtopics && t.subtopics.length > 0) {
+      return t.subtopics.every((st: any) => isFullyCompleted(st));
+    }
+    return false;
+  };
+
+  const completed = isFullyCompleted(topic);
+  const indent = level * 24; // 24px per level
+
+  const toggleExpanded = () => {
+    const newExpanded = new Set(expandedCategories);
+    if (isExpanded) {
+      newExpanded.delete(topic.id);
+    } else {
+      newExpanded.add(topic.id);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Card
+        className={`transition-all ${completed ? "bg-green-50 dark:bg-green-950/20" : ""} ${
+          isLeafTopic ? "cursor-pointer hover:shadow-md" : ""
+        }`}
+        style={{ marginLeft: `${indent}px` }}
+      >
+        <CardContent className="p-3">
+          <div
+            className="flex items-center justify-between"
+            onClick={() => {
+              if (hasSubtopics) {
+                toggleExpanded();
+              } else if (isLeafTopic) {
+                onTopicSelect(topic.id);
+              }
+            }}
+          >
+            <div className="flex items-center gap-3 flex-1">
+              {completed ? (
+                <CheckCircle2 className="text-green-600 dark:text-green-400 flex-shrink-0" size={level === 0 ? 20 : 18} />
+              ) : (
+                <Circle className={level === 0 ? "text-amber-600" : "text-primary"} size={level === 0 ? 20 : 18} />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className={`${level === 0 ? "font-semibold" : "font-medium"} text-foreground text-sm truncate`}>
+                  {topic.title}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {hasSubtopics && `${topic.subtopics.length} subtopic${topic.subtopics.length !== 1 ? 's' : ''}`}
+                  {isLeafTopic && `${topic.questions.length} question${topic.questions.length !== 1 ? 's' : ''}`}
+                  {topic.description && ` • ${topic.description}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {isLeafTopic && completed && topic.score !== null && (
+                <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                  {Math.round((topic.score || 0) * (topic.questions?.length || 0) / 100)}/{topic.questions?.length || 0} pts
+                </span>
+              )}
+              {hasSubtopics && (
+                <span className="text-sm text-muted-foreground">
+                  {isExpanded ? "▼" : "▶"}
+                </span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recursive rendering of subtopics */}
+      {isExpanded && hasSubtopics && (
+        <div className="space-y-2">
+          {topic.subtopics.map((subtopic: any) => (
+            <TopicTreeItem
+              key={subtopic.id}
+              topic={subtopic}
+              level={level + 1}
+              expandedCategories={expandedCategories}
+              setExpandedCategories={setExpandedCategories}
+              onTopicSelect={onTopicSelect}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function FullStudyPage() {
   // Get sessionId from URL params
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -491,93 +606,16 @@ export default function FullStudyPage() {
                 {/* Hierarchical Topic List */}
                 {!selectedTopicId && (
                   <div className="space-y-3">
-                    {topics.map((category, catIndex) => {
-                      const categoryCompleted = category.subtopics?.every((st: any) => st.completed) || false;
-                      const isExpanded = expandedCategories.has(category.id);
-
-                      return (
-                        <div key={category.id} className="space-y-2">
-                          {/* Category Header */}
-                          <Card className={`transition-all ${categoryCompleted ? "bg-green-50 dark:bg-green-950/20" : ""}`}>
-                            <CardContent className="p-3">
-                              <div
-                                className="flex items-center justify-between cursor-pointer"
-                                onClick={() => {
-                                  const newExpanded = new Set(expandedCategories);
-                                  if (isExpanded) {
-                                    newExpanded.delete(category.id);
-                                  } else {
-                                    newExpanded.add(category.id);
-                                  }
-                                  setExpandedCategories(newExpanded);
-                                }}
-                              >
-                                <div className="flex items-center gap-3">
-                                  {categoryCompleted ? (
-                                    <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
-                                  ) : (
-                                    <Circle className="text-amber-600" size={20} />
-                                  )}
-                                  <div>
-                                    <p className="font-semibold text-foreground">{category.title}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {category.subtopics?.length || 0} subtopics
-                                      {category.description && ` • ${category.description}`}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className="text-sm text-muted-foreground">
-                                  {isExpanded ? "▼" : "▶"}
-                                </span>
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          {/* Subtopics (expanded) */}
-                          {isExpanded && category.subtopics && category.subtopics.length > 0 && (
-                            <div className="ml-6 space-y-2">
-                              {category.subtopics.map((subtopic: any, subIndex: number) => {
-                                const isCompleted = subtopic.completed;
-
-                                return (
-                                  <Card
-                                    key={subtopic.id}
-                                    className={`cursor-pointer transition-all hover:shadow-md ${
-                                      isCompleted ? "bg-green-50 dark:bg-green-950/20" : ""
-                                    }`}
-                                    onClick={() => setSelectedTopicId(subtopic.id)}
-                                  >
-                                    <CardContent className="p-3">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                          {isCompleted ? (
-                                            <CheckCircle2 className="text-green-600 dark:text-green-400" size={18} />
-                                          ) : (
-                                            <Circle className="text-primary" size={18} />
-                                          )}
-                                          <div>
-                                            <p className="font-medium text-foreground text-sm">{subtopic.title}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {subtopic.questions?.length || 0} questions
-                                              {subtopic.description && ` • ${subtopic.description}`}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        {isCompleted && subtopic.score !== null && (
-                                          <span className="text-sm font-semibold text-green-600 dark:text-green-400">
-                                            {Math.round((subtopic.score || 0) * (subtopic.questions?.length || 0) / 100)}/{subtopic.questions?.length || 0} pts
-                                          </span>
-                                        )}
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {topics.map((category, catIndex) => (
+                      <TopicTreeItem
+                        key={category.id}
+                        topic={category}
+                        level={0}
+                        expandedCategories={expandedCategories}
+                        setExpandedCategories={setExpandedCategories}
+                        onTopicSelect={setSelectedTopicId}
+                      />
+                    ))}
                   </div>
                 )}
 
