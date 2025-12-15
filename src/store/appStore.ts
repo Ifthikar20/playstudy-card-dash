@@ -60,6 +60,7 @@ interface AppState {
   currentSession: StudySession | null;
   studySessions: StudySession[];
   setCurrentSession: (session: StudySession | null) => void;
+  addSession: (session: StudySession) => void;
   createSession: (title: string, content: string) => StudySession;
   createFullStudy: (sessionId: string) => void;
   createSpeedRun: (sessionId: string) => void;
@@ -258,6 +259,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   studySessions: [],
 
   setCurrentSession: (session) => set({ currentSession: session }),
+
+  addSession: (session) => set((state) => ({
+    studySessions: [session, ...state.studySessions],
+  })),
 
   createSession: (title, content) => {
     const newSession: StudySession = {

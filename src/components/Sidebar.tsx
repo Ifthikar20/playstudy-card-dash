@@ -22,10 +22,10 @@ const mainNavigation: Array<{ name: string; href: string; icon: typeof BookOpen 
   { name: "Study Folders", href: "/dashboard/folders", icon: FolderPlus },
 ];
 
-const sessionNavigation: Array<{ name: string; href: string; icon: typeof BookOpen; gamified?: boolean }> = [
-  { name: "🎮 Game Zone", href: "/dashboard/browse-games", icon: Gamepad2, gamified: true },
-  { name: "Full Study", href: "/dashboard/full-study", icon: GraduationCap },
-  { name: "Speed Run", href: "/dashboard/speedrun", icon: Zap },
+const sessionNavigation: Array<{ name: string; href: (sessionId: string) => string; icon: typeof BookOpen; gamified?: boolean }> = [
+  { name: "🎮 Game Zone", href: (sessionId) => `/dashboard/browse-games`, icon: Gamepad2, gamified: true },
+  { name: "Full Study", href: (sessionId) => `/dashboard/${sessionId}/full-study`, icon: GraduationCap },
+  { name: "Speed Run", href: (sessionId) => `/dashboard/${sessionId}/speedrun`, icon: Zap },
 ];
 
 export function Sidebar() {
@@ -90,7 +90,7 @@ export function Sidebar() {
             {sessionNavigation.map((item) => (
               <NavLink
                 key={item.name}
-                to={item.href}
+                to={item.href(currentSession!.id)}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",

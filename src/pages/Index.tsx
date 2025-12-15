@@ -15,7 +15,7 @@ export default function Index() {
 
   const handleSessionClick = (session: any) => {
     setCurrentSession(session);
-    navigate('/full-study');
+    navigate(`/dashboard/${session.id}/full-study`);
   };
 
 
