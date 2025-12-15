@@ -1,6 +1,7 @@
 """
 Text-to-Speech API endpoints.
 """
+import logging
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -10,6 +11,8 @@ from app.dependencies import get_current_user
 from app.core.rate_limit import limiter
 from slowapi import Limiter
 from fastapi import Request
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -65,6 +68,13 @@ async def generate_speech(
     Returns MP3 audio data that can be played in a browser.
     """
     try:
+        logger.info("=" * 60)
+        logger.info("[API /tts/generate] TTS generation requested")
+        logger.info(f"[API /tts/generate] User: {current_user.get('email', 'unknown')}")
+        logger.info(f"[API /tts/generate] Provider: {tts_request.provider}")
+        logger.info(f"[API /tts/generate] Voice: {tts_request.voice}")
+        logger.info(f"[API /tts/generate] Text length: {len(tts_request.text)} chars")
+
         # Prepare provider-specific parameters
         kwargs = {
             "speed": tts_request.speed,
@@ -77,12 +87,16 @@ async def generate_speech(
             kwargs["volume_gain_db"] = 0.0
 
         # Generate speech
+        logger.info(f"[API /tts/generate] Calling tts_service.generate_speech()...")
         audio_data = await tts_service.generate_speech(
             text=tts_request.text,
             provider_name=tts_request.provider,
             voice=tts_request.voice,
             **kwargs
         )
+
+        logger.info(f"[API /tts/generate] ✅ Successfully generated {len(audio_data)} bytes of audio")
+        logger.info("=" * 60)
 
         # Return audio as MP3
         return Response(
@@ -95,11 +109,13 @@ async def generate_speech(
         )
 
     except ValueError as e:
+        logger.error(f"[API /tts/generate] ❌ ValueError: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
+        logger.error(f"[API /tts/generate] ❌ Error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"TTS generation failed: {str(e)}"
@@ -121,9 +137,20 @@ async def get_providers(
     Returns information about each provider including whether it's configured.
     """
     try:
+        logger.info("=" * 60)
+        logger.info("[API /tts/providers] Endpoint called")
+        logger.info(f"[API /tts/providers] User: {current_user.get('email', 'unknown')}")
+
         providers = tts_service.get_available_providers()
+
+        logger.info(f"[API /tts/providers] Returning {len(providers)} providers:")
+        for provider in providers:
+            logger.info(f"  - {provider['id']}: configured={provider['configured']}")
+        logger.info("=" * 60)
+
         return providers
     except Exception as e:
+        logger.error(f"[API /tts/providers] Error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get providers: {str(e)}"

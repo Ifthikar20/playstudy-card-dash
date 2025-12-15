@@ -3,10 +3,13 @@ Text-to-Speech Provider Implementations
 Handles TTS generation using multiple providers (OpenAI, Google Cloud)
 """
 import base64
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 import httpx
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class TTSProvider(ABC):
@@ -36,9 +39,12 @@ class OpenAITTSProvider(TTSProvider):
     def __init__(self):
         self.api_key = getattr(settings, "OPENAI_API_KEY", None)
         self.base_url = "https://api.openai.com/v1/audio/speech"
+        logger.info(f"[OpenAI TTS] Initializing provider - API Key: {'✅ Present' if self.api_key else '❌ Missing'}")
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        configured = bool(self.api_key)
+        logger.info(f"[OpenAI TTS] is_configured() = {configured}")
+        return configured
 
     async def generate_speech(
         self,
@@ -91,9 +97,14 @@ class GoogleCloudTTSProvider(TTSProvider):
     def __init__(self):
         self.api_key = getattr(settings, "GOOGLE_CLOUD_API_KEY", None)
         self.base_url = "https://texttospeech.googleapis.com/v1/text:synthesize"
+        logger.info(f"[Google Cloud TTS] Initializing provider - API Key: {'✅ Present' if self.api_key else '❌ Missing'}")
+        if self.api_key:
+            logger.info(f"[Google Cloud TTS] API Key (first 10 chars): {self.api_key[:10]}...")
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        configured = bool(self.api_key)
+        logger.info(f"[Google Cloud TTS] is_configured() = {configured}")
+        return configured
 
     async def generate_speech(
         self,
@@ -183,14 +194,25 @@ class TTSProviderFactory:
     @classmethod
     def get_available_providers(cls) -> List[Dict[str, any]]:
         """Get list of available providers with their configuration status."""
+        logger.info("=" * 60)
+        logger.info("[TTSProviderFactory] Getting available providers...")
         providers = []
         for name, provider_class in cls._providers.items():
+            logger.info(f"[TTSProviderFactory] Checking provider: {name}")
             instance = provider_class()
-            providers.append({
+            is_configured = instance.is_configured()
+            provider_info = {
                 "id": name,
                 "name": name.replace("-", " ").title(),
-                "configured": instance.is_configured(),
-            })
+                "configured": is_configured,
+            }
+            providers.append(provider_info)
+            logger.info(f"[TTSProviderFactory] Provider '{name}': {provider_info}")
+
+        logger.info(f"[TTSProviderFactory] Total providers: {len(providers)}")
+        logger.info(f"[TTSProviderFactory] Configured providers: {sum(1 for p in providers if p['configured'])}")
+        logger.info(f"[TTSProviderFactory] Final provider list: {providers}")
+        logger.info("=" * 60)
         return providers
 
     @classmethod
