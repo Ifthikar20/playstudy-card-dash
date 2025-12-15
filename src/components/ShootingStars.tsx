@@ -19,23 +19,6 @@ interface StaticStar {
   twinkleOffset: number;
 }
 
-interface Planet {
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-  glowColor: string;
-  hasRing: boolean;
-}
-
-interface Nebula {
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-  opacity: number;
-}
-
 export default function ShootingStars() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -49,9 +32,7 @@ export default function ShootingStars() {
     let animationId: number;
     const shootingStars: ShootingStar[] = [];
     const staticStars: StaticStar[] = [];
-    const planets: Planet[] = [];
-    const nebulae: Nebula[] = [];
-    const maxShootingStars = 8;
+    const maxShootingStars = 6;
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -60,73 +41,18 @@ export default function ShootingStars() {
     };
 
     const initStaticElements = () => {
-      // Clear and recreate static stars
+      // Clear and recreate static stars - more stars for a deeper space feel
       staticStars.length = 0;
-      for (let i = 0; i < 200; i++) {
+      for (let i = 0; i < 300; i++) {
         staticStars.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          size: Math.random() * 1.5 + 0.5,
-          opacity: Math.random() * 0.8 + 0.2,
-          twinkleSpeed: Math.random() * 0.02 + 0.01,
+          size: Math.random() * 1.2 + 0.3,
+          opacity: Math.random() * 0.6 + 0.2,
+          twinkleSpeed: Math.random() * 0.015 + 0.005,
           twinkleOffset: Math.random() * Math.PI * 2,
         });
       }
-
-      // Create planets with teal/cyan tones
-      planets.length = 0;
-      planets.push(
-        {
-          x: canvas.width * 0.85,
-          y: canvas.height * 0.2,
-          radius: 25,
-          color: '#14b8a6',
-          glowColor: 'rgba(20, 184, 166, 0.3)',
-          hasRing: true,
-        },
-        {
-          x: canvas.width * 0.1,
-          y: canvas.height * 0.7,
-          radius: 15,
-          color: '#0ea5e9',
-          glowColor: 'rgba(14, 165, 233, 0.2)',
-          hasRing: false,
-        },
-        {
-          x: canvas.width * 0.7,
-          y: canvas.height * 0.8,
-          radius: 8,
-          color: '#22d3ee',
-          glowColor: 'rgba(34, 211, 238, 0.2)',
-          hasRing: false,
-        }
-      );
-
-      // Create nebulae/clouds with teal/green/blue tones
-      nebulae.length = 0;
-      nebulae.push(
-        {
-          x: canvas.width * 0.2,
-          y: canvas.height * 0.3,
-          radius: 150,
-          color: 'rgba(20, 184, 166, 0.06)',
-          opacity: 0.5,
-        },
-        {
-          x: canvas.width * 0.8,
-          y: canvas.height * 0.6,
-          radius: 200,
-          color: 'rgba(14, 165, 233, 0.05)',
-          opacity: 0.4,
-        },
-        {
-          x: canvas.width * 0.5,
-          y: canvas.height * 0.15,
-          radius: 120,
-          color: 'rgba(34, 211, 238, 0.04)',
-          opacity: 0.3,
-        }
-      );
     };
 
     resize();
@@ -142,23 +68,6 @@ export default function ShootingStars() {
       width: Math.random() * 1.5 + 0.5,
     });
 
-    const drawNebulae = () => {
-      nebulae.forEach((nebula) => {
-        const gradient = ctx.createRadialGradient(
-          nebula.x, nebula.y, 0,
-          nebula.x, nebula.y, nebula.radius
-        );
-        gradient.addColorStop(0, nebula.color);
-        gradient.addColorStop(0.5, nebula.color.replace(/[\d.]+\)$/, '0.03)'));
-        gradient.addColorStop(1, 'transparent');
-        
-        ctx.beginPath();
-        ctx.arc(nebula.x, nebula.y, nebula.radius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
-        ctx.fill();
-      });
-    };
-
     const drawStaticStars = (time: number) => {
       staticStars.forEach((star) => {
         const twinkle = Math.sin(time * star.twinkleSpeed + star.twinkleOffset) * 0.3 + 0.7;
@@ -171,53 +80,84 @@ export default function ShootingStars() {
       });
     };
 
-    const drawPlanets = () => {
-      planets.forEach((planet) => {
-        // Draw glow
-        const glowGradient = ctx.createRadialGradient(
-          planet.x, planet.y, planet.radius * 0.5,
-          planet.x, planet.y, planet.radius * 3
-        );
-        glowGradient.addColorStop(0, planet.glowColor);
-        glowGradient.addColorStop(1, 'transparent');
-        
-        ctx.beginPath();
-        ctx.arc(planet.x, planet.y, planet.radius * 3, 0, Math.PI * 2);
-        ctx.fillStyle = glowGradient;
-        ctx.fill();
+    const drawMoon = () => {
+      const moonX = canvas.width * 0.85;
+      const moonY = canvas.height * 0.15;
+      const moonRadius = Math.min(canvas.width, canvas.height) * 0.055;
 
-        // Draw ring if applicable
-        if (planet.hasRing) {
-          ctx.save();
-          ctx.translate(planet.x, planet.y);
-          ctx.rotate(-0.3);
-          ctx.scale(1, 0.3);
-          ctx.beginPath();
-          ctx.arc(0, 0, planet.radius * 1.8, 0, Math.PI * 2);
-          ctx.strokeStyle = `${planet.color}66`;
-          ctx.lineWidth = 3;
-          ctx.stroke();
-          ctx.restore();
-        }
+      // Outer glow
+      const outerGlow = ctx.createRadialGradient(
+        moonX, moonY, moonRadius,
+        moonX, moonY, moonRadius * 4
+      );
+      outerGlow.addColorStop(0, 'rgba(200, 210, 230, 0.12)');
+      outerGlow.addColorStop(0.5, 'rgba(180, 200, 220, 0.04)');
+      outerGlow.addColorStop(1, 'transparent');
+      
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonRadius * 4, 0, Math.PI * 2);
+      ctx.fillStyle = outerGlow;
+      ctx.fill();
 
-        // Draw planet
-        const planetGradient = ctx.createRadialGradient(
-          planet.x - planet.radius * 0.3, planet.y - planet.radius * 0.3, 0,
-          planet.x, planet.y, planet.radius
+      // Inner glow
+      const innerGlow = ctx.createRadialGradient(
+        moonX, moonY, moonRadius * 0.8,
+        moonX, moonY, moonRadius * 1.5
+      );
+      innerGlow.addColorStop(0, 'rgba(240, 245, 255, 0.25)');
+      innerGlow.addColorStop(1, 'transparent');
+      
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonRadius * 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = innerGlow;
+      ctx.fill();
+
+      // Moon body with gradient
+      const moonGradient = ctx.createRadialGradient(
+        moonX - moonRadius * 0.35, moonY - moonRadius * 0.35, 0,
+        moonX, moonY, moonRadius
+      );
+      moonGradient.addColorStop(0, '#f8f9fc');
+      moonGradient.addColorStop(0.4, '#e8eaef');
+      moonGradient.addColorStop(0.8, '#d0d4dc');
+      moonGradient.addColorStop(1, '#b8bcc8');
+
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
+      ctx.fillStyle = moonGradient;
+      ctx.fill();
+
+      // Moon craters
+      const craters = [
+        { x: 0.25, y: -0.15, r: 0.18, opacity: 0.25 },
+        { x: -0.3, y: 0.25, r: 0.14, opacity: 0.2 },
+        { x: 0.05, y: 0.35, r: 0.12, opacity: 0.22 },
+        { x: -0.15, y: -0.3, r: 0.1, opacity: 0.18 },
+        { x: 0.35, y: 0.15, r: 0.08, opacity: 0.15 },
+        { x: -0.4, y: -0.1, r: 0.07, opacity: 0.12 },
+      ];
+
+      craters.forEach(crater => {
+        const craterX = moonX + crater.x * moonRadius;
+        const craterY = moonY + crater.y * moonRadius;
+        const craterRadius = crater.r * moonRadius;
+
+        const craterGradient = ctx.createRadialGradient(
+          craterX - craterRadius * 0.3, craterY - craterRadius * 0.3, 0,
+          craterX, craterY, craterRadius
         );
-        planetGradient.addColorStop(0, planet.color);
-        planetGradient.addColorStop(1, `${planet.color}88`);
-        
+        craterGradient.addColorStop(0, `rgba(160, 165, 175, ${crater.opacity * 0.5})`);
+        craterGradient.addColorStop(1, `rgba(140, 145, 155, ${crater.opacity})`);
+
         ctx.beginPath();
-        ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
-        ctx.fillStyle = planetGradient;
+        ctx.arc(craterX, craterY, craterRadius, 0, Math.PI * 2);
+        ctx.fillStyle = craterGradient;
         ctx.fill();
       });
     };
 
     const drawShootingStars = () => {
       shootingStars.forEach((star, index) => {
-        // Softer, more ethereal shooting star with teal/cyan tones
         const gradient = ctx.createLinearGradient(
           star.x,
           star.y,
@@ -267,15 +207,16 @@ export default function ShootingStars() {
     let time = 0;
     const animate = () => {
       time++;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Deep black space background
+      ctx.fillStyle = '#050508';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw background elements
-      drawNebulae();
       drawStaticStars(time);
-      drawPlanets();
+      drawMoon();
 
       // Add new shooting stars occasionally
-      if (shootingStars.length < maxShootingStars && Math.random() < 0.015) {
+      if (shootingStars.length < maxShootingStars && Math.random() < 0.012) {
         shootingStars.push(createShootingStar());
       }
 
@@ -296,7 +237,7 @@ export default function ShootingStars() {
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ zIndex: 0 }}
+      style={{ zIndex: 0, background: '#050508' }}
     />
   );
 }
