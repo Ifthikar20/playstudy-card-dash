@@ -1,25 +1,18 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
   BookOpen,
   FolderPlus,
-  Trophy,
   User,
   Menu,
   X,
   Share2,
   Zap,
   GraduationCap,
-  Clock,
-  Star,
-  Check,
-  Trash2,
-  Archive,
   Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/store/appStore";
 
 import { Gamepad2 } from "lucide-react";
@@ -33,9 +26,8 @@ const navigation: Array<{ name: string; href: string; icon: typeof BookOpen; gam
 ];
 
 export function Sidebar() {
-  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { studySessions, currentSession, setCurrentSession, deleteStudySession, archiveStudySession } = useAppStore();
+  const { setCurrentSession } = useAppStore();
   return (
     <div className={cn(
       "bg-card border-r border-border transition-all duration-300 flex flex-col h-screen sticky top-0",
@@ -88,60 +80,6 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Study Sessions Section - Grouped by Content */}
-      {!isCollapsed && (
-        <div className="flex-1 px-4 pt-4 pb-2 overflow-hidden">
-          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <BookOpen size={16} />
-            Study Sessions by Content
-          </h3>
-          <ScrollArea className="h-[calc(100%-2rem)]">
-            <div className="space-y-1 pr-2">
-              {studySessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={cn(
-                    "group flex items-center justify-between p-2 rounded-lg transition-colors",
-                    currentSession?.id === session.id
-                      ? "bg-primary/10 border border-primary/20"
-                      : "hover:bg-accent/50"
-                  )}
-                >
-                  <div
-                    className="min-w-0 flex-1 cursor-pointer"
-                    onClick={() => {
-                      setCurrentSession(session);
-                      navigate(`/dashboard/full-study/${session.id}`);
-                    }}
-                  >
-                    <p className="text-xs font-medium text-foreground truncate">{session.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{session.topics} topics • {session.progress}% complete</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {currentSession?.id === session.id && (
-                      <Check size={12} className="text-primary" />
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Delete "${session.title}"?`)) {
-                          // Optimistic delete - UI updates immediately
-                          deleteStudySession(session.id);
-                        }
-                      }}
-                      className="ml-1 p-1 opacity-0 group-hover:opacity-100 hover:bg-destructive/20 rounded transition-all"
-                      title="Delete session"
-                    >
-                      <Trash2 size={12} className="text-destructive" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
 
       <div className="p-4 border-t border-border space-y-2 mt-auto">
         <NavLink

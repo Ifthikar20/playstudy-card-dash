@@ -11,9 +11,7 @@ import {
   Plus,
   Upload,
   Gamepad2,
-  Rocket,
-  BookOpen,
-  CheckCircle2
+  Rocket
 } from "lucide-react";
 
 export default function Index() {
@@ -123,11 +121,10 @@ export default function Index() {
           {/* My Study Sessions */}
           {studySessions.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
-                <BookOpen className="text-primary" size={24} />
+              <h2 className="text-xl font-semibold text-foreground mb-4">
                 My Study Sessions
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
                 {studySessions.map((session) => {
                   // Calculate completion percentage from extractedTopics if available
                   const completionPercentage = session.extractedTopics
@@ -138,43 +135,18 @@ export default function Index() {
                     : session.progress;
 
                   return (
-                    <Card
+                    <div
                       key={session.id}
-                      className="cursor-pointer hover:shadow-lg transition-all hover:-translate-y-1 p-6"
+                      className="cursor-pointer hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border"
                       onClick={() => handleSessionClick(session)}
                     >
-                      <div className="flex flex-col h-full">
-                        <h3 className="font-semibold text-foreground mb-2 line-clamp-2">
-                          {session.title}
-                        </h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                          <BookOpen size={16} />
-                          <span>{session.topics} topic{session.topics !== 1 ? 's' : ''}</span>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="mt-auto">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-foreground">
-                              {completionPercentage}% complete
-                            </span>
-                            {completionPercentage === 100 && (
-                              <CheckCircle2 size={18} className="text-green-500" />
-                            )}
-                          </div>
-                          <div className="w-full bg-secondary rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full transition-all ${
-                                completionPercentage === 100
-                                  ? 'bg-green-500'
-                                  : 'bg-primary'
-                              }`}
-                              style={{ width: `${completionPercentage}%` }}
-                            />
-                          </div>
-                        </div>
+                      <div className="font-semibold text-foreground">
+                        {session.title}
                       </div>
-                    </Card>
+                      <div className="text-sm text-muted-foreground">
+                        {session.topics} topic{session.topics !== 1 ? 's' : ''} • {completionPercentage}% complete
+                      </div>
+                    </div>
                   );
                 })}
               </div>
