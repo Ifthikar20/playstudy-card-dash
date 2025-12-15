@@ -21,7 +21,9 @@ export default function BrowseGamesPage() {
   const filteredGames = games.filter((game) => {
     const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "All" || game.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    // Only show games that have actual playable routes (game ID 7 = platformer)
+    const isPlayable = game.id === 7;
+    return matchesSearch && matchesCategory && isPlayable;
   });
 
   const handlePlayGame = (gameId: number) => {
