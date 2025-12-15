@@ -14,7 +14,8 @@ import {
   Star,
   Check,
   Trash2,
-  Archive
+  Archive,
+  Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";

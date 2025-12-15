@@ -160,7 +160,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
       createSpeedRun(createdSession.id);
       navigate("/dashboard/speedrun");
     } else if (selectedMode === "game") {
-      navigate("/dashboard/browse-games");
+      navigate(`/dashboard/game-mode/${createdSession.id}`);
     }
 
     // Reset state
