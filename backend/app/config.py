@@ -2,7 +2,7 @@
 Application configuration settings.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -38,6 +38,10 @@ class Settings(BaseSettings):
 
     # DeepSeek AI
     DEEPSEEK_API_KEY: str
+
+    # TTS Providers (Optional)
+    OPENAI_API_KEY: Optional[str] = None
+    GOOGLE_CLOUD_API_KEY: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

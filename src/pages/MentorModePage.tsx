@@ -48,6 +48,37 @@ export default function MentorModePage() {
     }
   }, [session, navigate]);
 
+  // Fetch providers and voices on mount
+  useEffect(() => {
+    const loadProvidersAndVoices = async () => {
+      try {
+        // Fetch available providers from backend
+        const providers = await aiVoiceService.fetchProviders();
+        setAvailableProviders(providers);
+
+        // Set first configured provider as default
+        const configuredProvider = providers.find(p => p.configured);
+        if (configuredProvider) {
+          setCurrentProvider(configuredProvider.id);
+          aiVoiceService.setProvider(configuredProvider.id);
+
+          // Fetch voices for the default provider
+          const voices = await aiVoiceService.fetchVoices(configuredProvider.id);
+          if (voices.length > 0) {
+            setCurrentVoice(voices[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load TTS providers:', error);
+        // Fallback to browser TTS
+        setCurrentProvider('browser');
+        aiVoiceService.setProvider('browser');
+      }
+    };
+
+    loadProvidersAndVoices();
+  }, []);
+
   if (!session) {
     return null;
   }
@@ -70,17 +101,21 @@ export default function MentorModePage() {
   };
 
   // Handle provider change
-  const handleProviderChange = (provider: TTSProvider) => {
+  const handleProviderChange = async (provider: TTSProvider) => {
     aiVoiceService.stop();
     setIsPlaying(false);
     setIsReading(false);
     setCurrentProvider(provider);
     aiVoiceService.setProvider(provider);
 
-    // Update available voices for the new provider
-    const voices = aiVoiceService.getAvailableVoices();
-    if (voices.length > 0) {
-      setCurrentVoice(voices[0].id);
+    // Fetch voices for the new provider
+    try {
+      const voices = await aiVoiceService.fetchVoices(provider);
+      if (voices.length > 0) {
+        setCurrentVoice(voices[0].id);
+      }
+    } catch (error) {
+      console.error('Failed to load voices:', error);
     }
   };
 

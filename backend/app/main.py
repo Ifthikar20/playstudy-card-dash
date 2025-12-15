@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.api import auth, app_data, questions, study_sessions
+from app.api import auth, app_data, questions, study_sessions, tts
 from app.database import Base, engine
 
 # Create database tables
@@ -104,6 +104,12 @@ app.include_router(
     study_sessions.router,
     prefix=f"{settings.API_V1_PREFIX}/study-sessions",
     tags=["Study Sessions"],
+)
+
+app.include_router(
+    tts.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["Text-to-Speech"],
 )
 
 
