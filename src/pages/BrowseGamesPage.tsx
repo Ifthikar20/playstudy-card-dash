@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog"
 const categories = ["All", "Mathematics", "Science", "History", "Languages", "Geography", "Programming", "Arts", "Music", "Business"];
 
 export default function BrowseGamesPage() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -21,6 +23,17 @@ export default function BrowseGamesPage() {
     const matchesCategory = selectedCategory === "All" || game.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const handlePlayGame = (gameId: number) => {
+    // Map game IDs to routes
+    // For now, only game ID 7 (platformer) has a playable route
+    if (gameId === 7) {
+      navigate("/dashboard/platformer-game");
+    } else {
+      // Other games show the create session dialog
+      setDialogOpen(true);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -122,12 +135,12 @@ export default function BrowseGamesPage() {
                         <Users size={12} />
                         <span className="text-xs font-medium">{game.likes.toLocaleString()} students</span>
                       </div>
-                      <Button 
+                      <Button
                         size="icon"
                         className="rounded-full h-10 w-10 shadow-lg"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setDialogOpen(true);
+                          handlePlayGame(game.id);
                         }}
                       >
                         <Play size={16} className="ml-0.5" />

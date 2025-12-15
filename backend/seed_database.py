@@ -144,6 +144,17 @@ def seed_database():
                 "estimated_time": 25,
                 "xp_reward": 250,
             },
+            {
+                "title": "Bean Platformer Adventure",
+                "description": "Classic platformer game! Jump on enemies, collect coins, and reach the portal. 2 levels of challenging fun!",
+                "category": "Programming",
+                "image": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&h=300&fit=crop",
+                "difficulty": "Medium",
+                "likes": 1450,
+                "rating": 4.9,
+                "estimated_time": 15,
+                "xp_reward": 180,
+            },
         ]
 
         games = []
