@@ -41,15 +41,40 @@ export default function ShootingStars() {
     };
 
     const initStaticElements = () => {
-      // Clear and recreate static stars - more stars for a deeper space feel
       staticStars.length = 0;
-      for (let i = 0; i < 300; i++) {
+      
+      // Far away stars - small and dim
+      for (let i = 0; i < 200; i++) {
         staticStars.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          size: Math.random() * 1.2 + 0.3,
-          opacity: Math.random() * 0.6 + 0.2,
+          size: Math.random() * 0.8 + 0.2,
+          opacity: Math.random() * 0.3 + 0.1,
+          twinkleSpeed: Math.random() * 0.01 + 0.003,
+          twinkleOffset: Math.random() * Math.PI * 2,
+        });
+      }
+      
+      // Medium distance stars
+      for (let i = 0; i < 80; i++) {
+        staticStars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 1.2 + 0.5,
+          opacity: Math.random() * 0.5 + 0.3,
           twinkleSpeed: Math.random() * 0.015 + 0.005,
+          twinkleOffset: Math.random() * Math.PI * 2,
+        });
+      }
+      
+      // Near stars - larger and brighter
+      for (let i = 0; i < 25; i++) {
+        staticStars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 1.8 + 1,
+          opacity: Math.random() * 0.4 + 0.5,
+          twinkleSpeed: Math.random() * 0.02 + 0.008,
           twinkleOffset: Math.random() * Math.PI * 2,
         });
       }
@@ -76,82 +101,6 @@ export default function ShootingStars() {
         ctx.beginPath();
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
-        ctx.fill();
-      });
-    };
-
-    const drawMoon = () => {
-      const moonX = canvas.width * 0.85;
-      const moonY = canvas.height * 0.15;
-      const moonRadius = Math.min(canvas.width, canvas.height) * 0.055;
-
-      // Outer glow
-      const outerGlow = ctx.createRadialGradient(
-        moonX, moonY, moonRadius,
-        moonX, moonY, moonRadius * 4
-      );
-      outerGlow.addColorStop(0, 'rgba(200, 210, 230, 0.12)');
-      outerGlow.addColorStop(0.5, 'rgba(180, 200, 220, 0.04)');
-      outerGlow.addColorStop(1, 'transparent');
-      
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, moonRadius * 4, 0, Math.PI * 2);
-      ctx.fillStyle = outerGlow;
-      ctx.fill();
-
-      // Inner glow
-      const innerGlow = ctx.createRadialGradient(
-        moonX, moonY, moonRadius * 0.8,
-        moonX, moonY, moonRadius * 1.5
-      );
-      innerGlow.addColorStop(0, 'rgba(240, 245, 255, 0.25)');
-      innerGlow.addColorStop(1, 'transparent');
-      
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, moonRadius * 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = innerGlow;
-      ctx.fill();
-
-      // Moon body with gradient
-      const moonGradient = ctx.createRadialGradient(
-        moonX - moonRadius * 0.35, moonY - moonRadius * 0.35, 0,
-        moonX, moonY, moonRadius
-      );
-      moonGradient.addColorStop(0, '#f8f9fc');
-      moonGradient.addColorStop(0.4, '#e8eaef');
-      moonGradient.addColorStop(0.8, '#d0d4dc');
-      moonGradient.addColorStop(1, '#b8bcc8');
-
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
-      ctx.fillStyle = moonGradient;
-      ctx.fill();
-
-      // Moon craters
-      const craters = [
-        { x: 0.25, y: -0.15, r: 0.18, opacity: 0.25 },
-        { x: -0.3, y: 0.25, r: 0.14, opacity: 0.2 },
-        { x: 0.05, y: 0.35, r: 0.12, opacity: 0.22 },
-        { x: -0.15, y: -0.3, r: 0.1, opacity: 0.18 },
-        { x: 0.35, y: 0.15, r: 0.08, opacity: 0.15 },
-        { x: -0.4, y: -0.1, r: 0.07, opacity: 0.12 },
-      ];
-
-      craters.forEach(crater => {
-        const craterX = moonX + crater.x * moonRadius;
-        const craterY = moonY + crater.y * moonRadius;
-        const craterRadius = crater.r * moonRadius;
-
-        const craterGradient = ctx.createRadialGradient(
-          craterX - craterRadius * 0.3, craterY - craterRadius * 0.3, 0,
-          craterX, craterY, craterRadius
-        );
-        craterGradient.addColorStop(0, `rgba(160, 165, 175, ${crater.opacity * 0.5})`);
-        craterGradient.addColorStop(1, `rgba(140, 145, 155, ${crater.opacity})`);
-
-        ctx.beginPath();
-        ctx.arc(craterX, craterY, craterRadius, 0, Math.PI * 2);
-        ctx.fillStyle = craterGradient;
         ctx.fill();
       });
     };
@@ -213,7 +162,6 @@ export default function ShootingStars() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       drawStaticStars(time);
-      drawMoon();
 
       // Add new shooting stars occasionally
       if (shootingStars.length < maxShootingStars && Math.random() < 0.012) {
