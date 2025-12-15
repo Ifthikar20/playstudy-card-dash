@@ -21,7 +21,8 @@ import {
   Gamepad2,
   Clock,
   Target,
-  Loader2
+  Loader2,
+  Mic
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
@@ -35,7 +36,7 @@ interface CreateStudySessionDialogProps {
 
 type Step = "upload" | "select-mode";
 type UploadType = "file" | "text";
-type StudyMode = "full-study" | "speed-run" | "game";
+type StudyMode = "full-study" | "speed-run" | "game" | "mentor";
 
 export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySessionDialogProps) {
   const navigate = useNavigate();
@@ -160,6 +161,8 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     } else if (selectedMode === "speed-run") {
       createSpeedRun(createdSession.id);
       navigate(`/dashboard/${createdSession.id}/speedrun`);
+    } else if (selectedMode === "mentor") {
+      navigate(`/dashboard/${createdSession.id}/mentor`);
     } else if (selectedMode === "game") {
       navigate(`/dashboard/${createdSession.id}/browse-games`);
     }
@@ -423,7 +426,27 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                 </CardContent>
               </Card>
 
-              <Card 
+              <Card
+                className={cn(
+                  "cursor-pointer transition-all hover:shadow-md",
+                  selectedMode === "mentor" && "ring-2 ring-primary"
+                )}
+                onClick={() => setSelectedMode("mentor")}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <Mic className="text-blue-500" size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground">Mentor Mode</h3>
+                      <p className="text-sm text-muted-foreground">Listen to AI narration like a teacher guiding you through the content</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card
                 className={cn(
                   "cursor-pointer transition-all hover:shadow-md",
                   selectedMode === "game" && "ring-2 ring-primary"

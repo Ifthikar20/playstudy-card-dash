@@ -9,7 +9,8 @@ import {
   Share2,
   Zap,
   GraduationCap,
-  Settings
+  Settings,
+  Mic
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -26,6 +27,7 @@ const sessionNavigation: Array<{ name: string; href: (sessionId: string) => stri
   { name: "🎮 Game Zone", href: (sessionId) => `/dashboard/browse-games`, icon: Gamepad2, gamified: true },
   { name: "Full Study", href: (sessionId) => `/dashboard/${sessionId}/full-study`, icon: GraduationCap },
   { name: "Speed Run", href: (sessionId) => `/dashboard/${sessionId}/speedrun`, icon: Zap },
+  { name: "Mentor Mode", href: (sessionId) => `/dashboard/${sessionId}/mentor`, icon: Mic },
 ];
 
 export function Sidebar() {
