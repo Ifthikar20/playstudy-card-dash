@@ -39,7 +39,10 @@ export default function GameModePage() {
 
   // Extract all questions from the session
   useEffect(() => {
-    if (!session?.topicTree) return;
+    if (!session?.extractedTopics) {
+      console.log('⚠️ No extractedTopics found in session:', session);
+      return;
+    }
 
     const extractQuestions = (topics: any[]): Question[] => {
       const questions: Question[] = [];
@@ -64,8 +67,9 @@ export default function GameModePage() {
       return questions;
     };
 
-    const questions = extractQuestions(session.topicTree);
+    const questions = extractQuestions(session.extractedTopics);
     console.log('📚 Loaded questions:', questions.length);
+    console.log('📝 Sample questions:', questions.slice(0, 2));
     setAllQuestions(questions);
   }, [session]);
 
