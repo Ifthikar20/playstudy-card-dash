@@ -1,10 +1,10 @@
 """
-Question generation API endpoint using Anthropic Claude.
+Question generation API endpoint using DeepSeek.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List
-import anthropic
+from openai import OpenAI
 from app.config import settings
 from app.dependencies import get_current_active_user
 from app.models.user import User
@@ -43,7 +43,7 @@ async def generate_questions(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Generate quiz questions using Anthropic Claude.
+    Generate quiz questions using DeepSeek.
 
     Args:
         request: FastAPI request object (required for rate limiting)
@@ -57,10 +57,13 @@ async def generate_questions(
         - 10 requests per minute per user
     """
     try:
-        # Initialize Anthropic client
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        # Initialize DeepSeek client (OpenAI-compatible)
+        client = OpenAI(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
 
-        # Create prompt for Claude
+        # Create prompt for DeepSeek
         prompt = f"""Generate {data.num_questions} multiple-choice questions about the topic: "{data.topic}".
 
 Difficulty level: {data.difficulty}
@@ -86,9 +89,9 @@ Return the questions in this EXACT JSON format:
 
 Generate {data.num_questions} questions now."""
 
-        # Call Anthropic API
-        message = client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+        # Call DeepSeek API
+        response = client.chat.completions.create(
+            model="deepseek-chat",
             max_tokens=4096,
             temperature=0.7,
             messages=[
@@ -100,7 +103,7 @@ Generate {data.num_questions} questions now."""
         )
 
         # Extract the response
-        response_text = message.content[0].text
+        response_text = response.choices[0].message.content
 
         # Parse the JSON response
         import json
@@ -142,11 +145,13 @@ Generate {data.num_questions} questions now."""
                 detail=f"Failed to parse AI response: {str(e)}"
             )
 
-    except anthropic.APIError as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Anthropic API error: {str(e)}"
-        )
+    except Exception as api_error:
+        if "openai" in str(type(api_error).__module__):
+            raise HTTPException(
+                status_code=500,
+                detail=f"DeepSeek API error: {str(api_error)}"
+            )
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
