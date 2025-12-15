@@ -42,8 +42,7 @@ class Settings(BaseSettings):
     # DeepSeek AI
     DEEPSEEK_API_KEY: str
 
-    # TTS Providers (Optional)
-    OPENAI_API_KEY: Optional[str] = None
+    # TTS Provider (Optional)
     GOOGLE_CLOUD_API_KEY: Optional[str] = None
 
     model_config = SettingsConfigDict(
@@ -62,12 +61,11 @@ settings = Settings()
 
 # Log TTS configuration status
 logger.info("=" * 60)
-logger.info("TTS CONFIGURATION STATUS")
+logger.info("GOOGLE CLOUD TTS CONFIGURATION")
 logger.info("=" * 60)
-logger.info(f"OPENAI_API_KEY: {'✅ Configured' if settings.OPENAI_API_KEY else '❌ Not configured'}")
-logger.info(f"GOOGLE_CLOUD_API_KEY: {'✅ Configured' if settings.GOOGLE_CLOUD_API_KEY else '❌ Not configured'}")
-if settings.OPENAI_API_KEY:
-    logger.info(f"OpenAI API Key (first 10 chars): {settings.OPENAI_API_KEY[:10]}...")
+logger.info(f"Status: {'✅ Configured' if settings.GOOGLE_CLOUD_API_KEY else '❌ Not configured'}")
 if settings.GOOGLE_CLOUD_API_KEY:
-    logger.info(f"Google Cloud API Key (first 10 chars): {settings.GOOGLE_CLOUD_API_KEY[:10]}...")
+    logger.info(f"API Key (first 10 chars): {settings.GOOGLE_CLOUD_API_KEY[:10]}...")
+else:
+    logger.warning("⚠️  Google Cloud TTS is not configured. Add GOOGLE_CLOUD_API_KEY to backend/.env")
 logger.info("=" * 60)

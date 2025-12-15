@@ -20,11 +20,11 @@ router = APIRouter()
 class TTSRequest(BaseModel):
     """Request model for TTS generation."""
     text: str = Field(..., min_length=1, max_length=5000, description="Text to convert to speech")
-    provider: str = Field(default="openai", description="TTS provider (openai or google-cloud)")
+    provider: str = Field(default="google-cloud", description="TTS provider (google-cloud)")
     voice: Optional[str] = Field(default=None, description="Voice ID to use")
     speed: Optional[float] = Field(default=1.0, ge=0.25, le=4.0, description="Speech speed")
-    pitch: Optional[float] = Field(default=0.0, ge=-20.0, le=20.0, description="Voice pitch (Google Cloud only)")
-    model: Optional[str] = Field(default="tts-1", description="Model to use (OpenAI only: tts-1 or tts-1-hd)")
+    pitch: Optional[float] = Field(default=0.0, ge=-20.0, le=20.0, description="Voice pitch")
+    model: Optional[str] = Field(default=None, description="Deprecated - not used")
 
 
 class TTSProviderInfo(BaseModel):
@@ -56,14 +56,13 @@ async def generate_speech(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Generate speech from text using TTS providers.
+    Generate speech from text using Google Cloud Text-to-Speech.
 
     - **text**: Text to convert (max 5000 characters)
-    - **provider**: TTS provider (openai or google-cloud)
-    - **voice**: Voice ID (provider-specific)
+    - **provider**: TTS provider (google-cloud)
+    - **voice**: Voice ID (e.g., en-US-Neural2-F)
     - **speed**: Speaking speed (0.25 to 4.0)
-    - **pitch**: Voice pitch for Google Cloud (-20 to 20)
-    - **model**: Model for OpenAI (tts-1 or tts-1-hd)
+    - **pitch**: Voice pitch (-20 to 20)
 
     Returns MP3 audio data that can be played in a browser.
     """
@@ -75,16 +74,12 @@ async def generate_speech(
         logger.info(f"[API /tts/generate] Voice: {tts_request.voice}")
         logger.info(f"[API /tts/generate] Text length: {len(tts_request.text)} chars")
 
-        # Prepare provider-specific parameters
+        # Prepare parameters for Google Cloud TTS
         kwargs = {
             "speed": tts_request.speed,
+            "pitch": tts_request.pitch,
+            "volume_gain_db": 0.0,
         }
-
-        if tts_request.provider == "openai":
-            kwargs["model"] = tts_request.model
-        elif tts_request.provider == "google-cloud":
-            kwargs["pitch"] = tts_request.pitch
-            kwargs["volume_gain_db"] = 0.0
 
         # Generate speech
         logger.info(f"[API /tts/generate] Calling tts_service.generate_speech()...")

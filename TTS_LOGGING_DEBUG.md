@@ -19,12 +19,10 @@ When the backend starts, you'll see:
 
 ```
 ============================================================
-TTS CONFIGURATION STATUS
+GOOGLE CLOUD TTS CONFIGURATION
 ============================================================
-INFO:app.config:OPENAI_API_KEY: ✅ Configured
-INFO:app.config:GOOGLE_CLOUD_API_KEY: ✅ Configured
-INFO:app.config:OpenAI API Key (first 10 chars): sk-proj-ab...
-INFO:app.config:Google Cloud API Key (first 10 chars): AIzaSyBcd...
+INFO:app.config:Status: ✅ Configured
+INFO:app.config:API Key (first 10 chars): AIzaSyBcd...
 ============================================================
 ```
 
@@ -35,18 +33,15 @@ INFO:app.config:Google Cloud API Key (first 10 chars): AIzaSyBcd...
 
 ### 2. Provider Initialization
 
-When providers are checked, you'll see:
+When the provider is checked, you'll see:
 
 ```
-INFO:app.services.tts_providers:[OpenAI TTS] Initializing provider - API Key: ✅ Present
-INFO:app.services.tts_providers:[OpenAI TTS] is_configured() = True
 INFO:app.services.tts_providers:[Google Cloud TTS] Initializing provider - API Key: ✅ Present
 INFO:app.services.tts_providers:[Google Cloud TTS] API Key (first 10 chars): AIzaSyBcd...
 INFO:app.services.tts_providers:[Google Cloud TTS] is_configured() = True
 ```
 
 **What to check:**
-- Each provider logs when it's initialized
 - Shows if API key is present or missing
 - Shows the result of `is_configured()` check
 
@@ -60,29 +55,24 @@ INFO:app.api.tts:[API /tts/providers] Endpoint called
 INFO:app.api.tts:[API /tts/providers] User: user@example.com
 ============================================================
 INFO:app.services.tts_providers:[TTSProviderFactory] Getting available providers...
-INFO:app.services.tts_providers:[TTSProviderFactory] Checking provider: openai
-INFO:app.services.tts_providers:[OpenAI TTS] Initializing provider - API Key: ✅ Present
-INFO:app.services.tts_providers:[OpenAI TTS] is_configured() = True
-INFO:app.services.tts_providers:[TTSProviderFactory] Provider 'openai': {'id': 'openai', 'name': 'Openai', 'configured': True}
 INFO:app.services.tts_providers:[TTSProviderFactory] Checking provider: google-cloud
 INFO:app.services.tts_providers:[Google Cloud TTS] Initializing provider - API Key: ✅ Present
 INFO:app.services.tts_providers:[Google Cloud TTS] API Key (first 10 chars): AIzaSyBcd...
 INFO:app.services.tts_providers:[Google Cloud TTS] is_configured() = True
 INFO:app.services.tts_providers:[TTSProviderFactory] Provider 'google-cloud': {'id': 'google-cloud', 'name': 'Google Cloud', 'configured': True}
-INFO:app.services.tts_providers:[TTSProviderFactory] Total providers: 2
-INFO:app.services.tts_providers:[TTSProviderFactory] Configured providers: 2
-INFO:app.services.tts_providers:[TTSProviderFactory] Final provider list: [{'id': 'openai', 'name': 'Openai', 'configured': True}, {'id': 'google-cloud', 'name': 'Google Cloud', 'configured': True}]
+INFO:app.services.tts_providers:[TTSProviderFactory] Total providers: 1
+INFO:app.services.tts_providers:[TTSProviderFactory] Configured providers: 1
+INFO:app.services.tts_providers:[TTSProviderFactory] Final provider list: [{'id': 'google-cloud', 'name': 'Google Cloud', 'configured': True}]
 ============================================================
-INFO:app.api.tts:[API /tts/providers] Returning 2 providers:
-INFO:app.api.tts:  - openai: configured=True
+INFO:app.api.tts:[API /tts/providers] Returning 1 providers:
 INFO:app.api.tts:  - google-cloud: configured=True
 ============================================================
 ```
 
 **What to check:**
-- Shows exactly what providers are being returned to frontend
-- Shows the configured status for each
-- Verifies the API keys are being loaded correctly
+- Shows exactly what provider is being returned to frontend
+- Shows the configured status
+- Verifies the API key is being loaded correctly
 
 ### 4. TTS Generation Request
 
@@ -113,7 +103,7 @@ INFO:app.api.tts:[API /tts/generate] ✅ Successfully generated 8192 bytes of au
 
 **Check logs for:**
 ```
-INFO:app.config:GOOGLE_CLOUD_API_KEY: ❌ Not configured
+INFO:app.config:Status: ❌ Not configured
 ```
 
 **Fix:**
@@ -174,8 +164,8 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Look for the configuration status section. Should see:
-- ✅ for both providers if configured
-- First 10 characters of each API key
+- ✅ if Google Cloud TTS is configured
+- First 10 characters of the API key
 
 ### Step 2: Open Mentor Mode and Check Browser Console
 
@@ -192,8 +182,7 @@ When you open Mentor Mode, backend logs should show:
 ```
 [API /tts/providers] Endpoint called
 ...
-[API /tts/providers] Returning 2 providers:
-  - openai: configured=True
+[API /tts/providers] Returning 1 providers:
   - google-cloud: configured=True
 ```
 
@@ -212,13 +201,13 @@ Backend should show:
 Use this checklist to verify everything is working:
 
 - [ ] Backend starts without errors
-- [ ] Startup logs show `GOOGLE_CLOUD_API_KEY: ✅ Configured`
+- [ ] Startup logs show `Status: ✅ Configured`
 - [ ] Startup logs show first 10 chars of API key
 - [ ] Provider initialization logs show `API Key: ✅ Present`
 - [ ] `is_configured()` returns `True` for Google Cloud provider
 - [ ] `/tts/providers` endpoint returns `configured: true` for google-cloud
-- [ ] Frontend receives providers list (check browser console)
-- [ ] Mentor Mode shows "Google Cloud" in provider dropdown
+- [ ] Frontend receives provider (check browser console)
+- [ ] Mentor Mode shows "Google Cloud" in provider dropdown (or uses it automatically)
 - [ ] Clicking play generates audio successfully
 - [ ] Logs show `✅ Successfully generated ... bytes of audio`
 

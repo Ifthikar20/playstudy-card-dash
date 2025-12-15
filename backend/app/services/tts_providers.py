@@ -1,6 +1,6 @@
 """
-Text-to-Speech Provider Implementations
-Handles TTS generation using multiple providers (OpenAI, Google Cloud)
+Text-to-Speech Provider Implementation
+Handles TTS generation using Google Cloud Text-to-Speech API
 """
 import base64
 import logging
@@ -31,64 +31,6 @@ class TTSProvider(ABC):
     def is_configured(self) -> bool:
         """Check if provider is properly configured."""
         pass
-
-
-class OpenAITTSProvider(TTSProvider):
-    """OpenAI Text-to-Speech provider."""
-
-    def __init__(self):
-        self.api_key = getattr(settings, "OPENAI_API_KEY", None)
-        self.base_url = "https://api.openai.com/v1/audio/speech"
-        logger.info(f"[OpenAI TTS] Initializing provider - API Key: {'✅ Present' if self.api_key else '❌ Missing'}")
-
-    def is_configured(self) -> bool:
-        configured = bool(self.api_key)
-        logger.info(f"[OpenAI TTS] is_configured() = {configured}")
-        return configured
-
-    async def generate_speech(
-        self,
-        text: str,
-        voice: str = "alloy",
-        speed: float = 1.0,
-        model: str = "tts-1",
-        **kwargs
-    ) -> bytes:
-        """Generate speech using OpenAI TTS API."""
-        if not self.is_configured():
-            raise ValueError("OpenAI API key not configured")
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                self.base_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "input": text,
-                    "voice": voice,
-                    "speed": speed,
-                },
-            )
-
-            if response.status_code != 200:
-                error_detail = response.json() if response.content else response.text
-                raise Exception(f"OpenAI TTS API error: {error_detail}")
-
-            return response.content
-
-    def get_available_voices(self) -> List[Dict[str, str]]:
-        """Get OpenAI TTS voices."""
-        return [
-            {"id": "alloy", "name": "Alloy", "description": "Neutral and balanced", "gender": "neutral"},
-            {"id": "echo", "name": "Echo", "description": "Male, clear and articulate", "gender": "male"},
-            {"id": "fable", "name": "Fable", "description": "British accent, warm", "gender": "male"},
-            {"id": "onyx", "name": "Onyx", "description": "Deep male voice", "gender": "male"},
-            {"id": "nova", "name": "Nova", "description": "Female, energetic", "gender": "female"},
-            {"id": "shimmer", "name": "Shimmer", "description": "Female, soft and gentle", "gender": "female"},
-        ]
 
 
 class GoogleCloudTTSProvider(TTSProvider):
@@ -176,10 +118,9 @@ class GoogleCloudTTSProvider(TTSProvider):
 
 
 class TTSProviderFactory:
-    """Factory to get TTS providers."""
+    """Factory to get TTS provider (Google Cloud TTS)."""
 
     _providers = {
-        "openai": OpenAITTSProvider,
         "google-cloud": GoogleCloudTTSProvider,
     }
 
