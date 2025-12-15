@@ -108,9 +108,9 @@ SECRET_KEY=your-secret-key
 DEEPSEEK_API_KEY=your-deepseek-key
 
 # Optional - for AI voices (if you want OpenAI or Google Cloud)
-GOOGLE_CLOUD_API_KEY=AIzaSyDuUXgy_Pc2bDEGY9LhgA2lYFd_Kd_6B7Y
+GOOGLE_CLOUD_API_KEY=your-google-cloud-api-key
 # OR
-OPENAI_API_KEY=sk-your-key
+OPENAI_API_KEY=your-openai-api-key
 ```
 
 ### 7. Common Solutions
