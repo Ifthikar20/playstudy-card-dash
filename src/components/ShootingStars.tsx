@@ -73,57 +73,57 @@ export default function ShootingStars() {
         });
       }
 
-      // Create planets
+      // Create planets with teal/cyan tones
       planets.length = 0;
       planets.push(
         {
           x: canvas.width * 0.85,
           y: canvas.height * 0.2,
           radius: 25,
-          color: '#8b5cf6',
-          glowColor: 'rgba(139, 92, 246, 0.3)',
+          color: '#14b8a6',
+          glowColor: 'rgba(20, 184, 166, 0.3)',
           hasRing: true,
         },
         {
           x: canvas.width * 0.1,
           y: canvas.height * 0.7,
           radius: 15,
-          color: '#f97316',
-          glowColor: 'rgba(249, 115, 22, 0.2)',
+          color: '#0ea5e9',
+          glowColor: 'rgba(14, 165, 233, 0.2)',
           hasRing: false,
         },
         {
           x: canvas.width * 0.7,
           y: canvas.height * 0.8,
           radius: 8,
-          color: '#06b6d4',
-          glowColor: 'rgba(6, 182, 212, 0.2)',
+          color: '#22d3ee',
+          glowColor: 'rgba(34, 211, 238, 0.2)',
           hasRing: false,
         }
       );
 
-      // Create nebulae/clouds
+      // Create nebulae/clouds with teal/green/blue tones
       nebulae.length = 0;
       nebulae.push(
         {
           x: canvas.width * 0.2,
           y: canvas.height * 0.3,
           radius: 150,
-          color: 'rgba(147, 51, 234, 0.08)',
+          color: 'rgba(20, 184, 166, 0.06)',
           opacity: 0.5,
         },
         {
           x: canvas.width * 0.8,
           y: canvas.height * 0.6,
           radius: 200,
-          color: 'rgba(59, 130, 246, 0.06)',
+          color: 'rgba(14, 165, 233, 0.05)',
           opacity: 0.4,
         },
         {
           x: canvas.width * 0.5,
           y: canvas.height * 0.15,
           radius: 120,
-          color: 'rgba(236, 72, 153, 0.05)',
+          color: 'rgba(34, 211, 238, 0.04)',
           opacity: 0.3,
         }
       );
@@ -217,7 +217,7 @@ export default function ShootingStars() {
 
     const drawShootingStars = () => {
       shootingStars.forEach((star, index) => {
-        // Softer, more ethereal shooting star
+        // Softer, more ethereal shooting star with teal/cyan tones
         const gradient = ctx.createLinearGradient(
           star.x,
           star.y,
@@ -226,9 +226,9 @@ export default function ShootingStars() {
         );
         
         gradient.addColorStop(0, `rgba(255, 255, 255, ${star.opacity})`);
-        gradient.addColorStop(0.2, `rgba(200, 180, 255, ${star.opacity * 0.6})`);
-        gradient.addColorStop(0.6, `rgba(147, 112, 219, ${star.opacity * 0.3})`);
-        gradient.addColorStop(1, 'rgba(147, 112, 219, 0)');
+        gradient.addColorStop(0.2, `rgba(180, 240, 255, ${star.opacity * 0.6})`);
+        gradient.addColorStop(0.6, `rgba(20, 184, 166, ${star.opacity * 0.3})`);
+        gradient.addColorStop(1, 'rgba(20, 184, 166, 0)');
 
         ctx.beginPath();
         ctx.moveTo(star.x, star.y);
