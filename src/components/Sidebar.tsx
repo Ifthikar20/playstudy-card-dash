@@ -4,7 +4,6 @@ import {
   BookOpen,
   FolderPlus,
   Trophy,
-  Settings,
   User,
   Menu,
   X,
@@ -156,22 +155,7 @@ export function Sidebar() {
           }
         >
           <User size={20} className="flex-shrink-0" />
-          {!isCollapsed && <span className="ml-3">Profile</span>}
-        </NavLink>
-
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-              isActive
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            )
-          }
-        >
-          <Settings size={20} className="flex-shrink-0" />
-          {!isCollapsed && <span className="ml-3">Settings</span>}
+          {!isCollapsed && <span className="ml-3">Profile & Settings</span>}
         </NavLink>
 
         <div className="flex items-center justify-between">
