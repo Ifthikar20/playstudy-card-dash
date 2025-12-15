@@ -29,7 +29,8 @@ export default function GameModePage() {
   const [isGameOver, setIsGameOver] = useState(false);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [askedQuestions, setAskedQuestions] = useState<Set<string>>(new Set());
-  const scoreThresholds = [300, 700, 1200, 1800, 2500, 3300, 4200];
+  const [passedThresholds, setPassedThresholds] = useState<Set<number>>(new Set());
+  const scoreThresholds = [100, 300, 600, 1000, 1500, 2100, 2800, 3600];
 
   // Find the session
   const session = sessionId
@@ -64,25 +65,46 @@ export default function GameModePage() {
     };
 
     const questions = extractQuestions(session.topicTree);
+    console.log('📚 Loaded questions:', questions.length);
     setAllQuestions(questions);
   }, [session]);
 
   // Check if we should ask a question based on score
   useEffect(() => {
-    if (isGameOver || currentQuestion) return;
+    if (isGameOver || currentQuestion || allQuestions.length === 0) return;
 
-    const nextThreshold = scoreThresholds.find(t => t > gameScore - 100 && t <= gameScore);
-    if (nextThreshold && allQuestions.length > 0) {
+    // Find thresholds we've crossed but haven't triggered yet
+    const crossedThresholds = scoreThresholds.filter(
+      threshold => gameScore >= threshold && !passedThresholds.has(threshold)
+    );
+
+    // Debug logging
+    console.log('🎯 Score check - Current:', gameScore, 'Thresholds:', scoreThresholds);
+    console.log('✅ Crossed thresholds:', crossedThresholds);
+    console.log('📝 Passed thresholds:', Array.from(passedThresholds));
+
+    if (crossedThresholds.length > 0) {
+      // Take the first crossed threshold
+      const threshold = crossedThresholds[0];
+      console.log('🚨 Triggering question at threshold:', threshold);
+
       // Find a question we haven't asked yet
       const unaskedQuestions = allQuestions.filter(q => !askedQuestions.has(q.id));
       if (unaskedQuestions.length > 0) {
         const randomQuestion = unaskedQuestions[Math.floor(Math.random() * unaskedQuestions.length)];
         pauseGameForQuestion(randomQuestion);
+
+        // Mark this threshold as passed
+        setPassedThresholds(prev => new Set([...prev, threshold]));
+      } else {
+        console.log('⚠️ No unasked questions available');
       }
     }
-  }, [gameScore, allQuestions, askedQuestions, isGameOver, currentQuestion]);
+  }, [gameScore, allQuestions, askedQuestions, isGameOver, currentQuestion, passedThresholds]);
 
   const pauseGameForQuestion = (question: Question) => {
+    console.log('🎮 Pausing game for question:', question.text);
+    console.log('📊 Current score:', gameScore);
     setCurrentQuestion(question);
     setIsPaused(true);
   };
@@ -331,6 +353,7 @@ export default function GameModePage() {
 
           score += 100;
           defeated++;
+          console.log('💯 Enemy defeated! New score:', score);
           setGameScore(score);
           setEnemiesDefeated(defeated);
           scoreLabel.text = `Score: ${score}`;
