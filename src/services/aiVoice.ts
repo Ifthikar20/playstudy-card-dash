@@ -1,117 +1,167 @@
 /**
- * AI Voice Service using OpenAI Text-to-Speech API
+ * AI Voice Service - Multi-Provider TTS Manager
  *
  * Provides high-quality AI narration for educational content
- * Supports multiple voices and streaming audio playback
+ * Supports multiple TTS providers: OpenAI, Google Cloud, and Browser TTS
  */
 
+import { OpenAITTSProvider } from './tts/openaiProvider';
+import { GoogleCloudTTSProvider } from './tts/googleCloudProvider';
+import { BrowserTTSProvider } from './tts/browserProvider';
+import { ITTSProvider, TTSProvider, TTSVoiceOptions, TTSVoiceInfo, TTSAudioCallbacks } from './tts/types';
+
+// Re-export types for backward compatibility
+export type { TTSProvider, TTSVoiceOptions, TTSVoiceInfo };
+
+// Legacy type for backward compatibility
 export type VoiceModel = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 
-export interface VoiceOptions {
-  voice?: VoiceModel;
-  speed?: number; // 0.25 to 4.0
-  model?: 'tts-1' | 'tts-1-hd'; // tts-1-hd has higher quality
-}
-
 class AIVoiceService {
-  private apiKey: string;
-  private baseUrl: string = 'https://api.openai.com/v1/audio/speech';
+  private providers: Map<TTSProvider, ITTSProvider>;
+  private currentProvider: TTSProvider;
   private currentAudio: HTMLAudioElement | null = null;
-  private audioCache: Map<string, string> = new Map(); // Cache audio URLs
+  private browserTTSProvider: BrowserTTSProvider;
 
   constructor() {
-    // Get API key from environment variable
-    this.apiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
+    // Initialize all providers
+    this.providers = new Map([
+      ['openai', new OpenAITTSProvider()],
+      ['google-cloud', new GoogleCloudTTSProvider()],
+      ['browser', new BrowserTTSProvider()],
+    ]);
+
+    this.browserTTSProvider = this.providers.get('browser') as BrowserTTSProvider;
+
+    // Set default provider based on what's configured
+    this.currentProvider = this.getDefaultProvider();
   }
 
   /**
-   * Checks if the service is properly configured
+   * Get the default provider based on configuration
+   */
+  private getDefaultProvider(): TTSProvider {
+    if (this.providers.get('openai')?.isConfigured()) {
+      return 'openai';
+    }
+    if (this.providers.get('google-cloud')?.isConfigured()) {
+      return 'google-cloud';
+    }
+    return 'browser';
+  }
+
+  /**
+   * Set the active TTS provider
+   */
+  setProvider(provider: TTSProvider): void {
+    if (!this.providers.has(provider)) {
+      throw new Error(`Unknown provider: ${provider}`);
+    }
+    this.currentProvider = provider;
+  }
+
+  /**
+   * Get the current provider
+   */
+  getProvider(): TTSProvider {
+    return this.currentProvider;
+  }
+
+  /**
+   * Get all available providers with their configuration status
+   */
+  getAvailableProviders(): Array<{ id: TTSProvider; name: string; configured: boolean }> {
+    return Array.from(this.providers.entries()).map(([id, provider]) => ({
+      id,
+      name: provider.getProviderName(),
+      configured: provider.isConfigured(),
+    }));
+  }
+
+  /**
+   * Checks if any provider is configured (including browser)
    */
   isConfigured(): boolean {
-    return !!this.apiKey;
+    return Array.from(this.providers.values()).some(provider => provider.isConfigured());
   }
 
   /**
-   * Generate speech from text using OpenAI TTS
-   * Returns an audio URL that can be played
+   * Checks if the current provider is configured
+   */
+  isCurrentProviderConfigured(): boolean {
+    const provider = this.providers.get(this.currentProvider);
+    return provider ? provider.isConfigured() : false;
+  }
+
+  /**
+   * Generate speech from text using the current provider
    */
   async generateSpeech(
     text: string,
-    options: VoiceOptions = {}
+    options: Partial<TTSVoiceOptions> = {}
   ): Promise<string> {
-    if (!this.isConfigured()) {
-      throw new Error('OpenAI API key not configured. Please add VITE_OPENAI_API_KEY to your .env file');
+    const provider = this.providers.get(this.currentProvider);
+    if (!provider) {
+      throw new Error(`Provider ${this.currentProvider} not found`);
     }
 
-    // Check cache first
-    const cacheKey = `${text}-${options.voice}-${options.speed}`;
-    if (this.audioCache.has(cacheKey)) {
-      return this.audioCache.get(cacheKey)!;
+    if (!provider.isConfigured()) {
+      throw new Error(`Provider ${this.currentProvider} is not configured`);
     }
 
-    const {
-      voice = 'alloy', // Default to 'alloy' voice (neutral)
-      speed = 1.0,
-      model = 'tts-1' // Use standard quality by default
-    } = options;
+    // Add provider to options
+    const providerOptions = { ...options, provider: this.currentProvider };
 
-    try {
-      const response = await fetch(this.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          input: text,
-          voice,
-          speed,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`OpenAI TTS API error: ${error.error?.message || response.statusText}`);
-      }
-
-      // Convert response to blob and create URL
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      // Cache the audio URL
-      this.audioCache.set(cacheKey, audioUrl);
-
-      return audioUrl;
-    } catch (error) {
-      console.error('Error generating speech:', error);
-      throw error;
-    }
+    return provider.generateSpeech(text, providerOptions);
   }
 
   /**
-   * Play audio from text
+   * Play audio from text using the current provider
    */
   async speak(
     text: string,
-    options: VoiceOptions = {},
-    onEnd?: () => void,
-    onError?: (error: Error) => void
-  ): Promise<HTMLAudioElement> {
+    options: Partial<TTSVoiceOptions> = {},
+    callbacks?: TTSAudioCallbacks
+  ): Promise<HTMLAudioElement | SpeechSynthesisUtterance | null> {
     try {
       // Stop any currently playing audio
       this.stop();
 
-      const audioUrl = await this.generateSpeech(text, options);
+      const provider = this.providers.get(this.currentProvider);
+      if (!provider) {
+        throw new Error(`Provider ${this.currentProvider} not found`);
+      }
+
+      if (!provider.isConfigured()) {
+        throw new Error(
+          `${provider.getProviderName()} is not configured. Please add the necessary API key to your .env file`
+        );
+      }
+
+      // Add provider to options
+      const providerOptions = { ...options, provider: this.currentProvider };
+
+      // Browser TTS uses direct speech synthesis
+      if (this.currentProvider === 'browser') {
+        const utterance = this.browserTTSProvider.speak(
+          text,
+          providerOptions,
+          callbacks?.onEnd,
+          callbacks?.onError
+        );
+        return utterance;
+      }
+
+      // API-based providers generate audio URLs
+      const audioUrl = await provider.generateSpeech(text, providerOptions);
       const audio = new Audio(audioUrl);
 
       audio.onended = () => {
-        if (onEnd) onEnd();
+        if (callbacks?.onEnd) callbacks.onEnd();
       };
 
       audio.onerror = () => {
         const error = new Error('Error playing audio');
-        if (onError) onError(error);
+        if (callbacks?.onError) callbacks.onError(error);
       };
 
       this.currentAudio = audio;
@@ -119,7 +169,7 @@ class AIVoiceService {
 
       return audio;
     } catch (error) {
-      if (onError) onError(error as Error);
+      if (callbacks?.onError) callbacks.onError(error as Error);
       throw error;
     }
   }
@@ -127,8 +177,10 @@ class AIVoiceService {
   /**
    * Pause current audio
    */
-  pause() {
-    if (this.currentAudio) {
+  pause(): void {
+    if (this.currentProvider === 'browser') {
+      this.browserTTSProvider.pause();
+    } else if (this.currentAudio) {
       this.currentAudio.pause();
     }
   }
@@ -136,8 +188,10 @@ class AIVoiceService {
   /**
    * Resume paused audio
    */
-  resume() {
-    if (this.currentAudio) {
+  resume(): void {
+    if (this.currentProvider === 'browser') {
+      this.browserTTSProvider.resume();
+    } else if (this.currentAudio) {
       this.currentAudio.play();
     }
   }
@@ -145,8 +199,10 @@ class AIVoiceService {
   /**
    * Stop and clear current audio
    */
-  stop() {
-    if (this.currentAudio) {
+  stop(): void {
+    if (this.currentProvider === 'browser') {
+      this.browserTTSProvider.stop();
+    } else if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
@@ -156,46 +212,47 @@ class AIVoiceService {
   /**
    * Set volume (0 to 1)
    */
-  setVolume(volume: number) {
+  setVolume(volume: number): void {
     if (this.currentAudio) {
       this.currentAudio.volume = Math.max(0, Math.min(1, volume));
     }
+    // Note: Browser TTS volume is controlled by the utterance, not globally
   }
 
   /**
    * Get current playback state
    */
   isPlaying(): boolean {
+    if (this.currentProvider === 'browser') {
+      return this.browserTTSProvider.isPlaying();
+    }
     return this.currentAudio ? !this.currentAudio.paused : false;
+  }
+
+  /**
+   * Get available voices for the current provider
+   */
+  getAvailableVoices(): TTSVoiceInfo[] {
+    const provider = this.providers.get(this.currentProvider);
+    return provider ? provider.getAvailableVoices() : [];
   }
 
   /**
    * Clear audio cache to free memory
    */
-  clearCache() {
-    this.audioCache.forEach(url => URL.revokeObjectURL(url));
-    this.audioCache.clear();
-  }
-
-  /**
-   * Get available voices with descriptions
-   */
-  getAvailableVoices(): Array<{ id: VoiceModel; name: string; description: string }> {
-    return [
-      { id: 'alloy', name: 'Alloy', description: 'Neutral and balanced' },
-      { id: 'echo', name: 'Echo', description: 'Male, clear and articulate' },
-      { id: 'fable', name: 'Fable', description: 'British accent, warm' },
-      { id: 'onyx', name: 'Onyx', description: 'Deep male voice' },
-      { id: 'nova', name: 'Nova', description: 'Female, energetic' },
-      { id: 'shimmer', name: 'Shimmer', description: 'Female, soft and gentle' },
-    ];
+  clearCache(): void {
+    this.providers.forEach(provider => {
+      if ('clearCache' in provider) {
+        (provider as any).clearCache();
+      }
+    });
   }
 }
 
 // Export singleton instance
 export const aiVoiceService = new AIVoiceService();
 
-// Export fallback function for browser TTS (when API key is not configured)
+// Export fallback function for direct browser TTS access (backward compatibility)
 export function useBrowserTTS(
   text: string,
   options: { rate?: number; pitch?: number; volume?: number } = {}

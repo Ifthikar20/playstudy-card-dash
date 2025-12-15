@@ -31,11 +31,19 @@ See [Backend Implementation Guide](./BACKEND_IMPLEMENTATION.md) for detailed set
 
 ### Complete Implementation Guides
 
+- **[TTS Integration Guide](./TTS_INTEGRATION.md)** - Multi-provider Text-to-Speech setup and AWS deployment
 - **[API Integration Guide](./API_INTEGRATION.md)** - How the consolidated API architecture works
 - **[Backend Implementation](./BACKEND_IMPLEMENTATION.md)** - Complete Python FastAPI backend with security features
 - **[Security Checklist](./SECURITY_CHECKLIST.md)** - Comprehensive security implementation checklist
 
 ### Key Features
+
+✅ **AI-Powered Mentor Mode** 🎙️ NEW!
+- Multi-provider Text-to-Speech support (OpenAI TTS, Google Cloud TTS, Browser TTS)
+- AI-narrated teaching experience with interactive voice
+- Switch between providers and voices in real-time
+- Cost-effective options for production deployment
+- See [TTS Integration Guide](./TTS_INTEGRATION.md) for setup details
 
 ✅ **Single API Call Architecture**
 - Consolidated `/api/app-data` endpoint returns all data in ONE request
