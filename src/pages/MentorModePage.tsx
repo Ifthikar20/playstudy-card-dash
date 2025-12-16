@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAppStore } from "@/store/appStore";
-import { aiVoiceService, useBrowserTTS } from "@/services/aiVoice";
+import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
 import {
   Play,
   Pause,
@@ -13,27 +13,32 @@ import {
   SkipBack,
   Volume2,
   VolumeX,
-  User,
-  BookOpen,
   ArrowLeft,
   Mic,
-  Settings
+  Settings,
+  MessageSquare
 } from "lucide-react";
 
 export default function MentorModePage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { currentSession, studySessions } = useAppStore();
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTopicIndex, setCurrentTopicIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isReading, setIsReading] = useState(false);
-  const [useAIVoice, setUseAIVoice] = useState(true); // Use AI voice by default if configured
-  const [currentVoice, setCurrentVoice] = useState<'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer'>('nova');
+  const [currentProvider, setCurrentProvider] = useState<TTSProvider>(aiVoiceService.getProvider());
+  const [currentVoice, setCurrentVoice] = useState<string>(
+    aiVoiceService.getAvailableVoices()[0]?.id || 'nova'
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
+  const [currentTranscript, setCurrentTranscript] = useState<string>('');
+  const [fullNarrative, setFullNarrative] = useState<string>('');
 
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
@@ -45,6 +50,59 @@ export default function MentorModePage() {
     }
   }, [session, navigate]);
 
+  // Auto-scroll transcript
+  useEffect(() => {
+    if (transcriptRef.current && isPlaying) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [currentTranscript, isPlaying]);
+
+  // Fetch providers and voices on mount
+  useEffect(() => {
+    const loadProvidersAndVoices = async () => {
+      try {
+        console.log('[Mentor Mode] Fetching providers...');
+        const providers = await aiVoiceService.fetchProviders();
+        console.log('[Mentor Mode] Providers received:', providers);
+        setAvailableProviders(providers);
+
+        // Prefer non-browser providers, but fallback to browser
+        const configuredProvider = providers.find(p => p.configured && p.id !== 'browser') || providers.find(p => p.configured);
+        if (configuredProvider) {
+          console.log('[Mentor Mode] Using provider:', configuredProvider.id);
+          setCurrentProvider(configuredProvider.id);
+          aiVoiceService.setProvider(configuredProvider.id);
+
+          const voices = await aiVoiceService.fetchVoices(configuredProvider.id);
+          console.log(`[Mentor Mode] Voices for ${configuredProvider.id}:`, voices);
+
+          if (voices.length > 0) {
+            // For browser TTS, prefer a pleasant female voice
+            if (configuredProvider.id === 'browser') {
+              const preferredVoice = voices.find(v =>
+                v.name.includes('Google') && v.gender === 'female'
+              ) || voices.find(v =>
+                v.name.includes('Samantha') || v.name.includes('Victoria')
+              ) || voices.find(v =>
+                v.gender === 'female' && v.language?.startsWith('en')
+              ) || voices[0];
+              setCurrentVoice(preferredVoice.id);
+            } else {
+              // For API providers, use the first voice (already good quality)
+              setCurrentVoice(voices[0].id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Mentor Mode] Failed to load providers:', error);
+        setCurrentProvider('browser');
+        aiVoiceService.setProvider('browser');
+      }
+    };
+
+    loadProvidersAndVoices();
+  }, []);
+
   if (!session) {
     return null;
   }
@@ -55,22 +113,39 @@ export default function MentorModePage() {
   const handlePlayPause = () => {
     if (isPlaying) {
       setIsPlaying(false);
-      if (useAIVoice && aiVoiceService.isConfigured()) {
-        aiVoiceService.pause();
-      } else if ('speechSynthesis' in window) {
-        window.speechSynthesis.pause();
-      }
+      aiVoiceService.pause();
     } else {
       setIsPlaying(true);
       if (currentTopic && !isReading) {
         speakContent(currentTopic);
       } else {
-        if (useAIVoice && aiVoiceService.isConfigured()) {
-          aiVoiceService.resume();
-        } else if ('speechSynthesis' in window) {
-          window.speechSynthesis.resume();
+        aiVoiceService.resume();
+      }
+    }
+  };
+
+  // Handle provider change
+  const handleProviderChange = async (provider: TTSProvider) => {
+    aiVoiceService.stop();
+    setIsPlaying(false);
+    setIsReading(false);
+    setCurrentProvider(provider);
+    aiVoiceService.setProvider(provider);
+
+    try {
+      const voices = await aiVoiceService.fetchVoices(provider);
+      if (voices.length > 0) {
+        if (provider === 'browser') {
+          const preferredVoice = voices.find(v =>
+            v.name.includes('Google') && v.gender === 'female'
+          ) || voices.find(v => v.gender === 'female') || voices[0];
+          setCurrentVoice(preferredVoice.id);
+        } else {
+          setCurrentVoice(voices[0].id);
         }
       }
+    } catch (error) {
+      console.error('Failed to load voices:', error);
     }
   };
 
@@ -79,25 +154,51 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
-    // Create narrative from topic
-    const narrative = `
-      Welcome to ${topic.title}.
-      ${topic.description}
+    // Create a conversational narrative
+    const narrative = `Hello! I'm your AI mentor. Let me help you understand ${topic.title}.
 
-      Let's explore this topic together. I'll guide you through the key concepts and help you understand the material.
+${topic.description ? `First, let me explain what this is about. ${topic.description}` : ''}
 
-      ${topic.questions.map((q: any, idx: number) => `
-        Question ${idx + 1}: ${q.question}
+Now, I'll break this down into key concepts for you.
 
-        The answer is: ${q.options[q.correctAnswer]}.
+${topic.questions && topic.questions.length > 0 ? topic.questions.map((q: any, idx: number) => {
+  const questionNumber = idx + 1;
+  const correctAnswer = q.options[q.correctAnswer];
 
-        ${q.explanation}
-      `).join('\n\n')}
+  return `Concept ${questionNumber}: ${q.question}
 
-      That covers ${topic.title}. Let's move on when you're ready!
-    `;
+${q.explanation ? `Here's what you need to know: ${q.explanation}` : ''}
+
+The correct answer is: ${correctAnswer}.`;
+}).join('\n\n') : 'This topic contains important concepts for you to learn.'}
+
+That covers everything for ${topic.title}. Take your time to think about what we discussed. When you're ready, move on to the next topic.`;
+
+    setFullNarrative(narrative);
+    setCurrentTranscript('');
+
+    // Simulate live transcript
+    const words = narrative.split(' ');
+    let wordIndex = 0;
+    let transcriptInterval: NodeJS.Timeout;
+
+    const startTranscript = () => {
+      transcriptInterval = setInterval(() => {
+        if (wordIndex < words.length) {
+          setCurrentTranscript(prev => {
+            const newText = prev + (prev ? ' ' : '') + words[wordIndex];
+            wordIndex++;
+            return newText;
+          });
+        } else {
+          clearInterval(transcriptInterval);
+        }
+      }, 180); // Adjust speed to match speech
+    };
 
     const handleEnd = () => {
+      if (transcriptInterval) clearInterval(transcriptInterval);
+      setCurrentTranscript(narrative);
       setIsReading(false);
       setIsPlaying(false);
       if (currentTopicIndex < topics.length - 1) {
@@ -108,47 +209,35 @@ export default function MentorModePage() {
     };
 
     const handleError = (error: Error) => {
-      setError(error.message);
+      if (transcriptInterval) clearInterval(transcriptInterval);
+      console.error('[TTS Error]:', error);
+      setError(`Unable to play audio: ${error.message}`);
       setIsReading(false);
       setIsPlaying(false);
       setIsLoading(false);
     };
 
     try {
-      // Try to use AI voice if configured and enabled
-      if (useAIVoice && aiVoiceService.isConfigured()) {
-        setIsLoading(true);
-        await aiVoiceService.speak(
-          narrative,
-          {
-            voice: currentVoice,
-            speed: 1.0,
-            model: 'tts-1' // Use standard quality for faster generation
-          },
-          handleEnd,
-          handleError
-        );
-        setIsLoading(false);
-      } else {
-        // Fallback to browser TTS
-        if (!('speechSynthesis' in window)) {
-          throw new Error('Text-to-speech is not supported in your browser');
-        }
+      setIsLoading(true);
 
-        const utterance = useBrowserTTS(narrative, {
-          rate: 0.9,
-          pitch: 1.0,
-          volume: isMuted ? 0 : 1
-        });
+      // Start transcript animation slightly before audio starts
+      setTimeout(startTranscript, 500);
 
-        if (utterance) {
-          utterance.onend = handleEnd;
-          utterance.onerror = () => handleError(new Error('Browser TTS error'));
-          window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(utterance);
+      await aiVoiceService.speak(
+        narrative,
+        {
+          voice: currentVoice,
+          speed: 0.9, // Slower for better understanding
+          model: currentProvider === 'openai' ? 'tts-1' : undefined,
+          pitch: 0,
+          provider: currentProvider
+        },
+        {
+          onEnd: handleEnd,
+          onError: handleError
         }
-        setIsLoading(false);
-      }
+      );
+      setIsLoading(false);
     } catch (error) {
       handleError(error as Error);
     }
@@ -156,30 +245,22 @@ export default function MentorModePage() {
 
   const handleNext = () => {
     if (currentTopicIndex < topics.length - 1) {
-      // Stop any playing audio
-      if (useAIVoice && aiVoiceService.isConfigured()) {
-        aiVoiceService.stop();
-      } else {
-        window.speechSynthesis.cancel();
-      }
+      aiVoiceService.stop();
       setCurrentTopicIndex(currentTopicIndex + 1);
       setIsPlaying(false);
       setIsReading(false);
+      setCurrentTranscript('');
       setProgress(((currentTopicIndex + 1) / topics.length) * 100);
     }
   };
 
   const handlePrevious = () => {
     if (currentTopicIndex > 0) {
-      // Stop any playing audio
-      if (useAIVoice && aiVoiceService.isConfigured()) {
-        aiVoiceService.stop();
-      } else {
-        window.speechSynthesis.cancel();
-      }
+      aiVoiceService.stop();
       setCurrentTopicIndex(currentTopicIndex - 1);
       setIsPlaying(false);
       setIsReading(false);
+      setCurrentTranscript('');
       setProgress(((currentTopicIndex - 1) / topics.length) * 100);
     }
   };
@@ -187,220 +268,209 @@ export default function MentorModePage() {
   const toggleMute = () => {
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
-    if (useAIVoice && aiVoiceService.isConfigured()) {
-      aiVoiceService.setVolume(newMutedState ? 0 : 1);
-    }
+    aiVoiceService.setVolume(newMutedState ? 0 : 1);
   };
 
   return (
     <div className="min-h-screen bg-background flex">
       <Sidebar />
 
-      <div className="flex-1 p-4 md:p-8 overflow-auto">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <Button
-              variant="ghost"
-              className="mb-4"
-              onClick={() => navigate('/dashboard')}
-            >
-              <ArrowLeft size={18} className="mr-2" />
-              Back to Dashboard
-            </Button>
+      <div className="flex-1 flex flex-col h-screen">
+        {/* Header */}
+        <div className="p-4 md:p-6 border-b">
+          <Button
+            variant="ghost"
+            className="mb-2"
+            onClick={() => navigate('/dashboard')}
+          >
+            <ArrowLeft size={18} className="mr-2" />
+            Back to Dashboard
+          </Button>
 
-            <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-primary/10">
-                <Mic className="text-primary" size={28} />
+                <Mic className="text-primary" size={24} />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                  Mentor Mode
+                <h1 className="text-xl md:text-2xl font-bold text-foreground">
+                  AI Mentor Session
                 </h1>
-                <p className="text-muted-foreground">{session.title}</p>
+                <p className="text-sm text-muted-foreground">{session.title}</p>
               </div>
             </div>
-          </div>
 
-          {/* Progress */}
-          <div className="mb-6">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-muted-foreground">
-                Topic {currentTopicIndex + 1} of {topics.length}
-              </span>
-              <span className="font-medium text-foreground">
+            {/* Progress */}
+            <div className="text-right">
+              <div className="text-sm text-muted-foreground">
+                Topic {currentTopicIndex + 1} / {topics.length}
+              </div>
+              <div className="text-xs font-medium text-foreground">
                 {Math.round(progress)}% Complete
-              </span>
+              </div>
             </div>
-            <Progress value={progress} className="h-2" />
           </div>
 
-          {/* Voice Settings */}
-          {aiVoiceService.isConfigured() && (
-            <Card className="p-4 mb-6">
-              <div className="flex items-center justify-between">
+          <Progress value={progress} className="h-1 mt-3" />
+        </div>
+
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col gap-4">
+          {/* Settings Card - Collapsible */}
+          <Card className="p-3">
+            <details className="group">
+              <summary className="flex items-center justify-between cursor-pointer list-none">
                 <div className="flex items-center gap-2">
-                  <Settings size={18} className="text-primary" />
-                  <span className="text-sm font-medium">AI Voice Settings</span>
+                  <Settings size={16} className="text-primary" />
+                  <span className="text-sm font-medium">Voice Settings</span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={useAIVoice}
-                      onChange={(e) => setUseAIVoice(e.target.checked)}
-                      className="rounded"
-                    />
-                    Use AI Voice
-                  </label>
-                  {useAIVoice && (
-                    <select
-                      value={currentVoice}
-                      onChange={(e) => setCurrentVoice(e.target.value as any)}
-                      className="text-sm border rounded px-2 py-1 bg-background"
-                    >
-                      {aiVoiceService.getAvailableVoices().map(voice => (
-                        <option key={voice.id} value={voice.id}>
-                          {voice.name} - {voice.description}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Error Display */}
-          {error && (
-            <Card className="p-4 mb-6 border-destructive bg-destructive/10">
-              <div className="flex items-start gap-2">
-                <span className="text-sm text-destructive">
-                  ⚠️ {error}
+                <span className="text-xs text-muted-foreground group-open:hidden">
+                  {currentProvider === 'browser' ? 'Browser TTS' :
+                   currentProvider === 'google-cloud' ? 'Google Cloud' : 'OpenAI'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
                 </span>
-              </div>
-            </Card>
-          )}
-
-          {/* Configuration Notice */}
-          {!aiVoiceService.isConfigured() && (
-            <Card className="p-4 mb-6 border-yellow-500 bg-yellow-500/10">
-              <div className="text-sm text-yellow-700 dark:text-yellow-300">
-                <strong>Note:</strong> Using browser TTS. For higher quality AI narration, add your OpenAI API key to <code className="bg-black/10 px-1 rounded">.env</code> file.
-              </div>
-            </Card>
-          )}
-
-          {/* Teacher Avatar & Content */}
-          <Card className="p-6 mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <User className="text-primary" size={32} />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-foreground mb-1">
-                  Your AI Mentor
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  I'll guide you through the material step by step
-                </p>
-              </div>
-            </div>
-
-            {currentTopic && (
-              <div className="space-y-4">
-                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <BookOpen size={18} className="text-primary" />
-                    <h4 className="font-semibold text-foreground">
-                      {currentTopic.title}
-                    </h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {currentTopic.description}
-                  </p>
-                </div>
-
-                <div className="prose prose-sm max-w-none">
-                  <h5 className="text-sm font-semibold text-foreground mb-3">
-                    Key Concepts ({currentTopic.questions.length} topics to cover)
-                  </h5>
-                  <div className="space-y-3">
-                    {currentTopic.questions.map((question: any, idx: number) => (
-                      <div key={idx} className="bg-accent/50 rounded-lg p-3">
-                        <p className="text-sm font-medium text-foreground mb-2">
-                          {idx + 1}. {question.question}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          <span className="font-medium text-primary">Answer:</span>{' '}
-                          {question.options[question.correctAnswer]}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {question.explanation}
-                        </p>
-                      </div>
+              </summary>
+              <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Provider</label>
+                  <select
+                    value={currentProvider}
+                    onChange={(e) => handleProviderChange(e.target.value as TTSProvider)}
+                    className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
+                  >
+                    {availableProviders.map(provider => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name} {!provider.configured && provider.id !== 'browser' ? '(Not configured)' : ''}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Voice</label>
+                  <select
+                    value={currentVoice}
+                    onChange={(e) => setCurrentVoice(e.target.value)}
+                    className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
+                  >
+                    {aiVoiceService.getAvailableVoices().map(voice => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            )}
+            </details>
           </Card>
 
-          {/* Controls */}
-          <Card className="p-6">
-            <div className="flex items-center justify-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handlePrevious}
-                disabled={currentTopicIndex === 0}
-              >
-                <SkipBack size={20} />
-              </Button>
+          {/* Error */}
+          {error && (
+            <Card className="p-3 border-destructive bg-destructive/10">
+              <p className="text-sm text-destructive">⚠️ {error}</p>
+            </Card>
+          )}
 
-              <Button
-                size="lg"
-                className="w-16 h-16 rounded-full"
-                onClick={handlePlayPause}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="animate-spin">⏳</div>
-                ) : isPlaying ? (
-                  <Pause size={24} />
-                ) : (
-                  <Play size={24} className="ml-1" />
-                )}
-              </Button>
+          {/* Conversation Area */}
+          <Card className="flex-1 flex flex-col overflow-hidden">
+            {/* Transcript */}
+            <div className="flex-1 overflow-auto p-4 space-y-4" ref={transcriptRef}>
+              {/* Topic Header */}
+              {currentTopic && (
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4">
+                  <h3 className="font-semibold text-foreground mb-2">{currentTopic.title}</h3>
+                  <p className="text-sm text-muted-foreground">{currentTopic.description}</p>
+                </div>
+              )}
 
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleNext}
-                disabled={currentTopicIndex === topics.length - 1}
-              >
-                <SkipForward size={20} />
-              </Button>
+              {/* Live Transcript */}
+              {currentTranscript && (
+                <div className="flex gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <MessageSquare size={20} className="text-primary" />
+                  </div>
+                  <div className="flex-1 bg-accent/50 rounded-lg p-4">
+                    <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
+                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {currentTranscript}
+                      {isPlaying && currentTranscript !== fullNarrative && (
+                        <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-              <div className="ml-4">
+              {/* Placeholder */}
+              {!currentTranscript && !isLoading && (
+                <div className="flex items-center justify-center h-full text-center">
+                  <div className="text-muted-foreground">
+                    <Mic size={48} className="mx-auto mb-4 opacity-20" />
+                    <p className="text-sm">Click play to start your lesson</p>
+                    <p className="text-xs mt-2">Your AI mentor will explain the concepts here</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="border-t p-4">
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handlePrevious}
+                  disabled={currentTopicIndex === 0}
+                  title="Previous Topic"
+                >
+                  <SkipBack size={18} />
+                </Button>
+
+                <Button
+                  size="lg"
+                  className="w-14 h-14 rounded-full"
+                  onClick={handlePlayPause}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <span className="text-xs">...</span>
+                  ) : isPlaying ? (
+                    <Pause size={22} />
+                  ) : (
+                    <Play size={22} className="ml-0.5" />
+                  )}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleNext}
+                  disabled={currentTopicIndex === topics.length - 1}
+                  title="Next Topic"
+                >
+                  <SkipForward size={18} />
+                </Button>
+
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={toggleMute}
+                  title={isMuted ? 'Unmute' : 'Mute'}
                 >
-                  {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                  {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                 </Button>
               </div>
-            </div>
 
-            <div className="text-center mt-4 text-sm text-muted-foreground">
-              {isLoading ? (
-                'Generating AI narration...'
-              ) : isPlaying ? (
-                `Playing with ${useAIVoice && aiVoiceService.isConfigured() ? 'AI voice' : 'browser TTS'}...`
-              ) : (
-                'Click play to start the lesson'
-              )}
+              <div className="text-center mt-3 text-xs text-muted-foreground">
+                {isLoading ? (
+                  'Preparing your lesson...'
+                ) : isPlaying ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Speaking
+                  </span>
+                ) : (
+                  'Ready to learn'
+                )}
+              </div>
             </div>
           </Card>
         </div>
