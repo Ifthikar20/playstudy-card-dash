@@ -14,7 +14,7 @@ const LandingPage = () => {
           <img
             src="/logo-svg.svg"
             alt="PlayStudy"
-            className="h-16 w-auto"
+            className="h-24 w-auto"
           />
         </div>
         
@@ -173,7 +173,7 @@ const LandingPage = () => {
             <img
               src="/logo-svg.svg"
               alt="PlayStudy"
-              className="h-10 w-auto opacity-40"
+              className="h-14 w-auto opacity-40"
             />
             <span className="text-xs text-white/40">© 2024</span>
           </div>

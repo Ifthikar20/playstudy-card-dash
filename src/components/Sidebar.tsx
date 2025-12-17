@@ -44,7 +44,7 @@ export function Sidebar() {
             <img
               src="/logo-svg.svg"
               alt="PlayStudy"
-              className="h-14 w-auto"
+              className="h-20 w-auto"
             />
           )}
           <button
