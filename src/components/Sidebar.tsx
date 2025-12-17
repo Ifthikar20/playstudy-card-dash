@@ -41,7 +41,11 @@ export function Sidebar() {
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
           {!isCollapsed && (
-            <h1 className="text-xl font-bold text-primary">Playstudy.ai</h1>
+            <img
+              src="/logo-svg.svg"
+              alt="PlayStudy"
+              className="h-8 w-auto"
+            />
           )}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}

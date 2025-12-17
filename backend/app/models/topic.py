@@ -22,6 +22,7 @@ class Topic(Base):
     completed = Column(Boolean, default=False)
     score = Column(Integer, nullable=True)  # Score as percentage 0-100
     current_question_index = Column(Integer, default=0)
+    mentor_narrative = Column(Text, nullable=True)  # AI-generated mentor content for this topic
 
     # Relationships
     study_session = relationship("StudySession", back_populates="topics")

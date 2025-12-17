@@ -11,10 +11,11 @@ const LandingPage = () => {
       {/* Navigation */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 lg:px-12">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <Brain className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-white">PlayStudy.ai</span>
+          <img
+            src="/logo-svg.svg"
+            alt="PlayStudy"
+            className="h-10 w-auto"
+          />
         </div>
         
         <div className="flex items-center gap-3">
@@ -169,10 +170,12 @@ const LandingPage = () => {
       <footer className="relative z-10 px-6 py-8 border-t border-white/10">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 bg-primary rounded flex items-center justify-center">
-              <Brain className="w-3 h-3 text-primary-foreground" />
-            </div>
-            <span className="text-xs text-white/40">© 2024 PlayStudy.ai</span>
+            <img
+              src="/logo-svg.svg"
+              alt="PlayStudy"
+              className="h-6 w-auto opacity-40"
+            />
+            <span className="text-xs text-white/40">© 2024</span>
           </div>
           <div className="flex gap-6 text-xs text-white/40">
             <Link to="/privacy" className="hover:text-white/60 transition-colors">Privacy</Link>

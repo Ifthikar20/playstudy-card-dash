@@ -57,8 +57,14 @@ export default function MentorModePage() {
     }
   }, [currentTranscript, isPlaying]);
 
-  // Fetch providers and voices on mount
+  // Check authentication on mount
   useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setError('Please log in to use AI Mentor Mode.');
+      return;
+    }
+
     const loadProvidersAndVoices = async () => {
       try {
         console.log('[Mentor Mode] Fetching providers...');
@@ -66,8 +72,8 @@ export default function MentorModePage() {
         console.log('[Mentor Mode] Providers received:', providers);
         setAvailableProviders(providers);
 
-        // Prefer non-browser providers, but fallback to browser
-        const configuredProvider = providers.find(p => p.configured && p.id !== 'browser') || providers.find(p => p.configured);
+        // Use OpenAI as primary provider
+        const configuredProvider = providers.find(p => p.configured && p.id === 'openai') || providers.find(p => p.configured);
         if (configuredProvider) {
           console.log('[Mentor Mode] Using provider:', configuredProvider.id);
           setCurrentProvider(configuredProvider.id);
@@ -77,26 +83,18 @@ export default function MentorModePage() {
           console.log(`[Mentor Mode] Voices for ${configuredProvider.id}:`, voices);
 
           if (voices.length > 0) {
-            // For browser TTS, prefer a pleasant female voice
-            if (configuredProvider.id === 'browser') {
-              const preferredVoice = voices.find(v =>
-                v.name.includes('Google') && v.gender === 'female'
-              ) || voices.find(v =>
-                v.name.includes('Samantha') || v.name.includes('Victoria')
-              ) || voices.find(v =>
-                v.gender === 'female' && v.language?.startsWith('en')
-              ) || voices[0];
-              setCurrentVoice(preferredVoice.id);
-            } else {
-              // For API providers, use the first voice (already good quality)
-              setCurrentVoice(voices[0].id);
-            }
+            // Use the first voice (default Google Cloud voice)
+            setCurrentVoice(voices[0].id);
           }
         }
       } catch (error) {
         console.error('[Mentor Mode] Failed to load providers:', error);
-        setCurrentProvider('browser');
-        aiVoiceService.setProvider('browser');
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        if (errorMessage.includes('Authentication')) {
+          setError('Please log in to use AI Mentor Mode.');
+        } else {
+          setError('Failed to initialize TTS. Please check your configuration.');
+        }
       }
     };
 
@@ -135,17 +133,11 @@ export default function MentorModePage() {
     try {
       const voices = await aiVoiceService.fetchVoices(provider);
       if (voices.length > 0) {
-        if (provider === 'browser') {
-          const preferredVoice = voices.find(v =>
-            v.name.includes('Google') && v.gender === 'female'
-          ) || voices.find(v => v.gender === 'female') || voices[0];
-          setCurrentVoice(preferredVoice.id);
-        } else {
-          setCurrentVoice(voices[0].id);
-        }
+        setCurrentVoice(voices[0].id);
       }
     } catch (error) {
       console.error('Failed to load voices:', error);
+      setError('Failed to load voices for the selected provider.');
     }
   };
 
@@ -154,47 +146,76 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
-    // Create a conversational narrative
-    const narrative = `Hello! I'm your AI mentor. Let me help you understand ${topic.title}.
+    try {
+      // Get AI-generated content from DeepSeek
+      const token = localStorage.getItem('auth_token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-${topic.description ? `First, let me explain what this is about. ${topic.description}` : ''}
+      console.log('[Mentor Mode] Requesting AI-generated content from DeepSeek...');
+      console.log('[Mentor Mode] Topic data:', {
+        id: topic.id,
+        db_id: topic.db_id,
+        title: topic.title,
+        description: topic.description,
+        questionsCount: topic.questions?.length || 0
+      });
 
-Now, I'll break this down into key concepts for you.
+      // Only use db_id if it's a valid number (not string like "category-1")
+      const topicDbId = typeof topic.db_id === 'number' ? topic.db_id : null;
 
-${topic.questions && topic.questions.length > 0 ? topic.questions.map((q: any, idx: number) => {
-  const questionNumber = idx + 1;
-  const correctAnswer = q.options[q.correctAnswer];
+      const requestBody = {
+        topic_id: topicDbId,  // Use database ID only if it's a number
+        topic_title: topic.title || 'Untitled Topic',
+        topic_description: topic.description || null,
+        questions: Array.isArray(topic.questions) ? topic.questions : [],
+      };
 
-  return `Concept ${questionNumber}: ${q.question}
+      console.log('[Mentor Mode] Request body:', requestBody);
 
-${q.explanation ? `Here's what you need to know: ${q.explanation}` : ''}
+      const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-The correct answer is: ${correctAnswer}.`;
-}).join('\n\n') : 'This topic contains important concepts for you to learn.'}
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to generate AI content' }));
+        const errorMessage = typeof errorData.detail === 'string'
+          ? errorData.detail
+          : JSON.stringify(errorData, null, 2);
+        console.error('[Mentor Mode] API Error Response:', errorData);
+        throw new Error(errorMessage);
+      }
 
-That covers everything for ${topic.title}. Take your time to think about what we discussed. When you're ready, move on to the next topic.`;
+      const data = await response.json();
+      const narrative = data.narrative;
 
-    setFullNarrative(narrative);
-    setCurrentTranscript('');
+      console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
+
+      setFullNarrative(narrative);
+      setCurrentTranscript('');
 
     // Simulate live transcript
     const words = narrative.split(' ');
     let wordIndex = 0;
     let transcriptInterval: NodeJS.Timeout;
 
-    const startTranscript = () => {
-      transcriptInterval = setInterval(() => {
-        if (wordIndex < words.length) {
-          setCurrentTranscript(prev => {
-            const newText = prev + (prev ? ' ' : '') + words[wordIndex];
-            wordIndex++;
-            return newText;
-          });
-        } else {
-          clearInterval(transcriptInterval);
-        }
-      }, 180); // Adjust speed to match speech
-    };
+      const startTranscript = () => {
+        transcriptInterval = setInterval(() => {
+          if (wordIndex < words.length) {
+            setCurrentTranscript(prev => {
+              const newText = prev + (prev ? ' ' : '') + words[wordIndex];
+              wordIndex++;
+              return newText;
+            });
+          } else {
+            clearInterval(transcriptInterval);
+          }
+        }, 350); // Synced with OpenAI TTS speed (~170 words/minute)
+      };
 
     const handleEnd = () => {
       if (transcriptInterval) clearInterval(transcriptInterval);
@@ -227,8 +248,8 @@ That covers everything for ${topic.title}. Take your time to think about what we
         narrative,
         {
           voice: currentVoice,
-          speed: 0.9, // Slower for better understanding
-          model: currentProvider === 'openai' ? 'tts-1' : undefined,
+          speed: 1.0, // Normal speed for natural conversation
+          model: currentProvider === 'openai' ? 'tts-1' : undefined, // Fast, high-quality OpenAI model
           pitch: 0,
           provider: currentProvider
         },
@@ -237,9 +258,31 @@ That covers everything for ${topic.title}. Take your time to think about what we
           onError: handleError
         }
       );
-      setIsLoading(false);
+        setIsLoading(false);
+      } catch (aiError) {
+        console.error('[Mentor Mode] Failed to get AI content:', aiError);
+        const errorMessage = aiError instanceof Error ? aiError.message : 'Failed to generate lesson content';
+
+        // Check for specific error types
+        if (errorMessage.includes('API key') || errorMessage.includes('not configured')) {
+          setError('⚙️ API keys not configured. Please add DEEPSEEK_API_KEY and OPENAI_API_KEY to backend/.env file.');
+        } else if (errorMessage.includes('timeout')) {
+          setError('⏱️ Request timed out. The AI is taking too long. Please try again.');
+        } else {
+          setError(`❌ ${errorMessage}`);
+        }
+
+        setIsReading(false);
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
     } catch (error) {
-      handleError(error as Error);
+      console.error('[Mentor Mode] Error in speakContent:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      setError(`⚠️ ${errorMessage}`);
+      setIsReading(false);
+      setIsPlaying(false);
+      setIsLoading(false);
     }
   };
 
@@ -325,8 +368,7 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   <span className="text-sm font-medium">Voice Settings</span>
                 </div>
                 <span className="text-xs text-muted-foreground group-open:hidden">
-                  {currentProvider === 'browser' ? 'Browser TTS' :
-                   currentProvider === 'google-cloud' ? 'Google Cloud' : 'OpenAI'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
+                  {currentProvider === 'openai' ? 'OpenAI' : 'Google Cloud'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
                 </span>
               </summary>
               <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
@@ -339,7 +381,7 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   >
                     {availableProviders.map(provider => (
                       <option key={provider.id} value={provider.id}>
-                        {provider.name} {!provider.configured && provider.id !== 'browser' ? '(Not configured)' : ''}
+                        {provider.name} {!provider.configured ? '(Not configured)' : ''}
                       </option>
                     ))}
                   </select>
@@ -365,7 +407,16 @@ That covers everything for ${topic.title}. Take your time to think about what we
           {/* Error */}
           {error && (
             <Card className="p-3 border-destructive bg-destructive/10">
-              <p className="text-sm text-destructive">⚠️ {error}</p>
+              <p className="text-sm text-destructive mb-2">⚠️ {error}</p>
+              {error.includes('log in') && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => navigate('/auth')}
+                >
+                  Go to Login
+                </Button>
+              )}
             </Card>
           )}
 
@@ -389,12 +440,41 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   </div>
                   <div className="flex-1 bg-accent/50 rounded-lg p-4">
                     <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
-                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                      {currentTranscript}
+                    <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {currentTranscript.split('\n').map((line, index) => {
+                        // Format special lines with styling
+                        if (line.startsWith('🎯 CONCEPT')) {
+                          return <div key={index} className="font-bold text-primary text-lg mt-6 mb-3 border-l-4 border-primary pl-3">{line}</div>;
+                        } else if (line.startsWith('💡 Let me explain')) {
+                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-4 mb-2">{line}</div>;
+                        } else if (line.startsWith('✅ KEY ANSWER:')) {
+                          return <div key={index} className="font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-950 p-3 rounded-lg mt-3 mb-2 border-l-4 border-green-600">{line}</div>;
+                        } else if (line.startsWith('🌍 REAL-WORLD EXAMPLES:')) {
+                          return <div key={index} className="font-bold text-orange-600 dark:text-orange-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('❓ WHY THIS MATTERS:')) {
+                          return <div key={index} className="font-bold text-indigo-600 dark:text-indigo-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('📌 REMEMBER THIS:')) {
+                          return <div key={index} className="font-bold text-purple-600 dark:text-purple-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('🎓 LESSON SUMMARY:')) {
+                          return <div key={index} className="font-bold text-primary text-lg mt-6 mb-3 border-l-4 border-primary pl-3">{line}</div>;
+                        } else if (line.startsWith('📚 What is')) {
+                          return <div key={index} className="font-bold text-blue-600 dark:text-blue-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('Example 1:') || line.startsWith('Example 2:')) {
+                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-orange-300 dark:border-orange-700 pl-3">{line}</div>;
+                        } else if (line.match(/^\d+\./)) {
+                          return <div key={index} className="ml-4 mt-1 font-medium">{line}</div>;
+                        } else if (line.startsWith('━━━')) {
+                          return <div key={index} className="border-t-2 border-primary/30 my-4"></div>;
+                        } else if (line.trim() === '') {
+                          return <div key={index} className="h-3"></div>;
+                        } else {
+                          return <div key={index} className="leading-relaxed">{line}</div>;
+                        }
+                      })}
                       {isPlaying && currentTranscript !== fullNarrative && (
                         <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
               )}
