@@ -87,67 +87,56 @@ export default function BrowseGamesPage() {
             </div>
           </div>
 
-          {/* Games Grid - Netflix Style */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Games Grid - Retro Style */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {filteredGames.map((game) => (
-              <Card 
-                key={game.id} 
-                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border hover:border-primary/30"
+              <Card
+                key={game.id}
+                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border-2 hover:border-primary/50 bg-card"
+                onClick={() => handlePlayGame(game.id)}
               >
-                <div className="flex h-36">
-                  {/* Image Side */}
-                  <div className="relative w-44 shrink-0 overflow-hidden">
-                    <img 
-                      src={game.image} 
-                      alt={game.title}
-                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/20" />
-                    <Badge 
-                      className="absolute top-2 left-2 text-xs"
+                {/* Game Thumbnail */}
+                <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
+                  <img
+                    src={game.image}
+                    alt={game.title}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                  />
+
+                  {/* Overlay on Hover */}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Play size={32} className="text-white" />
+                  </div>
+
+                  {/* Top Badges */}
+                  <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
+                    <Badge
+                      className="text-xs backdrop-blur-sm"
                       variant={game.difficulty === "Easy" ? "secondary" : game.difficulty === "Medium" ? "default" : "destructive"}
                     >
                       {game.difficulty}
                     </Badge>
+                    <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                      <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                      <span className="text-xs font-bold text-white">{game.rating}</span>
+                    </div>
                   </div>
+                </div>
 
-                  {/* Content Side */}
-                  <div className="flex-1 p-4 flex flex-col justify-between">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {game.category}
-                        </Badge>
-                        <div className="flex items-center gap-1">
-                          <Star size={12} className="text-yellow-500 fill-yellow-500" />
-                          <span className="text-xs font-medium text-foreground">{game.rating}</span>
-                        </div>
-                      </div>
-                      <h3 className="font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {game.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {game.questionCount} MCQ • Level: {game.difficulty} • {game.points}+ points
-                      </p>
-                    </div>
+                {/* Game Info */}
+                <div className="p-3 space-y-2">
+                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem]">
+                    {game.title}
+                  </h3>
 
-                    {/* Bottom Row */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Users size={12} />
-                        <span className="text-xs font-medium">{game.likes.toLocaleString()} students</span>
-                      </div>
-                      <Button
-                        size="icon"
-                        className="rounded-full h-10 w-10 shadow-lg"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePlayGame(game.id);
-                        }}
-                      >
-                        <Play size={16} className="ml-0.5" />
-                      </Button>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Users size={12} />
+                      <span>{(game.likes / 1000).toFixed(1)}k</span>
                     </div>
+                    <Badge variant="outline" className="text-xs">
+                      {game.category}
+                    </Badge>
                   </div>
                 </div>
               </Card>
