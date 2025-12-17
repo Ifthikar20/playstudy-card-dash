@@ -154,13 +154,14 @@ export default function MentorModePage() {
       console.log('[Mentor Mode] Requesting AI-generated content from DeepSeek...');
       console.log('[Mentor Mode] Topic data:', {
         id: topic.id,
+        db_id: topic.db_id,
         title: topic.title,
         description: topic.description,
         questionsCount: topic.questions?.length || 0
       });
 
       const requestBody = {
-        topic_id: topic.id || null,
+        topic_id: topic.db_id || null,  // Use database ID, not frontend ID
         topic_title: topic.title || 'Untitled Topic',
         topic_description: topic.description || null,
         questions: Array.isArray(topic.questions) ? topic.questions : [],
