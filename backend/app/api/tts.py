@@ -69,7 +69,7 @@ async def generate_speech(
     try:
         logger.info("=" * 60)
         logger.info("[API /tts/generate] TTS generation requested")
-        logger.info(f"[API /tts/generate] User: {current_user.get('email', 'unknown')}")
+        logger.info(f"[API /tts/generate] User: {current_user.email}")
         logger.info(f"[API /tts/generate] Provider: {tts_request.provider}")
         logger.info(f"[API /tts/generate] Voice: {tts_request.voice}")
         logger.info(f"[API /tts/generate] Text length: {len(tts_request.text)} chars")
@@ -134,12 +134,12 @@ async def get_providers(
     try:
         print("\n" + "=" * 70)
         print("🔊 [API /tts/providers] Endpoint called")
-        print(f"👤 User: {current_user.get('email', 'unknown')}")
+        print(f"👤 User: {current_user.email}")
         print("=" * 70)
 
         logger.info("=" * 70)
         logger.info("[API /tts/providers] Endpoint called")
-        logger.info(f"[API /tts/providers] User: {current_user.get('email', 'unknown')}")
+        logger.info(f"[API /tts/providers] User: {current_user.email}")
 
         providers = tts_service.get_available_providers()
 
