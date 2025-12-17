@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, FileText, Loader2 } from "lucide-react";
+import { Upload, FileText } from "lucide-react";
 
 interface StudyContentUploadProps {
   onContentSubmit: (content: string) => void;
@@ -47,8 +47,10 @@ export function StudyContentUpload({ onContentSubmit, isProcessing }: StudyConte
           >
             {isProcessing ? (
               <>
-                <Loader2 size={16} className="mr-2 animate-spin" />
-                Processing...
+                <div className="inline-block h-4 w-4 mr-2 rounded-full border-2 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin"></div>
+                <span className="bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent font-semibold">
+                  Processing...
+                </span>
               </>
             ) : (
               <>
