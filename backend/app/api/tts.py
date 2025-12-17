@@ -7,12 +7,14 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
+from sqlalchemy.orm import Session
 from app.services.tts_service import tts_service
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_db
 from app.core.rate_limit import limiter
 from slowapi import Limiter
 from fastapi import Request
 from app.config import settings
+from app.models.topic import Topic
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +224,7 @@ async def get_provider_voices(
 
 class MentorContentRequest(BaseModel):
     """Request model for mentor content generation."""
+    topic_id: Optional[int] = Field(None, description="Topic ID to save narrative to")
     topic_title: str = Field(..., description="Title of the topic")
     topic_description: Optional[str] = Field(None, description="Description of the topic")
     questions: List[Dict] = Field(..., description="List of questions with options and correct answers")
@@ -244,6 +247,7 @@ async def generate_mentor_content(
     request: Request,
     content_request: MentorContentRequest,
     current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Generate comprehensive mentor content using DeepSeek AI.
@@ -256,7 +260,21 @@ async def generate_mentor_content(
     - Formatted for text-to-speech
     """
     try:
-        logger.info(f"[Mentor Content] Generating content for: {content_request.topic_title}")
+        logger.info(f"[Mentor Content] Request for topic: {content_request.topic_title}")
+
+        # Check if narrative already exists for this topic
+        if content_request.topic_id:
+            topic = db.query(Topic).filter(Topic.id == content_request.topic_id).first()
+            if topic and topic.mentor_narrative:
+                logger.info(f"[Mentor Content] ✅ Using cached narrative for topic {content_request.topic_id}")
+                word_count = len(topic.mentor_narrative.split())
+                estimated_seconds = int((word_count / 150) * 60)
+                return MentorContentResponse(
+                    narrative=topic.mentor_narrative,
+                    estimated_duration_seconds=estimated_seconds
+                )
+
+        logger.info(f"[Mentor Content] Generating new content for: {content_request.topic_title}")
 
         # Build the prompt for DeepSeek
         prompt = f"""You are an expert AI mentor creating an engaging, comprehensive lesson.
@@ -347,6 +365,14 @@ Make sure to use the exact emoji markers listed above.
         estimated_seconds = int((word_count / 150) * 60)
 
         logger.info(f"[Mentor Content] ✅ Generated {word_count} words (~{estimated_seconds}s)")
+
+        # Save narrative to topic if topic_id provided
+        if content_request.topic_id:
+            topic = db.query(Topic).filter(Topic.id == content_request.topic_id).first()
+            if topic:
+                topic.mentor_narrative = narrative
+                db.commit()
+                logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
 
         return MentorContentResponse(
             narrative=narrative,

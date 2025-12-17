@@ -160,6 +160,7 @@ export default function MentorModePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          topic_id: topic.id,  // Include topic ID for caching
           topic_title: topic.title,
           topic_description: topic.description,
           questions: topic.questions || [],
@@ -167,7 +168,8 @@ export default function MentorModePage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate AI content');
+        const errorData = await response.json().catch(() => ({ detail: 'Failed to generate AI content' }));
+        throw new Error(errorData.detail || 'Failed to generate AI content');
       }
 
       const data = await response.json();
@@ -241,14 +243,25 @@ export default function MentorModePage() {
         setIsLoading(false);
       } catch (aiError) {
         console.error('[Mentor Mode] Failed to get AI content:', aiError);
-        setError('Failed to generate lesson content. Please try again.');
+        const errorMessage = aiError instanceof Error ? aiError.message : 'Failed to generate lesson content';
+
+        // Check for specific error types
+        if (errorMessage.includes('API key') || errorMessage.includes('not configured')) {
+          setError('⚙️ API keys not configured. Please add DEEPSEEK_API_KEY and OPENAI_API_KEY to backend/.env file.');
+        } else if (errorMessage.includes('timeout')) {
+          setError('⏱️ Request timed out. The AI is taking too long. Please try again.');
+        } else {
+          setError(`❌ ${errorMessage}`);
+        }
+
         setIsReading(false);
         setIsPlaying(false);
         setIsLoading(false);
       }
     } catch (error) {
       console.error('[Mentor Mode] Error in speakContent:', error);
-      setError('An error occurred. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      setError(`⚠️ ${errorMessage}`);
       setIsReading(false);
       setIsPlaying(false);
       setIsLoading(false);
