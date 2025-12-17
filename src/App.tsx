@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { LoadingBrain } from "@/components/LoadingSpinner";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -91,10 +92,7 @@ const AuthenticatedApp = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your dashboard...</p>
-        </div>
+        <LoadingBrain message="Loading your dashboard..." />
       </div>
     );
   }
