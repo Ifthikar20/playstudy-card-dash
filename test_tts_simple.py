@@ -199,7 +199,7 @@ def simulate_transcript():
     """Simulate live transcript."""
     print_step(4, "Live Transcript Simulation")
 
-    text = "Hello! I'm your AI mentor. Let me help you understand this topic."
+    text = "Welcome to your personalized learning session! I'll guide you through each concept step by step, with clear explanations and practice questions."
     words = text.split()
 
     print(f"📝 Text: '{text}'")
