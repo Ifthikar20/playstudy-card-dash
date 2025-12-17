@@ -66,8 +66,8 @@ export default function MentorModePage() {
         console.log('[Mentor Mode] Providers received:', providers);
         setAvailableProviders(providers);
 
-        // Prefer non-browser providers, but fallback to browser
-        const configuredProvider = providers.find(p => p.configured && p.id !== 'browser') || providers.find(p => p.configured);
+        // Use Google Cloud as primary provider
+        const configuredProvider = providers.find(p => p.configured && p.id === 'google-cloud') || providers.find(p => p.configured);
         if (configuredProvider) {
           console.log('[Mentor Mode] Using provider:', configuredProvider.id);
           setCurrentProvider(configuredProvider.id);
@@ -77,26 +77,13 @@ export default function MentorModePage() {
           console.log(`[Mentor Mode] Voices for ${configuredProvider.id}:`, voices);
 
           if (voices.length > 0) {
-            // For browser TTS, prefer a pleasant female voice
-            if (configuredProvider.id === 'browser') {
-              const preferredVoice = voices.find(v =>
-                v.name.includes('Google') && v.gender === 'female'
-              ) || voices.find(v =>
-                v.name.includes('Samantha') || v.name.includes('Victoria')
-              ) || voices.find(v =>
-                v.gender === 'female' && v.language?.startsWith('en')
-              ) || voices[0];
-              setCurrentVoice(preferredVoice.id);
-            } else {
-              // For API providers, use the first voice (already good quality)
-              setCurrentVoice(voices[0].id);
-            }
+            // Use the first voice (default Google Cloud voice)
+            setCurrentVoice(voices[0].id);
           }
         }
       } catch (error) {
         console.error('[Mentor Mode] Failed to load providers:', error);
-        setCurrentProvider('browser');
-        aiVoiceService.setProvider('browser');
+        setError('Failed to initialize Google Cloud TTS. Please check your configuration.');
       }
     };
 
@@ -135,17 +122,11 @@ export default function MentorModePage() {
     try {
       const voices = await aiVoiceService.fetchVoices(provider);
       if (voices.length > 0) {
-        if (provider === 'browser') {
-          const preferredVoice = voices.find(v =>
-            v.name.includes('Google') && v.gender === 'female'
-          ) || voices.find(v => v.gender === 'female') || voices[0];
-          setCurrentVoice(preferredVoice.id);
-        } else {
-          setCurrentVoice(voices[0].id);
-        }
+        setCurrentVoice(voices[0].id);
       }
     } catch (error) {
       console.error('Failed to load voices:', error);
+      setError('Failed to load voices for the selected provider.');
     }
   };
 
@@ -325,8 +306,7 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   <span className="text-sm font-medium">Voice Settings</span>
                 </div>
                 <span className="text-xs text-muted-foreground group-open:hidden">
-                  {currentProvider === 'browser' ? 'Browser TTS' :
-                   currentProvider === 'google-cloud' ? 'Google Cloud' : 'OpenAI'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
+                  {currentProvider === 'google-cloud' ? 'Google Cloud' : 'OpenAI'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
                 </span>
               </summary>
               <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
@@ -339,7 +319,7 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   >
                     {availableProviders.map(provider => (
                       <option key={provider.id} value={provider.id}>
-                        {provider.name} {!provider.configured && provider.id !== 'browser' ? '(Not configured)' : ''}
+                        {provider.name} {!provider.configured ? '(Not configured)' : ''}
                       </option>
                     ))}
                   </select>
