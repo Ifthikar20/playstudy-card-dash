@@ -160,8 +160,11 @@ export default function MentorModePage() {
         questionsCount: topic.questions?.length || 0
       });
 
+      // Only use db_id if it's a valid number (not string like "category-1")
+      const topicDbId = typeof topic.db_id === 'number' ? topic.db_id : null;
+
       const requestBody = {
-        topic_id: topic.db_id || null,  // Use database ID, not frontend ID
+        topic_id: topicDbId,  // Use database ID only if it's a number
         topic_title: topic.title || 'Untitled Topic',
         topic_description: topic.description || null,
         questions: Array.isArray(topic.questions) ? topic.questions : [],
