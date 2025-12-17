@@ -122,6 +122,58 @@ export default function MentorModePage() {
     }
   };
 
+  // Generate additional contextual examples
+  const generateAdditionalExamples = (topicTitle: string, question: string, conceptNumber: number): string => {
+    const searchText = `${topicTitle} ${question}`.toLowerCase();
+
+    // Programming examples
+    if (searchText.includes('variable')) {
+      return `Example 1: In a game, a variable called "score" keeps track of your points. Start at 0, get 10 points for each level—the variable updates automatically.\n\nExample 2: In a shopping cart, a variable called "totalPrice" adds up all your items. Add a $20 shirt, a $15 hat—the total becomes $35. That's variables storing and updating data.`;
+    }
+
+    if (searchText.includes('loop')) {
+      return `Example 1: Your alarm clock uses a loop. Every 60 seconds, it checks: "Is it time to ring?" If not, wait another 60 seconds and check again. That's a loop in action.\n\nExample 2: When Netflix loads videos, it uses a loop to download each chunk of data until the whole video is ready. Check, download, repeat—that's how streaming works.`;
+    }
+
+    if (searchText.includes('function')) {
+      return `Example 1: The "like" button on social media is a function. Click it, and it: (1) updates the count, (2) changes color, (3) saves to database. Same steps, every time.\n\nExample 2: Your phone's calculator has a function for addition. Type 5 + 3, press equals, it always returns 8. One function, works every time you need it.`;
+    }
+
+    if (searchText.includes('array')) {
+      return `Example 1: Your browser tabs are like an array. Each tab is an item in order. Close one, the others shift up. That's how arrays manage lists.\n\nExample 2: Amazon's shopping cart is an array of products. Add items, remove items, view them in order—classic array behavior.`;
+    }
+
+    // Math examples
+    if (searchText.includes('algebra')) {
+      return `Example 1: You're splitting a $60 dinner bill among friends. If there are x people, each pays 60 ÷ x. That's algebra solving real problems.\n\nExample 2: Your phone battery drains 10% per hour. If it's at 80%, how long until it dies? 80 ÷ 10 = 8 hours. You just used algebra!`;
+    }
+
+    if (searchText.includes('geometry')) {
+      return `Example 1: Parking your car? You're using angles and spatial reasoning—pure geometry. Will it fit? What angle do I turn?\n\nExample 2: Playing pool or mini-golf? Every shot uses geometry—angles of reflection, distances, trajectories. Geometry in action!`;
+    }
+
+    // Science examples
+    if (searchText.includes('physics')) {
+      return `Example 1: Riding a bike around a turn? You lean inward to balance centrifugal force. That's physics keeping you upright.\n\nExample 2: Your phone's gyroscope detects rotation using physics principles. Rotate your phone, the screen rotates—physics sensors at work.`;
+    }
+
+    if (searchText.includes('chemistry')) {
+      return `Example 1: Soap cleaning dishes uses chemistry. Soap molecules grab grease on one end, water on the other—chemical bonding in action.\n\nExample 2: Your car battery? Chemical reactions between lead and acid create electricity. Turn the key—chemistry starts your car.`;
+    }
+
+    // SaaS/Infrastructure examples
+    if (searchText.includes('saas') || searchText.includes('cloud') || searchText.includes('infrastructure')) {
+      return `Example 1: When you upload a photo to Instagram, it: (1) goes to their servers (infrastructure), (2) gets processed (platform), (3) appears in your feed (application). All layers working together.\n\nExample 2: Google Docs lets multiple people edit at once. The infrastructure handles millions of users, the platform syncs changes, the app shows you the document. Three layers, seamless experience.`;
+    }
+
+    if (searchText.includes('layer') || searchText.includes('architecture')) {
+      return `Example 1: Ordering food on Uber Eats: You use the app layer (UI), it processes your order (application layer), payment goes through Stripe (service layer), data saves to database (data layer). Multiple layers working as one.\n\nExample 2: Watching Netflix: Your device (user layer), Netflix app (application layer), recommendation engine (services layer), video files (data layer), AWS servers (infrastructure layer). Five layers delivering your show.`;
+    }
+
+    // Default comprehensive examples
+    return `Example 1: Think of this like building a house. You need a foundation (the basics), walls (the structure), and a roof (protection). Each part depends on the others, just like this concept builds on fundamentals.\n\nExample 2: Or consider your smartphone. The hardware is the foundation, the operating system is the platform, and your apps are what you interact with. Each layer serves a purpose, working together to give you the experience you want.`;
+  };
+
   // Generate real-world examples based on the topic and question
   const generateRealWorldExample = (topicTitle: string, question: string, answer: string): string => {
     // Create contextual examples based on common educational topics
@@ -187,46 +239,86 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
-    // Create an enhanced conversational narrative with structure
-    let narrative = `Hey there! I'm your AI mentor, and today we're going to explore ${topic.title}. Let's make this easy and fun to understand!\n\n`;
+    // Create an extensive, teacher-style narrative
+    let narrative = `Hey there! I'm your AI mentor, and today we're going to deeply explore ${topic.title}. \n\nI won't just tell you what it is—I'll show you how it works in the real world, why it matters, and how you can apply it. Let's make this crystal clear!\n\n`;
 
     if (topic.description) {
-      narrative += `📚 What is this about?\n${topic.description}\n\n`;
+      narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      narrative += `📚 What is ${topic.title}?\n\n`;
+      narrative += `${topic.description}\n\n`;
+      narrative += `Now, let me break this down in a way that makes sense. We'll go through each concept step by step, with real examples you see every single day.\n\n`;
     }
 
-    narrative += `Let me break this down into bite-sized pieces. I'll give you key points, explanations, and real-world examples to make everything crystal clear.\n\n`;
-
-    // Generate content for each question/concept
+    // Generate extensive content for each question/concept
     if (topic.questions && topic.questions.length > 0) {
       topic.questions.forEach((q: any, idx: number) => {
         const questionNumber = idx + 1;
         const correctAnswer = q.options[q.correctAnswer];
 
         narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        narrative += `🎯 Concept ${questionNumber}: ${q.question}\n\n`;
+        narrative += `🎯 CONCEPT ${questionNumber}: ${q.question}\n\n`;
 
+        // Main explanation - extensive
         if (q.explanation) {
-          narrative += `💡 Here's what you need to know:\n${q.explanation}\n\n`;
+          narrative += `💡 Let me explain this clearly:\n\n`;
+          narrative += `${q.explanation}\n\n`;
+
+          // Add deeper context
+          narrative += `Here's what this means in practice:\n\n`;
+          narrative += `Think about it this way—this concept is fundamental because it shows up everywhere. Whether you're building something, solving a problem, or just trying to understand how things work, this is one of those core ideas you'll use again and again.\n\n`;
         }
 
-        narrative += `✅ Key Answer: ${correctAnswer}\n\n`;
+        // Key answer with emphasis
+        narrative += `✅ KEY ANSWER:\n`;
+        narrative += `${correctAnswer}\n\n`;
+        narrative += `This is important—write this down if you can. This is the core takeaway.\n\n`;
 
-        // Add a real-world example based on the concept
-        narrative += `🌍 Real-World Example:\n`;
-        const examplePrompt = generateRealWorldExample(topic.title, q.question, correctAnswer);
-        narrative += `${examplePrompt}\n\n`;
+        // Real-world example - extensive with multiple scenarios
+        narrative += `🌍 REAL-WORLD EXAMPLES:\n\n`;
+        const mainExample = generateRealWorldExample(topic.title, q.question, correctAnswer);
+        narrative += `${mainExample}\n\n`;
 
-        // Add key takeaway
-        narrative += `📌 Remember This:\n`;
-        narrative += `The most important thing to remember is: ${correctAnswer}. This connects directly to how ${topic.title.toLowerCase()} works in practice.\n\n`;
+        // Add additional context examples
+        narrative += `Let me give you more examples so you really get this:\n\n`;
+        narrative += generateAdditionalExamples(topic.title, q.question, questionNumber);
+        narrative += `\n`;
+
+        // Why it matters section
+        narrative += `❓ WHY THIS MATTERS:\n\n`;
+        narrative += `You might be wondering—why do I need to know this? Here's why:\n\n`;
+        narrative += `Understanding ${correctAnswer.toLowerCase()} isn't just about passing a test. It's about building a mental model of how things work. Once you understand this, you'll start seeing it everywhere—in the apps you use, the problems you solve, even in everyday situations.\n\n`;
+
+        // Remember this - key takeaway
+        narrative += `📌 REMEMBER THIS:\n\n`;
+        narrative += `If you forget everything else, remember this: ${correctAnswer}.\n\n`;
+        narrative += `This connects directly to how ${topic.title.toLowerCase()} works in the real world. When you encounter similar situations, you'll know exactly what's happening and why.\n\n`;
+
+        // Add spacing between concepts
+        if (idx < topic.questions.length - 1) {
+          narrative += `Alright, let's move to the next concept. Stay with me!\n\n`;
+        }
       });
     } else {
-      narrative += `This topic contains important concepts about ${topic.title}. Let's explore the key ideas together.\n\n`;
+      narrative += `This topic contains important concepts about ${topic.title}. Let me walk you through the key ideas, one by one.\n\n`;
     }
 
+    // Comprehensive summary
     narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    narrative += `🎓 Summary:\nWe've covered the essential concepts of ${topic.title}. Take a moment to think about these ideas and how they apply to real situations. When you're ready, let's move to the next topic!\n\n`;
-    narrative += `Remember: Learning is a journey, not a race. You're doing great!`;
+    narrative += `🎓 LESSON SUMMARY:\n\n`;
+    narrative += `Okay, let's recap what we've covered about ${topic.title}.\n\n`;
+
+    // List key points
+    if (topic.questions && topic.questions.length > 0) {
+      narrative += `We discussed ${topic.questions.length} major concept${topic.questions.length > 1 ? 's' : ''}:\n\n`;
+      topic.questions.forEach((q: any, idx: number) => {
+        narrative += `${idx + 1}. ${q.options[q.correctAnswer]}\n`;
+      });
+      narrative += `\n`;
+    }
+
+    narrative += `Take a moment to think about these ideas. How do they connect? Where have you seen them before? How can you use them?\n\n`;
+    narrative += `Remember: Learning isn't about memorizing—it's about understanding. And you're doing great!\n\n`;
+    narrative += `When you're ready, let's move to the next topic. There's so much more to explore!`;
 
     setFullNarrative(narrative);
     setCurrentTranscript('');
@@ -454,26 +546,32 @@ export default function MentorModePage() {
                     <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                       {currentTranscript.split('\n').map((line, index) => {
                         // Format special lines with styling
-                        if (line.startsWith('🎯 Concept')) {
-                          return <div key={index} className="font-bold text-primary text-base mt-4 mb-2">{line}</div>;
-                        } else if (line.startsWith('💡 Here\'s what you need to know:')) {
-                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-3">{line}</div>;
-                        } else if (line.startsWith('✅ Key Answer:')) {
-                          return <div key={index} className="font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950 p-2 rounded mt-2">{line}</div>;
-                        } else if (line.startsWith('🌍 Real-World Example:')) {
-                          return <div key={index} className="font-semibold text-orange-600 dark:text-orange-400 mt-3">{line}</div>;
-                        } else if (line.startsWith('📌 Remember This:')) {
-                          return <div key={index} className="font-semibold text-purple-600 dark:text-purple-400 mt-3">{line}</div>;
-                        } else if (line.startsWith('🎓 Summary:')) {
-                          return <div key={index} className="font-bold text-primary text-base mt-4 mb-2">{line}</div>;
-                        } else if (line.startsWith('📚 What is this about?')) {
-                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-2">{line}</div>;
+                        if (line.startsWith('🎯 CONCEPT')) {
+                          return <div key={index} className="font-bold text-primary text-lg mt-6 mb-3 border-l-4 border-primary pl-3">{line}</div>;
+                        } else if (line.startsWith('💡 Let me explain')) {
+                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-4 mb-2">{line}</div>;
+                        } else if (line.startsWith('✅ KEY ANSWER:')) {
+                          return <div key={index} className="font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-950 p-3 rounded-lg mt-3 mb-2 border-l-4 border-green-600">{line}</div>;
+                        } else if (line.startsWith('🌍 REAL-WORLD EXAMPLES:')) {
+                          return <div key={index} className="font-bold text-orange-600 dark:text-orange-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('❓ WHY THIS MATTERS:')) {
+                          return <div key={index} className="font-bold text-indigo-600 dark:text-indigo-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('📌 REMEMBER THIS:')) {
+                          return <div key={index} className="font-bold text-purple-600 dark:text-purple-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('🎓 LESSON SUMMARY:')) {
+                          return <div key={index} className="font-bold text-primary text-lg mt-6 mb-3 border-l-4 border-primary pl-3">{line}</div>;
+                        } else if (line.startsWith('📚 What is')) {
+                          return <div key={index} className="font-bold text-blue-600 dark:text-blue-400 mt-4 mb-2 text-base">{line}</div>;
+                        } else if (line.startsWith('Example 1:') || line.startsWith('Example 2:')) {
+                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-orange-300 dark:border-orange-700 pl-3">{line}</div>;
+                        } else if (line.match(/^\d+\./)) {
+                          return <div key={index} className="ml-4 mt-1 font-medium">{line}</div>;
                         } else if (line.startsWith('━━━')) {
-                          return <div key={index} className="border-t border-primary/20 my-3"></div>;
+                          return <div key={index} className="border-t-2 border-primary/30 my-4"></div>;
                         } else if (line.trim() === '') {
-                          return <div key={index} className="h-2"></div>;
+                          return <div key={index} className="h-3"></div>;
                         } else {
-                          return <div key={index}>{line}</div>;
+                          return <div key={index} className="leading-relaxed">{line}</div>;
                         }
                       })}
                       {isPlaying && currentTranscript !== fullNarrative && (
