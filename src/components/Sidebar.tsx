@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAppStore } from "@/store/appStore";
+import { AnimatedXP } from "@/components/AnimatedXP";
 
 import { Gamepad2 } from "lucide-react";
 
@@ -55,13 +56,7 @@ export function Sidebar() {
           </button>
         </div>
         {/* XP Display */}
-        {!isCollapsed && (
-          <div className="mt-3">
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm font-bold text-primary animate-[pulse_2s_ease-in-out_infinite]">
-              2,450 XP
-            </span>
-          </div>
-        )}
+        {!isCollapsed && <AnimatedXP />}
       </div>
 
       <nav className="p-4 space-y-2">
