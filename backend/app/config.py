@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     # DeepSeek AI
     DEEPSEEK_API_KEY: str
 
-    # TTS Provider (Optional)
+    # TTS Providers (Optional)
+    OPENAI_API_KEY: Optional[str] = None
     GOOGLE_CLOUD_API_KEY: Optional[str] = None
 
     model_config = SettingsConfigDict(
@@ -61,42 +62,41 @@ settings = Settings()
 
 # Enhanced TTS configuration logging (both logger and print for visibility)
 print("\n" + "=" * 70)
-print("🔊 GOOGLE CLOUD TTS CONFIGURATION CHECK")
+print("🔊 TTS PROVIDERS CONFIGURATION CHECK")
 print("=" * 70)
 logger.info("=" * 70)
-logger.info("🔊 GOOGLE CLOUD TTS CONFIGURATION CHECK")
+logger.info("🔊 TTS PROVIDERS CONFIGURATION CHECK")
 logger.info("=" * 70)
 
-# Check if key exists and log details
-key_exists = bool(settings.GOOGLE_CLOUD_API_KEY)
-key_length = len(settings.GOOGLE_CLOUD_API_KEY) if settings.GOOGLE_CLOUD_API_KEY else 0
-is_placeholder = settings.GOOGLE_CLOUD_API_KEY == "your-google-cloud-api-key-here" if settings.GOOGLE_CLOUD_API_KEY else False
-
-print(f"📋 Key Exists: {key_exists}")
-print(f"📏 Key Length: {key_length} characters")
-print(f"⚠️  Is Placeholder: {is_placeholder}")
-
-logger.info(f"📋 Key Exists: {key_exists}")
-logger.info(f"📏 Key Length: {key_length} characters")
-logger.info(f"⚠️  Is Placeholder: {is_placeholder}")
-
-if settings.GOOGLE_CLOUD_API_KEY and not is_placeholder:
+# Check OpenAI TTS
+print("\n📌 OpenAI TTS:")
+openai_configured = bool(settings.OPENAI_API_KEY)
+if openai_configured:
     print(f"✅ Status: CONFIGURED")
-    print(f"🔑 API Key (first 15 chars): {settings.GOOGLE_CLOUD_API_KEY[:15]}...")
-    print(f"🔑 API Key (last 8 chars): ...{settings.GOOGLE_CLOUD_API_KEY[-8:]}")
-    logger.info(f"✅ Status: CONFIGURED")
-    logger.info(f"🔑 API Key (first 15 chars): {settings.GOOGLE_CLOUD_API_KEY[:15]}...")
-    logger.info(f"🔑 API Key (last 8 chars): ...{settings.GOOGLE_CLOUD_API_KEY[-8:]}")
-elif is_placeholder:
-    print(f"❌ Status: NOT CONFIGURED (placeholder value detected)")
-    print(f"⚠️  Action Required: Replace placeholder in backend/.env")
-    logger.warning("❌ Status: NOT CONFIGURED (placeholder value detected)")
-    logger.warning("⚠️  Action Required: Replace placeholder in backend/.env")
+    print(f"🔑 API Key: {settings.OPENAI_API_KEY[:7]}...{settings.OPENAI_API_KEY[-4:]}")
+    logger.info(f"[OpenAI TTS] CONFIGURED - Key: {settings.OPENAI_API_KEY[:7]}...")
 else:
-    print(f"❌ Status: NOT CONFIGURED (key missing)")
-    print(f"⚠️  Add GOOGLE_CLOUD_API_KEY to backend/.env")
-    logger.warning("❌ Status: NOT CONFIGURED (key missing)")
-    logger.warning("⚠️  Add GOOGLE_CLOUD_API_KEY to backend/.env")
+    print(f"❌ Status: NOT CONFIGURED")
+    print(f"⚠️  Add OPENAI_API_KEY to backend/.env")
+    logger.warning("[OpenAI TTS] NOT CONFIGURED")
 
-print("=" * 70 + "\n")
+# Check Google Cloud TTS
+print("\n📌 Google Cloud TTS:")
+google_key_exists = bool(settings.GOOGLE_CLOUD_API_KEY)
+google_is_placeholder = settings.GOOGLE_CLOUD_API_KEY == "your-google-cloud-api-key-here" if settings.GOOGLE_CLOUD_API_KEY else False
+google_configured = google_key_exists and not google_is_placeholder
+
+if google_configured:
+    print(f"✅ Status: CONFIGURED")
+    print(f"🔑 API Key: {settings.GOOGLE_CLOUD_API_KEY[:15]}...{settings.GOOGLE_CLOUD_API_KEY[-8:]}")
+    logger.info(f"[Google Cloud TTS] CONFIGURED - Key: {settings.GOOGLE_CLOUD_API_KEY[:15]}...")
+elif google_is_placeholder:
+    print(f"❌ Status: NOT CONFIGURED (placeholder detected)")
+    logger.warning("[Google Cloud TTS] NOT CONFIGURED (placeholder)")
+else:
+    print(f"❌ Status: NOT CONFIGURED")
+    print(f"⚠️  Add GOOGLE_CLOUD_API_KEY to backend/.env")
+    logger.warning("[Google Cloud TTS] NOT CONFIGURED")
+
+print("\n" + "=" * 70 + "\n")
 logger.info("=" * 70)

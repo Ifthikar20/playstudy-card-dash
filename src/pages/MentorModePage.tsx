@@ -72,8 +72,8 @@ export default function MentorModePage() {
         console.log('[Mentor Mode] Providers received:', providers);
         setAvailableProviders(providers);
 
-        // Use Google Cloud as primary provider
-        const configuredProvider = providers.find(p => p.configured && p.id === 'google-cloud') || providers.find(p => p.configured);
+        // Use OpenAI as primary provider
+        const configuredProvider = providers.find(p => p.configured && p.id === 'openai') || providers.find(p => p.configured);
         if (configuredProvider) {
           console.log('[Mentor Mode] Using provider:', configuredProvider.id);
           setCurrentProvider(configuredProvider.id);
@@ -93,7 +93,7 @@ export default function MentorModePage() {
         if (errorMessage.includes('Authentication')) {
           setError('Please log in to use AI Mentor Mode.');
         } else {
-          setError('Failed to initialize Google Cloud TTS. Please check your configuration.');
+          setError('Failed to initialize TTS. Please check your configuration.');
         }
       }
     };
@@ -317,7 +317,7 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   <span className="text-sm font-medium">Voice Settings</span>
                 </div>
                 <span className="text-xs text-muted-foreground group-open:hidden">
-                  {currentProvider === 'google-cloud' ? 'Google Cloud' : 'OpenAI'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
+                  {currentProvider === 'openai' ? 'OpenAI' : 'Google Cloud'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
                 </span>
               </summary>
               <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">

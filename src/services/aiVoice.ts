@@ -1,7 +1,7 @@
 /**
- * AI Voice Service - Frontend Client for Google Cloud TTS API
+ * AI Voice Service - Frontend Client for TTS API
  *
- * This service calls the backend API for Text-to-Speech generation using Google Cloud.
+ * This service calls the backend API for Text-to-Speech generation using OpenAI or Google Cloud.
  * All TTS logic and API keys are securely stored in the backend.
  */
 
@@ -40,7 +40,7 @@ export type VoiceModel = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer
 class AIVoiceService {
   private apiUrl: string;
   private currentAudio: HTMLAudioElement | null = null;
-  private currentProvider: TTSProvider = 'google-cloud';
+  private currentProvider: TTSProvider = 'openai';
   private providersCache: TTSProviderInfo[] | null = null;
   private voicesCache: Record<string, TTSVoiceInfo[]> = {};
 
@@ -137,8 +137,8 @@ class AIVoiceService {
     if (this.providersCache) {
       return this.providersCache;
     }
-    // Return Google Cloud as default
-    return [{ id: 'google-cloud', name: 'Google Cloud', configured: true }];
+    // Return OpenAI as default
+    return [{ id: 'openai', name: 'OpenAI', configured: true }];
   }
 
   /**
