@@ -152,6 +152,21 @@ export default function MentorModePage() {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
       console.log('[Mentor Mode] Requesting AI-generated content from DeepSeek...');
+      console.log('[Mentor Mode] Topic data:', {
+        id: topic.id,
+        title: topic.title,
+        description: topic.description,
+        questionsCount: topic.questions?.length || 0
+      });
+
+      const requestBody = {
+        topic_id: topic.id || null,
+        topic_title: topic.title || 'Untitled Topic',
+        topic_description: topic.description || null,
+        questions: Array.isArray(topic.questions) ? topic.questions : [],
+      };
+
+      console.log('[Mentor Mode] Request body:', requestBody);
 
       const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
         method: 'POST',
@@ -159,17 +174,16 @@ export default function MentorModePage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          topic_id: topic.id,  // Include topic ID for caching
-          topic_title: topic.title,
-          topic_description: topic.description,
-          questions: topic.questions || [],
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Failed to generate AI content' }));
-        throw new Error(errorData.detail || 'Failed to generate AI content');
+        const errorMessage = typeof errorData.detail === 'string'
+          ? errorData.detail
+          : JSON.stringify(errorData, null, 2);
+        console.error('[Mentor Mode] API Error Response:', errorData);
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
