@@ -115,37 +115,20 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-border space-y-2 mt-auto">
-        <div className="flex gap-2">
-          <NavLink
-            to="/dashboard/profile"
-            className={({ isActive }) =>
-              cn(
-                "flex items-center justify-center flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-          >
-            <User size={20} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3">Profile</span>}
-          </NavLink>
-
-          <NavLink
-            to="/dashboard/settings"
-            className={({ isActive }) =>
-              cn(
-                "flex items-center justify-center flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-          >
-            <Settings size={20} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3">Settings</span>}
-          </NavLink>
-        </div>
+        <NavLink
+          to="/dashboard/profile"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )
+          }
+        >
+          <User size={20} className="flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Profile & Settings</span>}
+        </NavLink>
 
         <div className="flex items-center justify-between">
           {!isCollapsed && <span className="text-sm text-muted-foreground">Theme</span>}

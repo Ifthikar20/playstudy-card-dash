@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -52,7 +52,7 @@ const AppContent = () => {
           <Route path="folders" element={<StudyFolders />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
           <Route path="profile" element={<ProfilePage />} />
-          <Route path="settings" element={<Index />} />
+          <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
 
           {/* Session-specific routes */}
           <Route path=":sessionId/full-study" element={<FullStudyPage />} />
