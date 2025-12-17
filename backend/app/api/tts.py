@@ -69,7 +69,7 @@ async def generate_speech(
     try:
         logger.info("=" * 60)
         logger.info("[API /tts/generate] TTS generation requested")
-        logger.info(f"[API /tts/generate] User: {current_user.get('email', 'unknown')}")
+        logger.info(f"[API /tts/generate] User: {current_user.email}")
         logger.info(f"[API /tts/generate] Provider: {tts_request.provider}")
         logger.info(f"[API /tts/generate] Voice: {tts_request.voice}")
         logger.info(f"[API /tts/generate] Text length: {len(tts_request.text)} chars")
@@ -132,16 +132,27 @@ async def get_providers(
     Returns information about each provider including whether it's configured.
     """
     try:
-        logger.info("=" * 60)
+        print("\n" + "=" * 70)
+        print("🔊 [API /tts/providers] Endpoint called")
+        print(f"👤 User: {current_user.email}")
+        print("=" * 70)
+
+        logger.info("=" * 70)
         logger.info("[API /tts/providers] Endpoint called")
-        logger.info(f"[API /tts/providers] User: {current_user.get('email', 'unknown')}")
+        logger.info(f"[API /tts/providers] User: {current_user.email}")
 
         providers = tts_service.get_available_providers()
+
+        print(f"\n📋 [API /tts/providers] Returning {len(providers)} providers:")
+        for provider in providers:
+            status_icon = "✅" if provider['configured'] else "❌"
+            print(f"  {status_icon} {provider['id']}: configured={provider['configured']}")
+        print("=" * 70 + "\n")
 
         logger.info(f"[API /tts/providers] Returning {len(providers)} providers:")
         for provider in providers:
             logger.info(f"  - {provider['id']}: configured={provider['configured']}")
-        logger.info("=" * 60)
+        logger.info("=" * 70)
 
         return providers
     except Exception as e:
