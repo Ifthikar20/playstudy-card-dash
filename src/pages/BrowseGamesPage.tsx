@@ -2,28 +2,24 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, Play, Users, Star, Gamepad2 } from "lucide-react";
+import { Play, Users, Star, Gamepad2 } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 
-const categories = ["All", "Mathematics", "Science", "History", "Languages", "Geography", "Programming", "Arts", "Music", "Business"];
+const categories = ["All", "Memory Games", "Challenging & High XP", "Riddles"];
 
 export default function BrowseGamesPage() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { games, likeGame } = useAppStore();
+  const { games } = useAppStore();
 
   const filteredGames = games.filter((game) => {
-    const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "All" || game.category === selectedCategory;
     // Only show games that have actual playable routes (game ID 7 = platformer)
     const isPlayable = game.id === 7;
-    return matchesSearch && matchesCategory && isPlayable;
+    return matchesCategory && isPlayable;
   });
 
   const handlePlayGame = (gameId: number) => {
@@ -49,36 +45,19 @@ export default function BrowseGamesPage() {
               <div className="p-2 rounded-xl bg-primary/10">
                 <Gamepad2 className="text-primary" size={28} />
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Browse Games</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Game Zone</h1>
             </div>
-            <p className="text-muted-foreground">Discover and play educational games across all subjects</p>
+            <p className="text-muted-foreground">Choose from memory games, challenging puzzles, and riddles</p>
           </div>
 
-          {/* Search and Filters */}
-          <div className="mb-6 space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                <Input 
-                  placeholder="Search games..." 
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Button variant="outline" className="gap-2">
-                <Filter size={18} />
-                Filters
-              </Button>
-            </div>
-
-            {/* Category Pills */}
+          {/* Category Pills */}
+          <div className="mb-6">
             <div className="flex flex-wrap gap-2">
               {categories.map((category) => (
                 <Badge
                   key={category}
                   variant={selectedCategory === category ? "default" : "outline"}
-                  className="cursor-pointer hover:bg-primary/80 transition-colors px-4 py-1.5"
+                  className="cursor-pointer hover:bg-primary/80 transition-colors px-4 py-2 text-sm"
                   onClick={() => setSelectedCategory(category)}
                 >
                   {category}
