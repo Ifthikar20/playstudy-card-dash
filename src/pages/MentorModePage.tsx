@@ -122,6 +122,47 @@ export default function MentorModePage() {
     }
   };
 
+  // Generate real-world examples based on the topic and question
+  const generateRealWorldExample = (topicTitle: string, question: string, answer: string): string => {
+    // Create contextual examples based on common educational topics
+    const examples = {
+      // Programming concepts
+      variables: "Think of a variable like a labeled box in your kitchen. Just like you might have a box labeled 'Sugar' that holds sugar, a variable called 'userName' holds a person's name. You can change what's inside the box anytime!",
+      loops: "Imagine you're washing dishes. You repeat the same process: pick up dish, scrub it, rinse it, put it away. That's exactly what a loop does in code - it repeats actions until the job is done!",
+      functions: "A function is like a recipe. Once you write down the recipe for chocolate chip cookies, you can make them anytime by following those steps. Same with functions - write the code once, use it many times!",
+      arrays: "An array is like a playlist on your phone. It's a list of songs (items) in a specific order. You can add songs, remove songs, or play them in sequence. That's how arrays organize data!",
+
+      // Math concepts
+      algebra: "If you're shopping and see '20% off', you're using algebra! The original price (x) minus 20% equals what you pay. That's solving for an unknown value - pure algebra in action!",
+      geometry: "When you're hanging a picture frame and want it centered on the wall, you're using geometry! You measure the wall width, divide by 2, and that's where the center point goes.",
+      fractions: "Ordering pizza? If you eat 3 out of 8 slices, you've eaten 3/8 of the pizza. That's fractions in real life - parts of a whole!",
+
+      // Science concepts
+      physics: "Ever wonder why seatbelts keep you safe? It's Newton's First Law - your body wants to keep moving forward when the car stops suddenly. The seatbelt provides the force to stop you safely!",
+      chemistry: "Baking a cake is chemistry! When you mix baking soda with acidic ingredients, a chemical reaction produces gas bubbles that make your cake rise. Science in the kitchen!",
+      biology: "Your smartphone screen responds to your finger because of the electricity in your body! Human cells generate tiny electrical signals, and touch screens detect this - biology meets technology!",
+
+      // General fallback
+      default: `Let's connect this to everyday life: ${answer.toLowerCase()}. This concept appears all around us - from the apps we use, to the decisions we make, to how systems work in the real world. The key is recognizing these patterns once you understand the fundamentals!`
+    };
+
+    // Try to match keywords in the question or topic
+    const searchText = `${topicTitle} ${question} ${answer}`.toLowerCase();
+
+    if (searchText.includes('variable') || searchText.includes('store')) return examples.variables;
+    if (searchText.includes('loop') || searchText.includes('repeat') || searchText.includes('iterate')) return examples.loops;
+    if (searchText.includes('function') || searchText.includes('method')) return examples.functions;
+    if (searchText.includes('array') || searchText.includes('list')) return examples.arrays;
+    if (searchText.includes('algebra') || searchText.includes('equation')) return examples.algebra;
+    if (searchText.includes('geometry') || searchText.includes('shape') || searchText.includes('angle')) return examples.geometry;
+    if (searchText.includes('fraction') || searchText.includes('divide')) return examples.fractions;
+    if (searchText.includes('physics') || searchText.includes('force') || searchText.includes('motion')) return examples.physics;
+    if (searchText.includes('chemistry') || searchText.includes('reaction')) return examples.chemistry;
+    if (searchText.includes('biology') || searchText.includes('cell')) return examples.biology;
+
+    return examples.default;
+  };
+
   // Handle provider change
   const handleProviderChange = async (provider: TTSProvider) => {
     aiVoiceService.stop();
@@ -146,25 +187,46 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
-    // Create a conversational narrative
-    const narrative = `Hello! I'm your AI mentor. Let me help you understand ${topic.title}.
+    // Create an enhanced conversational narrative with structure
+    let narrative = `Hey there! I'm your AI mentor, and today we're going to explore ${topic.title}. Let's make this easy and fun to understand!\n\n`;
 
-${topic.description ? `First, let me explain what this is about. ${topic.description}` : ''}
+    if (topic.description) {
+      narrative += `📚 What is this about?\n${topic.description}\n\n`;
+    }
 
-Now, I'll break this down into key concepts for you.
+    narrative += `Let me break this down into bite-sized pieces. I'll give you key points, explanations, and real-world examples to make everything crystal clear.\n\n`;
 
-${topic.questions && topic.questions.length > 0 ? topic.questions.map((q: any, idx: number) => {
-  const questionNumber = idx + 1;
-  const correctAnswer = q.options[q.correctAnswer];
+    // Generate content for each question/concept
+    if (topic.questions && topic.questions.length > 0) {
+      topic.questions.forEach((q: any, idx: number) => {
+        const questionNumber = idx + 1;
+        const correctAnswer = q.options[q.correctAnswer];
 
-  return `Concept ${questionNumber}: ${q.question}
+        narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        narrative += `🎯 Concept ${questionNumber}: ${q.question}\n\n`;
 
-${q.explanation ? `Here's what you need to know: ${q.explanation}` : ''}
+        if (q.explanation) {
+          narrative += `💡 Here's what you need to know:\n${q.explanation}\n\n`;
+        }
 
-The correct answer is: ${correctAnswer}.`;
-}).join('\n\n') : 'This topic contains important concepts for you to learn.'}
+        narrative += `✅ Key Answer: ${correctAnswer}\n\n`;
 
-That covers everything for ${topic.title}. Take your time to think about what we discussed. When you're ready, move on to the next topic.`;
+        // Add a real-world example based on the concept
+        narrative += `🌍 Real-World Example:\n`;
+        const examplePrompt = generateRealWorldExample(topic.title, q.question, correctAnswer);
+        narrative += `${examplePrompt}\n\n`;
+
+        // Add key takeaway
+        narrative += `📌 Remember This:\n`;
+        narrative += `The most important thing to remember is: ${correctAnswer}. This connects directly to how ${topic.title.toLowerCase()} works in practice.\n\n`;
+      });
+    } else {
+      narrative += `This topic contains important concepts about ${topic.title}. Let's explore the key ideas together.\n\n`;
+    }
+
+    narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    narrative += `🎓 Summary:\nWe've covered the essential concepts of ${topic.title}. Take a moment to think about these ideas and how they apply to real situations. When you're ready, let's move to the next topic!\n\n`;
+    narrative += `Remember: Learning is a journey, not a race. You're doing great!`;
 
     setFullNarrative(narrative);
     setCurrentTranscript('');
@@ -185,7 +247,7 @@ That covers everything for ${topic.title}. Take your time to think about what we
         } else {
           clearInterval(transcriptInterval);
         }
-      }, 180); // Adjust speed to match speech
+      }, 120); // Optimized for natural reading pace with OpenAI TTS
     };
 
     const handleEnd = () => {
@@ -219,8 +281,8 @@ That covers everything for ${topic.title}. Take your time to think about what we
         narrative,
         {
           voice: currentVoice,
-          speed: 0.9, // Slower for better understanding
-          model: currentProvider === 'openai' ? 'tts-1' : undefined,
+          speed: 1.0, // Normal speed for natural conversation
+          model: currentProvider === 'openai' ? 'tts-1' : undefined, // Fast, high-quality OpenAI model
           pitch: 0,
           provider: currentProvider
         },
@@ -389,12 +451,35 @@ That covers everything for ${topic.title}. Take your time to think about what we
                   </div>
                   <div className="flex-1 bg-accent/50 rounded-lg p-4">
                     <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
-                    <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                      {currentTranscript}
+                    <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {currentTranscript.split('\n').map((line, index) => {
+                        // Format special lines with styling
+                        if (line.startsWith('🎯 Concept')) {
+                          return <div key={index} className="font-bold text-primary text-base mt-4 mb-2">{line}</div>;
+                        } else if (line.startsWith('💡 Here\'s what you need to know:')) {
+                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-3">{line}</div>;
+                        } else if (line.startsWith('✅ Key Answer:')) {
+                          return <div key={index} className="font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950 p-2 rounded mt-2">{line}</div>;
+                        } else if (line.startsWith('🌍 Real-World Example:')) {
+                          return <div key={index} className="font-semibold text-orange-600 dark:text-orange-400 mt-3">{line}</div>;
+                        } else if (line.startsWith('📌 Remember This:')) {
+                          return <div key={index} className="font-semibold text-purple-600 dark:text-purple-400 mt-3">{line}</div>;
+                        } else if (line.startsWith('🎓 Summary:')) {
+                          return <div key={index} className="font-bold text-primary text-base mt-4 mb-2">{line}</div>;
+                        } else if (line.startsWith('📚 What is this about?')) {
+                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-2">{line}</div>;
+                        } else if (line.startsWith('━━━')) {
+                          return <div key={index} className="border-t border-primary/20 my-3"></div>;
+                        } else if (line.trim() === '') {
+                          return <div key={index} className="h-2"></div>;
+                        } else {
+                          return <div key={index}>{line}</div>;
+                        }
+                      })}
                       {isPlaying && currentTranscript !== fullNarrative && (
                         <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
               )}
