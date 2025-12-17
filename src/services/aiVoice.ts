@@ -52,7 +52,7 @@ class AIVoiceService {
    * Get authentication token from storage
    */
   private getAuthToken(): string | null {
-    return localStorage.getItem('access_token');
+    return localStorage.getItem('auth_token');
   }
 
   /**

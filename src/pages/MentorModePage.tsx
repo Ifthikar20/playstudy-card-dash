@@ -57,8 +57,14 @@ export default function MentorModePage() {
     }
   }, [currentTranscript, isPlaying]);
 
-  // Fetch providers and voices on mount
+  // Check authentication on mount
   useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setError('Please log in to use AI Mentor Mode.');
+      return;
+    }
+
     const loadProvidersAndVoices = async () => {
       try {
         console.log('[Mentor Mode] Fetching providers...');
@@ -83,7 +89,12 @@ export default function MentorModePage() {
         }
       } catch (error) {
         console.error('[Mentor Mode] Failed to load providers:', error);
-        setError('Failed to initialize Google Cloud TTS. Please check your configuration.');
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        if (errorMessage.includes('Authentication')) {
+          setError('Please log in to use AI Mentor Mode.');
+        } else {
+          setError('Failed to initialize Google Cloud TTS. Please check your configuration.');
+        }
       }
     };
 
@@ -345,7 +356,16 @@ That covers everything for ${topic.title}. Take your time to think about what we
           {/* Error */}
           {error && (
             <Card className="p-3 border-destructive bg-destructive/10">
-              <p className="text-sm text-destructive">⚠️ {error}</p>
+              <p className="text-sm text-destructive mb-2">⚠️ {error}</p>
+              {error.includes('log in') && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => navigate('/auth')}
+                >
+                  Go to Login
+                </Button>
+              )}
             </Card>
           )}
 
