@@ -42,7 +42,7 @@ export function Sidebar() {
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <img
-              src="/logo-svg.svg"
+              src="/logo-new.png"
               alt="PlayStudy"
               className="h-20 w-auto"
             />

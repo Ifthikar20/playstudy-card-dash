@@ -12,7 +12,7 @@ const LandingPage = () => {
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 lg:px-12">
         <div className="flex items-center gap-2">
           <img
-            src="/logo-svg.svg"
+            src="/logo-new.png"
             alt="PlayStudy"
             className="h-24 w-auto"
           />
@@ -171,7 +171,7 @@ const LandingPage = () => {
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img
-              src="/logo-svg.svg"
+              src="/logo-new.png"
               alt="PlayStudy"
               className="h-14 w-auto opacity-40"
             />
