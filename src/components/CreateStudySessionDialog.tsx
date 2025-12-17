@@ -21,7 +21,6 @@ import {
   Gamepad2,
   Clock,
   Target,
-  Loader2,
   Mic
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -259,8 +258,10 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                   >
                     {isAnalyzing ? (
                       <>
-                        <Loader2 size={14} className="animate-spin mr-2" />
-                        Analyzing...
+                        <div className="inline-block h-3.5 w-3.5 mr-2 rounded-full border-2 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin"></div>
+                        <span className="bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent font-semibold">
+                          Analyzing...
+                        </span>
                       </>
                     ) : (
                       'Analyze Content'
@@ -324,8 +325,10 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
             >
               {isProcessing ? (
                 <>
-                  <Loader2 size={18} className="animate-spin" />
-                  Processing...
+                  <div className="inline-block h-4 w-4 mr-2 rounded-full border-2 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin"></div>
+                  <span className="bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent font-semibold">
+                    Processing...
+                  </span>
                 </>
               ) : (
                 <>

@@ -26,6 +26,7 @@ import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicQuizCard } from "@/components/TopicQuizCard";
 import { TopicSummary } from "@/components/TopicSummary";
 import { getStudySession } from "@/services/api";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 // Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
@@ -557,10 +558,7 @@ export default function FullStudyPage() {
         <div className="flex min-h-screen bg-background">
           <Sidebar />
           <main className="flex-1 flex items-center justify-center p-6">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-              <p className="mt-4 text-muted-foreground">Loading your study session...</p>
-            </div>
+            <LoadingSpinner message="Loading your study session..." size="lg" />
           </main>
         </div>
       );

@@ -4,10 +4,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { LoadingBrain } from "@/components/LoadingSpinner";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -51,7 +52,7 @@ const AppContent = () => {
           <Route path="folders" element={<StudyFolders />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
           <Route path="profile" element={<ProfilePage />} />
-          <Route path="settings" element={<Index />} />
+          <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
 
           {/* Session-specific routes */}
           <Route path=":sessionId/full-study" element={<FullStudyPage />} />
@@ -91,10 +92,7 @@ const AuthenticatedApp = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your dashboard...</p>
-        </div>
+        <LoadingBrain message="Loading your dashboard..." />
       </div>
     );
   }

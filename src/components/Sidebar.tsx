@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAppStore } from "@/store/appStore";
+import { AnimatedXP } from "@/components/AnimatedXP";
 
 import { Gamepad2 } from "lucide-react";
 
@@ -42,9 +43,9 @@ export function Sidebar() {
         <div className="flex items-center justify-between">
           {!isCollapsed && (
             <img
-              src="/logo-svg.svg"
+              src="/logo-new.png"
               alt="PlayStudy"
-              className="h-8 w-auto"
+              className="h-24 w-auto"
             />
           )}
           <button
@@ -55,13 +56,7 @@ export function Sidebar() {
           </button>
         </div>
         {/* XP Display */}
-        {!isCollapsed && (
-          <div className="mt-3">
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm font-bold text-primary animate-[pulse_2s_ease-in-out_infinite]">
-              2,450 XP
-            </span>
-          </div>
-        )}
+        {!isCollapsed && <AnimatedXP />}
       </div>
 
       <nav className="p-4 space-y-2">
@@ -120,37 +115,20 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-border space-y-2 mt-auto">
-        <div className="flex gap-2">
-          <NavLink
-            to="/dashboard/profile"
-            className={({ isActive }) =>
-              cn(
-                "flex items-center justify-center flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-          >
-            <User size={20} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3">Profile</span>}
-          </NavLink>
-
-          <NavLink
-            to="/dashboard/settings"
-            className={({ isActive }) =>
-              cn(
-                "flex items-center justify-center flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-          >
-            <Settings size={20} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3">Settings</span>}
-          </NavLink>
-        </div>
+        <NavLink
+          to="/dashboard/profile"
+          className={({ isActive }) =>
+            cn(
+              "flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              isActive
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )
+          }
+        >
+          <User size={20} className="flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Profile & Settings</span>}
+        </NavLink>
 
         <div className="flex items-center justify-between">
           {!isCollapsed && <span className="text-sm text-muted-foreground">Theme</span>}

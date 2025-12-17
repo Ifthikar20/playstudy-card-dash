@@ -2,28 +2,24 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, Play, Users, Star, Gamepad2 } from "lucide-react";
+import { Play, Users, Star, Gamepad2 } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 
-const categories = ["All", "Mathematics", "Science", "History", "Languages", "Geography", "Programming", "Arts", "Music", "Business"];
+const categories = ["All", "Memory Games", "Challenging & High XP", "Riddles"];
 
 export default function BrowseGamesPage() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { games, likeGame } = useAppStore();
+  const { games } = useAppStore();
 
   const filteredGames = games.filter((game) => {
-    const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "All" || game.category === selectedCategory;
     // Only show games that have actual playable routes (game ID 7 = platformer)
     const isPlayable = game.id === 7;
-    return matchesSearch && matchesCategory && isPlayable;
+    return matchesCategory && isPlayable;
   });
 
   const handlePlayGame = (gameId: number) => {
@@ -49,36 +45,19 @@ export default function BrowseGamesPage() {
               <div className="p-2 rounded-xl bg-primary/10">
                 <Gamepad2 className="text-primary" size={28} />
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Browse Games</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Game Zone</h1>
             </div>
-            <p className="text-muted-foreground">Discover and play educational games across all subjects</p>
+            <p className="text-muted-foreground">Choose from memory games, challenging puzzles, and riddles</p>
           </div>
 
-          {/* Search and Filters */}
-          <div className="mb-6 space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                <Input 
-                  placeholder="Search games..." 
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Button variant="outline" className="gap-2">
-                <Filter size={18} />
-                Filters
-              </Button>
-            </div>
-
-            {/* Category Pills */}
+          {/* Category Pills */}
+          <div className="mb-6">
             <div className="flex flex-wrap gap-2">
               {categories.map((category) => (
                 <Badge
                   key={category}
                   variant={selectedCategory === category ? "default" : "outline"}
-                  className="cursor-pointer hover:bg-primary/80 transition-colors px-4 py-1.5"
+                  className="cursor-pointer hover:bg-primary/80 transition-colors px-4 py-2 text-sm"
                   onClick={() => setSelectedCategory(category)}
                 >
                   {category}
@@ -87,67 +66,56 @@ export default function BrowseGamesPage() {
             </div>
           </div>
 
-          {/* Games Grid - Netflix Style */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Games Grid - Retro Style */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {filteredGames.map((game) => (
-              <Card 
-                key={game.id} 
-                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border hover:border-primary/30"
+              <Card
+                key={game.id}
+                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border-2 hover:border-primary/50 bg-card"
+                onClick={() => handlePlayGame(game.id)}
               >
-                <div className="flex h-36">
-                  {/* Image Side */}
-                  <div className="relative w-44 shrink-0 overflow-hidden">
-                    <img 
-                      src={game.image} 
-                      alt={game.title}
-                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/20" />
-                    <Badge 
-                      className="absolute top-2 left-2 text-xs"
+                {/* Game Thumbnail */}
+                <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
+                  <img
+                    src={game.image}
+                    alt={game.title}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                  />
+
+                  {/* Overlay on Hover */}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Play size={32} className="text-white" />
+                  </div>
+
+                  {/* Top Badges */}
+                  <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
+                    <Badge
+                      className="text-xs backdrop-blur-sm"
                       variant={game.difficulty === "Easy" ? "secondary" : game.difficulty === "Medium" ? "default" : "destructive"}
                     >
                       {game.difficulty}
                     </Badge>
+                    <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                      <Star size={10} className="text-yellow-400 fill-yellow-400" />
+                      <span className="text-xs font-bold text-white">{game.rating}</span>
+                    </div>
                   </div>
+                </div>
 
-                  {/* Content Side */}
-                  <div className="flex-1 p-4 flex flex-col justify-between">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          {game.category}
-                        </Badge>
-                        <div className="flex items-center gap-1">
-                          <Star size={12} className="text-yellow-500 fill-yellow-500" />
-                          <span className="text-xs font-medium text-foreground">{game.rating}</span>
-                        </div>
-                      </div>
-                      <h3 className="font-bold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {game.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {game.questionCount} MCQ • Level: {game.difficulty} • {game.points}+ points
-                      </p>
-                    </div>
+                {/* Game Info */}
+                <div className="p-3 space-y-2">
+                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem]">
+                    {game.title}
+                  </h3>
 
-                    {/* Bottom Row */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Users size={12} />
-                        <span className="text-xs font-medium">{game.likes.toLocaleString()} students</span>
-                      </div>
-                      <Button
-                        size="icon"
-                        className="rounded-full h-10 w-10 shadow-lg"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePlayGame(game.id);
-                        }}
-                      >
-                        <Play size={16} className="ml-0.5" />
-                      </Button>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Users size={12} />
+                      <span>{(game.likes / 1000).toFixed(1)}k</span>
                     </div>
+                    <Badge variant="outline" className="text-xs">
+                      {game.category}
+                    </Badge>
                   </div>
                 </div>
               </Card>
