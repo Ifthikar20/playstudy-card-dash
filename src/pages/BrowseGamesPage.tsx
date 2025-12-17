@@ -75,7 +75,7 @@ export default function BrowseGamesPage() {
                 onClick={() => handlePlayGame(game.id)}
               >
                 {/* Game Thumbnail */}
-                <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
+                <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
                   <img
                     src={game.image}
                     alt={game.title}
