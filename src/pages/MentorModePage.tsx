@@ -122,99 +122,6 @@ export default function MentorModePage() {
     }
   };
 
-  // Generate additional contextual examples
-  const generateAdditionalExamples = (topicTitle: string, question: string, conceptNumber: number): string => {
-    const searchText = `${topicTitle} ${question}`.toLowerCase();
-
-    // Programming examples
-    if (searchText.includes('variable')) {
-      return `Example 1: In a game, a variable called "score" keeps track of your points. Start at 0, get 10 points for each level—the variable updates automatically.\n\nExample 2: In a shopping cart, a variable called "totalPrice" adds up all your items. Add a $20 shirt, a $15 hat—the total becomes $35. That's variables storing and updating data.`;
-    }
-
-    if (searchText.includes('loop')) {
-      return `Example 1: Your alarm clock uses a loop. Every 60 seconds, it checks: "Is it time to ring?" If not, wait another 60 seconds and check again. That's a loop in action.\n\nExample 2: When Netflix loads videos, it uses a loop to download each chunk of data until the whole video is ready. Check, download, repeat—that's how streaming works.`;
-    }
-
-    if (searchText.includes('function')) {
-      return `Example 1: The "like" button on social media is a function. Click it, and it: (1) updates the count, (2) changes color, (3) saves to database. Same steps, every time.\n\nExample 2: Your phone's calculator has a function for addition. Type 5 + 3, press equals, it always returns 8. One function, works every time you need it.`;
-    }
-
-    if (searchText.includes('array')) {
-      return `Example 1: Your browser tabs are like an array. Each tab is an item in order. Close one, the others shift up. That's how arrays manage lists.\n\nExample 2: Amazon's shopping cart is an array of products. Add items, remove items, view them in order—classic array behavior.`;
-    }
-
-    // Math examples
-    if (searchText.includes('algebra')) {
-      return `Example 1: You're splitting a $60 dinner bill among friends. If there are x people, each pays 60 ÷ x. That's algebra solving real problems.\n\nExample 2: Your phone battery drains 10% per hour. If it's at 80%, how long until it dies? 80 ÷ 10 = 8 hours. You just used algebra!`;
-    }
-
-    if (searchText.includes('geometry')) {
-      return `Example 1: Parking your car? You're using angles and spatial reasoning—pure geometry. Will it fit? What angle do I turn?\n\nExample 2: Playing pool or mini-golf? Every shot uses geometry—angles of reflection, distances, trajectories. Geometry in action!`;
-    }
-
-    // Science examples
-    if (searchText.includes('physics')) {
-      return `Example 1: Riding a bike around a turn? You lean inward to balance centrifugal force. That's physics keeping you upright.\n\nExample 2: Your phone's gyroscope detects rotation using physics principles. Rotate your phone, the screen rotates—physics sensors at work.`;
-    }
-
-    if (searchText.includes('chemistry')) {
-      return `Example 1: Soap cleaning dishes uses chemistry. Soap molecules grab grease on one end, water on the other—chemical bonding in action.\n\nExample 2: Your car battery? Chemical reactions between lead and acid create electricity. Turn the key—chemistry starts your car.`;
-    }
-
-    // SaaS/Infrastructure examples
-    if (searchText.includes('saas') || searchText.includes('cloud') || searchText.includes('infrastructure')) {
-      return `Example 1: When you upload a photo to Instagram, it: (1) goes to their servers (infrastructure), (2) gets processed (platform), (3) appears in your feed (application). All layers working together.\n\nExample 2: Google Docs lets multiple people edit at once. The infrastructure handles millions of users, the platform syncs changes, the app shows you the document. Three layers, seamless experience.`;
-    }
-
-    if (searchText.includes('layer') || searchText.includes('architecture')) {
-      return `Example 1: Ordering food on Uber Eats: You use the app layer (UI), it processes your order (application layer), payment goes through Stripe (service layer), data saves to database (data layer). Multiple layers working as one.\n\nExample 2: Watching Netflix: Your device (user layer), Netflix app (application layer), recommendation engine (services layer), video files (data layer), AWS servers (infrastructure layer). Five layers delivering your show.`;
-    }
-
-    // Default comprehensive examples
-    return `Example 1: Think of this like building a house. You need a foundation (the basics), walls (the structure), and a roof (protection). Each part depends on the others, just like this concept builds on fundamentals.\n\nExample 2: Or consider your smartphone. The hardware is the foundation, the operating system is the platform, and your apps are what you interact with. Each layer serves a purpose, working together to give you the experience you want.`;
-  };
-
-  // Generate real-world examples based on the topic and question
-  const generateRealWorldExample = (topicTitle: string, question: string, answer: string): string => {
-    // Create contextual examples based on common educational topics
-    const examples = {
-      // Programming concepts
-      variables: "Think of a variable like a labeled box in your kitchen. Just like you might have a box labeled 'Sugar' that holds sugar, a variable called 'userName' holds a person's name. You can change what's inside the box anytime!",
-      loops: "Imagine you're washing dishes. You repeat the same process: pick up dish, scrub it, rinse it, put it away. That's exactly what a loop does in code - it repeats actions until the job is done!",
-      functions: "A function is like a recipe. Once you write down the recipe for chocolate chip cookies, you can make them anytime by following those steps. Same with functions - write the code once, use it many times!",
-      arrays: "An array is like a playlist on your phone. It's a list of songs (items) in a specific order. You can add songs, remove songs, or play them in sequence. That's how arrays organize data!",
-
-      // Math concepts
-      algebra: "If you're shopping and see '20% off', you're using algebra! The original price (x) minus 20% equals what you pay. That's solving for an unknown value - pure algebra in action!",
-      geometry: "When you're hanging a picture frame and want it centered on the wall, you're using geometry! You measure the wall width, divide by 2, and that's where the center point goes.",
-      fractions: "Ordering pizza? If you eat 3 out of 8 slices, you've eaten 3/8 of the pizza. That's fractions in real life - parts of a whole!",
-
-      // Science concepts
-      physics: "Ever wonder why seatbelts keep you safe? It's Newton's First Law - your body wants to keep moving forward when the car stops suddenly. The seatbelt provides the force to stop you safely!",
-      chemistry: "Baking a cake is chemistry! When you mix baking soda with acidic ingredients, a chemical reaction produces gas bubbles that make your cake rise. Science in the kitchen!",
-      biology: "Your smartphone screen responds to your finger because of the electricity in your body! Human cells generate tiny electrical signals, and touch screens detect this - biology meets technology!",
-
-      // General fallback
-      default: `Let's connect this to everyday life: ${answer.toLowerCase()}. This concept appears all around us - from the apps we use, to the decisions we make, to how systems work in the real world. The key is recognizing these patterns once you understand the fundamentals!`
-    };
-
-    // Try to match keywords in the question or topic
-    const searchText = `${topicTitle} ${question} ${answer}`.toLowerCase();
-
-    if (searchText.includes('variable') || searchText.includes('store')) return examples.variables;
-    if (searchText.includes('loop') || searchText.includes('repeat') || searchText.includes('iterate')) return examples.loops;
-    if (searchText.includes('function') || searchText.includes('method')) return examples.functions;
-    if (searchText.includes('array') || searchText.includes('list')) return examples.arrays;
-    if (searchText.includes('algebra') || searchText.includes('equation')) return examples.algebra;
-    if (searchText.includes('geometry') || searchText.includes('shape') || searchText.includes('angle')) return examples.geometry;
-    if (searchText.includes('fraction') || searchText.includes('divide')) return examples.fractions;
-    if (searchText.includes('physics') || searchText.includes('force') || searchText.includes('motion')) return examples.physics;
-    if (searchText.includes('chemistry') || searchText.includes('reaction')) return examples.chemistry;
-    if (searchText.includes('biology') || searchText.includes('cell')) return examples.biology;
-
-    return examples.default;
-  };
-
   // Handle provider change
   const handleProviderChange = async (provider: TTSProvider) => {
     aiVoiceService.stop();
@@ -239,108 +146,56 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
-    // Create an extensive, teacher-style narrative
-    let narrative = `Hey there! I'm your AI mentor, and today we're going to deeply explore ${topic.title}. \n\nI won't just tell you what it is—I'll show you how it works in the real world, why it matters, and how you can apply it. Let's make this crystal clear!\n\n`;
+    try {
+      // Get AI-generated content from DeepSeek
+      const token = localStorage.getItem('auth_token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-    if (topic.description) {
-      narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      narrative += `📚 What is ${topic.title}?\n\n`;
-      narrative += `${topic.description}\n\n`;
-      narrative += `Now, let me break this down in a way that makes sense. We'll go through each concept step by step, with real examples you see every single day.\n\n`;
-    }
+      console.log('[Mentor Mode] Requesting AI-generated content from DeepSeek...');
 
-    // Generate extensive content for each question/concept
-    if (topic.questions && topic.questions.length > 0) {
-      topic.questions.forEach((q: any, idx: number) => {
-        const questionNumber = idx + 1;
-        const correctAnswer = q.options[q.correctAnswer];
-
-        narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        narrative += `🎯 CONCEPT ${questionNumber}: ${q.question}\n\n`;
-
-        // Main explanation - extensive
-        if (q.explanation) {
-          narrative += `💡 Let me explain this clearly:\n\n`;
-          narrative += `${q.explanation}\n\n`;
-
-          // Add deeper context
-          narrative += `Here's what this means in practice:\n\n`;
-          narrative += `Think about it this way—this concept is fundamental because it shows up everywhere. Whether you're building something, solving a problem, or just trying to understand how things work, this is one of those core ideas you'll use again and again.\n\n`;
-        }
-
-        // Key answer with emphasis
-        narrative += `✅ KEY ANSWER:\n`;
-        narrative += `${correctAnswer}\n\n`;
-        narrative += `This is important—write this down if you can. This is the core takeaway.\n\n`;
-
-        // Real-world example - extensive with multiple scenarios
-        narrative += `🌍 REAL-WORLD EXAMPLES:\n\n`;
-        const mainExample = generateRealWorldExample(topic.title, q.question, correctAnswer);
-        narrative += `${mainExample}\n\n`;
-
-        // Add additional context examples
-        narrative += `Let me give you more examples so you really get this:\n\n`;
-        narrative += generateAdditionalExamples(topic.title, q.question, questionNumber);
-        narrative += `\n`;
-
-        // Why it matters section
-        narrative += `❓ WHY THIS MATTERS:\n\n`;
-        narrative += `You might be wondering—why do I need to know this? Here's why:\n\n`;
-        narrative += `Understanding ${correctAnswer.toLowerCase()} isn't just about passing a test. It's about building a mental model of how things work. Once you understand this, you'll start seeing it everywhere—in the apps you use, the problems you solve, even in everyday situations.\n\n`;
-
-        // Remember this - key takeaway
-        narrative += `📌 REMEMBER THIS:\n\n`;
-        narrative += `If you forget everything else, remember this: ${correctAnswer}.\n\n`;
-        narrative += `This connects directly to how ${topic.title.toLowerCase()} works in the real world. When you encounter similar situations, you'll know exactly what's happening and why.\n\n`;
-
-        // Add spacing between concepts
-        if (idx < topic.questions.length - 1) {
-          narrative += `Alright, let's move to the next concept. Stay with me!\n\n`;
-        }
+      const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topic_title: topic.title,
+          topic_description: topic.description,
+          questions: topic.questions || [],
+        }),
       });
-    } else {
-      narrative += `This topic contains important concepts about ${topic.title}. Let me walk you through the key ideas, one by one.\n\n`;
-    }
 
-    // Comprehensive summary
-    narrative += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    narrative += `🎓 LESSON SUMMARY:\n\n`;
-    narrative += `Okay, let's recap what we've covered about ${topic.title}.\n\n`;
+      if (!response.ok) {
+        throw new Error('Failed to generate AI content');
+      }
 
-    // List key points
-    if (topic.questions && topic.questions.length > 0) {
-      narrative += `We discussed ${topic.questions.length} major concept${topic.questions.length > 1 ? 's' : ''}:\n\n`;
-      topic.questions.forEach((q: any, idx: number) => {
-        narrative += `${idx + 1}. ${q.options[q.correctAnswer]}\n`;
-      });
-      narrative += `\n`;
-    }
+      const data = await response.json();
+      const narrative = data.narrative;
 
-    narrative += `Take a moment to think about these ideas. How do they connect? Where have you seen them before? How can you use them?\n\n`;
-    narrative += `Remember: Learning isn't about memorizing—it's about understanding. And you're doing great!\n\n`;
-    narrative += `When you're ready, let's move to the next topic. There's so much more to explore!`;
+      console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
 
-    setFullNarrative(narrative);
-    setCurrentTranscript('');
+      setFullNarrative(narrative);
+      setCurrentTranscript('');
 
     // Simulate live transcript
     const words = narrative.split(' ');
     let wordIndex = 0;
     let transcriptInterval: NodeJS.Timeout;
 
-    const startTranscript = () => {
-      transcriptInterval = setInterval(() => {
-        if (wordIndex < words.length) {
-          setCurrentTranscript(prev => {
-            const newText = prev + (prev ? ' ' : '') + words[wordIndex];
-            wordIndex++;
-            return newText;
-          });
-        } else {
-          clearInterval(transcriptInterval);
-        }
-      }, 120); // Optimized for natural reading pace with OpenAI TTS
-    };
+      const startTranscript = () => {
+        transcriptInterval = setInterval(() => {
+          if (wordIndex < words.length) {
+            setCurrentTranscript(prev => {
+              const newText = prev + (prev ? ' ' : '') + words[wordIndex];
+              wordIndex++;
+              return newText;
+            });
+          } else {
+            clearInterval(transcriptInterval);
+          }
+        }, 350); // Synced with OpenAI TTS speed (~170 words/minute)
+      };
 
     const handleEnd = () => {
       if (transcriptInterval) clearInterval(transcriptInterval);
@@ -383,9 +238,20 @@ export default function MentorModePage() {
           onError: handleError
         }
       );
-      setIsLoading(false);
+        setIsLoading(false);
+      } catch (aiError) {
+        console.error('[Mentor Mode] Failed to get AI content:', aiError);
+        setError('Failed to generate lesson content. Please try again.');
+        setIsReading(false);
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
     } catch (error) {
-      handleError(error as Error);
+      console.error('[Mentor Mode] Error in speakContent:', error);
+      setError('An error occurred. Please try again.');
+      setIsReading(false);
+      setIsPlaying(false);
+      setIsLoading(false);
     }
   };
 

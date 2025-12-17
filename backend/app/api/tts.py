@@ -2,6 +2,7 @@
 Text-to-Speech API endpoints.
 """
 import logging
+import httpx
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -11,6 +12,7 @@ from app.dependencies import get_current_user
 from app.core.rate_limit import limiter
 from slowapi import Limiter
 from fastapi import Request
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -215,4 +217,151 @@ async def get_provider_voices(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get voices: {str(e)}"
+        )
+
+
+class MentorContentRequest(BaseModel):
+    """Request model for mentor content generation."""
+    topic_title: str = Field(..., description="Title of the topic")
+    topic_description: Optional[str] = Field(None, description="Description of the topic")
+    questions: List[Dict] = Field(..., description="List of questions with options and correct answers")
+
+
+class MentorContentResponse(BaseModel):
+    """Response model for mentor content."""
+    narrative: str = Field(..., description="Formatted narrative for the mentor")
+    estimated_duration_seconds: int = Field(..., description="Estimated speech duration")
+
+
+@router.post(
+    "/tts/generate-mentor-content",
+    response_model=MentorContentResponse,
+    summary="Generate AI mentor content",
+    description="Use DeepSeek AI to generate comprehensive, structured mentor content with examples",
+)
+@limiter.limit("10/minute")
+async def generate_mentor_content(
+    request: Request,
+    content_request: MentorContentRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Generate comprehensive mentor content using DeepSeek AI.
+
+    Creates extensive, teacher-style explanations with:
+    - Real-world examples
+    - Bullet points
+    - Why it matters sections
+    - Multiple perspectives
+    - Formatted for text-to-speech
+    """
+    try:
+        logger.info(f"[Mentor Content] Generating content for: {content_request.topic_title}")
+
+        # Build the prompt for DeepSeek
+        prompt = f"""You are an expert AI mentor creating an engaging, comprehensive lesson.
+
+Topic: {content_request.topic_title}
+Description: {content_request.topic_description or 'No description provided'}
+
+Create an extensive, conversational lesson that includes:
+1. A friendly introduction
+2. For each concept below, provide:
+   - Clear, detailed explanation
+   - Real-world examples (2-3 per concept)
+   - Why it matters
+   - Key takeaways
+
+Format your response with these EXACT section markers:
+- Start with: "Hey there! I'm your AI mentor..."
+- Use: 🎯 CONCEPT [number]: [question]
+- Use: 💡 Let me explain this clearly:
+- Use: ✅ KEY ANSWER:
+- Use: 🌍 REAL-WORLD EXAMPLES:
+- Use: Example 1: and Example 2:
+- Use: ❓ WHY THIS MATTERS:
+- Use: 📌 REMEMBER THIS:
+- Use: 🎓 LESSON SUMMARY:
+- Use: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ for dividers
+
+Concepts to teach:
+"""
+
+        # Add each question/concept
+        for idx, q in enumerate(content_request.questions, 1):
+            question = q.get('question', '')
+            correct_answer = q.get('options', [''])[q.get('correctAnswer', 0)]
+            explanation = q.get('explanation', '')
+
+            prompt += f"\n{idx}. {question}\n"
+            prompt += f"   Correct Answer: {correct_answer}\n"
+            if explanation:
+                prompt += f"   Context: {explanation}\n"
+
+        prompt += """
+
+Make this extensive and conversational, like a real teacher explaining to students.
+Include multiple real-world examples for each concept.
+Keep the tone friendly, encouraging, and clear.
+Make sure to use the exact emoji markers listed above.
+"""
+
+        # Call DeepSeek AI
+        logger.info("[Mentor Content] Calling DeepSeek AI...")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are an expert educator who creates engaging, comprehensive lessons with real-world examples. Always use the exact formatting markers provided."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4000,
+                }
+            )
+
+        if response.status_code != 200:
+            logger.error(f"[Mentor Content] DeepSeek API error: {response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate content from AI"
+            )
+
+        result = response.json()
+        narrative = result['choices'][0]['message']['content']
+
+        # Estimate duration (average speaking rate: ~150 words per minute)
+        word_count = len(narrative.split())
+        estimated_seconds = int((word_count / 150) * 60)
+
+        logger.info(f"[Mentor Content] ✅ Generated {word_count} words (~{estimated_seconds}s)")
+
+        return MentorContentResponse(
+            narrative=narrative,
+            estimated_duration_seconds=estimated_seconds
+        )
+
+    except httpx.TimeoutException:
+        logger.error("[Mentor Content] DeepSeek API timeout")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="AI content generation timed out"
+        )
+    except Exception as e:
+        logger.error(f"[Mentor Content] Error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate mentor content: {str(e)}"
         )
