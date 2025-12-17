@@ -14,7 +14,7 @@ const LandingPage = () => {
           <img
             src="/logo-new.png"
             alt="PlayStudy"
-            className="h-32 w-auto"
+            className="h-48 w-auto"
           />
         </div>
         
@@ -173,7 +173,7 @@ const LandingPage = () => {
             <img
               src="/logo-new.png"
               alt="PlayStudy"
-              className="h-20 w-auto opacity-40"
+              className="h-28 w-auto opacity-40"
             />
             <span className="text-xs text-white/40">© 2024</span>
           </div>
