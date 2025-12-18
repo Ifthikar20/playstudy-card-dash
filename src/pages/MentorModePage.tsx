@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAppStore } from "@/store/appStore";
 import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import {
   Play,
   Pause,
@@ -588,18 +589,22 @@ export default function MentorModePage() {
                 </Button>
               </div>
 
-              <div className="text-center mt-3 text-xs text-muted-foreground">
-                {isLoading ? (
-                  'Preparing your lesson...'
-                ) : isPlaying ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    Speaking
-                  </span>
-                ) : (
-                  'Ready to learn'
-                )}
-              </div>
+              {isLoading ? (
+                <div className="mt-4">
+                  <LoadingSpinner message="Preparing your lesson..." size="sm" />
+                </div>
+              ) : (
+                <div className="text-center mt-3 text-xs text-muted-foreground">
+                  {isPlaying ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                      Speaking
+                    </span>
+                  ) : (
+                    'Ready to learn'
+                  )}
+                </div>
+              )}
             </div>
           </Card>
         </div>
