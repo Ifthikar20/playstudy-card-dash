@@ -27,7 +27,7 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         <div
           className="absolute inset-0 rounded-full donut-glow"
           style={{
-            background: 'radial-gradient(circle at 50% 50%, transparent 30%, rgba(167, 139, 250, 0.15) 45%, rgba(96, 165, 250, 0.1) 55%, transparent 70%)',
+            background: 'radial-gradient(circle at 50% 50%, transparent 30%, rgba(167, 139, 250, 0.3) 45%, rgba(96, 165, 250, 0.2) 55%, transparent 70%)',
             filter: 'blur(35px)',
             animation: 'glow-pulse 3s ease-in-out infinite'
           }}
@@ -37,7 +37,7 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         <div
           className="absolute inset-0 rounded-full donut-layer-2"
           style={{
-            background: 'radial-gradient(circle at 50% 50%, transparent 38%, rgba(196, 181, 253, 0.35) 43%, rgba(167, 139, 250, 0.5) 50%, rgba(96, 165, 250, 0.3) 58%, transparent 68%)',
+            background: 'radial-gradient(circle at 50% 50%, transparent 38%, rgba(196, 181, 253, 0.55) 43%, rgba(167, 139, 250, 0.7) 50%, rgba(96, 165, 250, 0.5) 58%, transparent 68%)',
             filter: 'blur(20px)',
             animation: 'breathe-reverse 4s ease-in-out infinite, rotate-reverse 12s linear infinite'
           }}
@@ -47,7 +47,7 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         <div
           className="absolute inset-0 rounded-full donut-ring"
           style={{
-            background: 'radial-gradient(circle at 50% 50%, transparent 35%, rgba(167, 139, 250, 0.25) 40%, rgba(139, 92, 246, 0.4) 50%, rgba(96, 165, 250, 0.35) 60%, rgba(147, 197, 253, 0.2) 70%, transparent 75%)',
+            background: 'radial-gradient(circle at 50% 50%, transparent 35%, rgba(167, 139, 250, 0.45) 40%, rgba(139, 92, 246, 0.65) 50%, rgba(96, 165, 250, 0.5) 60%, rgba(147, 197, 253, 0.35) 70%, transparent 75%)',
             filter: 'blur(25px)',
             animation: 'breathe 4s ease-in-out infinite, rotate 10s linear infinite'
           }}
@@ -57,7 +57,7 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         <div
           className="absolute inset-0 rounded-full donut-shimmer"
           style={{
-            background: 'radial-gradient(circle at 60% 40%, transparent 35%, rgba(220, 208, 255, 0.4) 42%, transparent 50%)',
+            background: 'radial-gradient(circle at 60% 40%, transparent 35%, rgba(220, 208, 255, 0.6) 42%, transparent 50%)',
             filter: 'blur(15px)',
             animation: 'shimmer 5s ease-in-out infinite'
           }}
@@ -81,11 +81,11 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         @keyframes breathe {
           0%, 100% {
             transform: scale(0.8) rotate(0deg);
-            opacity: 0.5;
+            opacity: 0.7;
           }
           50% {
             transform: scale(1.2) rotate(180deg);
-            opacity: 0.8;
+            opacity: 1;
           }
         }
 
@@ -97,11 +97,11 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         @keyframes breathe-reverse {
           0%, 100% {
             transform: scale(1.2) rotate(0deg);
-            opacity: 0.4;
+            opacity: 0.6;
           }
           50% {
             transform: scale(0.85) rotate(-180deg);
-            opacity: 0.7;
+            opacity: 0.9;
           }
         }
 
@@ -113,30 +113,30 @@ export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingS
         @keyframes glow-pulse {
           0%, 100% {
             transform: scale(0.9);
-            opacity: 0.3;
+            opacity: 0.5;
           }
           50% {
             transform: scale(1.25);
-            opacity: 0.6;
+            opacity: 0.8;
           }
         }
 
         @keyframes shimmer {
           0%, 100% {
             transform: rotate(0deg) scale(0.95);
-            opacity: 0.3;
+            opacity: 0.5;
           }
           25% {
             transform: rotate(90deg) scale(1.15);
-            opacity: 0.6;
+            opacity: 0.8;
           }
           50% {
             transform: rotate(180deg) scale(0.95);
-            opacity: 0.3;
+            opacity: 0.5;
           }
           75% {
             transform: rotate(270deg) scale(1.15);
-            opacity: 0.6;
+            opacity: 0.8;
           }
         }
       `}</style>
