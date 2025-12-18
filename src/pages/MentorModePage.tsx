@@ -386,24 +386,10 @@ export default function MentorModePage() {
                     <span className="text-sm font-medium">Voice Settings</span>
                   </div>
                   <span className="text-xs text-muted-foreground group-open:hidden">
-                    {currentProvider === 'openai' ? 'OpenAI' : 'Google Cloud'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
+                    {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
                   </span>
                 </summary>
-                <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Provider</label>
-                    <select
-                      value={currentProvider}
-                      onChange={(e) => handleProviderChange(e.target.value as TTSProvider)}
-                      className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
-                    >
-                      {availableProviders.map(provider => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name} {!provider.configured ? '(Not configured)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="mt-3 pt-3 border-t">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Voice</label>
                     <select
