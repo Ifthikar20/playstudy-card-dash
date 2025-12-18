@@ -118,6 +118,7 @@ export interface Question {
 
 export interface Topic {
   id: string;
+  db_id?: number;  // Database ID for syncing cached audio/narratives
   title: string;
   description: string;
   questions: Question[];
@@ -466,6 +467,7 @@ export const createStudySessionWithAI = async (
       if (!topicList) return [];
       return topicList.map((t: any) => ({
         ...t,
+        db_id: t.db_id ?? t.id, // Preserve database ID for caching
         score: t.score ?? 0, // Ensure score is 0, not null
         currentQuestionIndex: t.currentQuestionIndex ?? 0,
         completed: t.completed ?? false,
@@ -535,6 +537,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       if (!topicList) return [];
       return topicList.map((t: any) => ({
         ...t,
+        db_id: t.db_id ?? t.id, // Preserve database ID for caching
         score: t.score ?? 0, // Ensure score is 0, not null
         currentQuestionIndex: t.currentQuestionIndex ?? 0,
         completed: t.completed ?? false,
