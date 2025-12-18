@@ -4,7 +4,7 @@ import { login, register } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Mail, Sparkles } from 'lucide-react';
+import { Loader2, Mail, Zap } from 'lucide-react';
 import ShootingStars from '@/components/ShootingStars';
 
 export default function AuthPage() {
@@ -99,11 +99,12 @@ export default function AuthPage() {
 
             {/* Header */}
             <div className="text-center mb-8">
-              <div className="inline-flex items-center gap-2 mb-4">
-                <Sparkles className="h-8 w-8 text-primary" />
-                <span className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-                  PlayStudy
-                </span>
+              <div className="flex justify-center mb-4">
+                <img
+                  src="/logo-new.png"
+                  alt="PlayStudy"
+                  className="h-24 w-auto"
+                />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">
                 {mode === 'initial' && 'Welcome to PlayStudy'}
@@ -159,7 +160,7 @@ export default function AuthPage() {
                   className="w-full h-14 rounded-full text-base font-medium border-2 hover:bg-accent transition-all"
                   onClick={fillDemoCredentials}
                 >
-                  <Sparkles className="mr-3 h-5 w-5 text-primary" />
+                  <Zap className="mr-3 h-5 w-5 text-primary" />
                   Use Demo Account
                 </Button>
 
