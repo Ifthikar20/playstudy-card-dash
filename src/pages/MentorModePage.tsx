@@ -109,6 +109,51 @@ export default function MentorModePage() {
   const topics = session.extractedTopics || [];
   const currentTopic = topics[currentTopicIndex];
 
+  // Load cached narrative when topic changes
+  useEffect(() => {
+    const loadCachedNarrative = async () => {
+      if (!currentTopic) return;
+
+      const topicDbId = typeof currentTopic.db_id === 'number' ? currentTopic.db_id : null;
+      if (!topicDbId) return;
+
+      const token = localStorage.getItem('auth_token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+      try {
+        console.log(`[Mentor Mode] Checking for cached narrative for topic ${topicDbId}`);
+
+        const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            topic_id: topicDbId,
+            topic_title: currentTopic.title || 'Untitled Topic',
+            topic_description: currentTopic.description || null,
+            questions: Array.isArray(currentTopic.questions) ? currentTopic.questions : [],
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.narrative) {
+            console.log(`[Mentor Mode] ✅ Loaded cached narrative (${data.narrative.length} chars)`);
+            setFullNarrative(data.narrative);
+            setCurrentTranscript(data.narrative); // Show full transcript immediately
+          }
+        }
+      } catch (error) {
+        console.error('[Mentor Mode] Error loading cached narrative:', error);
+        // Silently fail - user can still click play to generate new content
+      }
+    };
+
+    loadCachedNarrative();
+  }, [currentTopic?.id, currentTopic?.db_id]);
+
   const handlePlayPause = () => {
     if (isPlaying) {
       setIsPlaying(false);
