@@ -3,12 +3,21 @@ Database seeding script to populate with sample data.
 """
 import sys
 from pathlib import Path
+import os
 
 # Add backend directory to Python path
 backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
 
-from app.database import SessionLocal
+# Check if we should use SQLite for development
+USE_SQLITE = os.getenv('USE_SQLITE', 'false').lower() == 'true'
+
+if USE_SQLITE:
+    print("🔄 Using SQLite for development...")
+    # Temporarily override DATABASE_URL for SQLite
+    os.environ['DATABASE_URL'] = 'sqlite:///./playstudy_dev.db'
+
+from app.database import SessionLocal, engine
 from app.models.user import User
 from app.models.game import Game
 from app.models.study_session import StudySession
@@ -36,6 +45,33 @@ def get_password_hash_safe(password: str) -> str:
 
 def seed_database():
     """Populate database with sample data."""
+
+    # Test database connection first
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print("✅ Database connection successful!")
+    except Exception as e:
+        print(f"\n❌ Database connection failed!")
+        print(f"Error: {str(e)}")
+        print("\n💡 To fix this issue:")
+        print("   1. Make sure PostgreSQL is running:")
+        print("      - macOS: brew services start postgresql")
+        print("      - Linux: sudo systemctl start postgresql")
+        print("      - Windows: Start PostgreSQL service")
+        print("\n   2. Or use SQLite for development:")
+        print("      USE_SQLITE=true python backend/seed_database.py")
+        print("\n   3. Create the database if it doesn't exist:")
+        print("      createdb playstudy_db")
+        return
+
+    # Create tables if using SQLite
+    if USE_SQLITE:
+        print("📦 Creating database tables...")
+        from app.models.user import Base
+        Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
 
     try:
