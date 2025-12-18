@@ -115,13 +115,23 @@ export default function MentorModePage() {
       if (!currentTopic) return;
 
       const topicDbId = typeof currentTopic.db_id === 'number' ? currentTopic.db_id : null;
-      if (!topicDbId) return;
+      console.log(`[Mentor Mode] Current topic:`, {
+        id: currentTopic.id,
+        db_id: currentTopic.db_id,
+        topicDbId,
+        title: currentTopic.title
+      });
+
+      if (!topicDbId) {
+        console.log('[Mentor Mode] ⚠️ No db_id available, skipping cache check');
+        return;
+      }
 
       const token = localStorage.getItem('auth_token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
       try {
-        console.log(`[Mentor Mode] Checking for cached narrative for topic ${topicDbId}`);
+        console.log(`[Mentor Mode] 📡 Fetching cached narrative from DB for topic ID ${topicDbId}`);
 
         const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
           method: 'POST',
@@ -140,10 +150,14 @@ export default function MentorModePage() {
         if (response.ok) {
           const data = await response.json();
           if (data.narrative) {
-            console.log(`[Mentor Mode] ✅ Loaded cached narrative (${data.narrative.length} chars)`);
+            console.log(`[Mentor Mode] ✅ Narrative loaded from database (${data.narrative.length} chars, ~${data.estimated_duration_seconds}s)`);
             setFullNarrative(data.narrative);
             setCurrentTranscript(data.narrative); // Show full transcript immediately
+          } else {
+            console.log('[Mentor Mode] ⚠️ Response OK but no narrative in response');
           }
+        } else {
+          console.log(`[Mentor Mode] ⚠️ Response not OK: ${response.status} ${response.statusText}`);
         }
       } catch (error) {
         console.error('[Mentor Mode] Error loading cached narrative:', error);
