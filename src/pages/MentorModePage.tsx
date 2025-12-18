@@ -359,51 +359,6 @@ export default function MentorModePage() {
 
         {/* Main Content Area */}
         <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col gap-4">
-          {/* Settings Card - Collapsible */}
-          <Card className="p-3">
-            <details className="group">
-              <summary className="flex items-center justify-between cursor-pointer list-none">
-                <div className="flex items-center gap-2">
-                  <Settings size={16} className="text-primary" />
-                  <span className="text-sm font-medium">Voice Settings</span>
-                </div>
-                <span className="text-xs text-muted-foreground group-open:hidden">
-                  {currentProvider === 'openai' ? 'OpenAI' : 'Google Cloud'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
-                </span>
-              </summary>
-              <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Provider</label>
-                  <select
-                    value={currentProvider}
-                    onChange={(e) => handleProviderChange(e.target.value as TTSProvider)}
-                    className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
-                  >
-                    {availableProviders.map(provider => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name} {!provider.configured ? '(Not configured)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Voice</label>
-                  <select
-                    value={currentVoice}
-                    onChange={(e) => setCurrentVoice(e.target.value)}
-                    className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
-                  >
-                    {aiVoiceService.getAvailableVoices().map(voice => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </details>
-          </Card>
-
           {/* Error */}
           {error && (
             <Card className="p-3 border-destructive bg-destructive/10">
@@ -420,8 +375,52 @@ export default function MentorModePage() {
             </Card>
           )}
 
-          {/* Conversation Area */}
+          {/* Combined Conversation Area with Settings */}
           <Card className="flex-1 flex flex-col overflow-hidden">
+            {/* Voice Settings - Collapsible */}
+            <div className="border-b p-3">
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer list-none">
+                  <div className="flex items-center gap-2">
+                    <Settings size={16} className="text-primary" />
+                    <span className="text-sm font-medium">Voice Settings</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground group-open:hidden">
+                    {currentProvider === 'openai' ? 'OpenAI' : 'Google Cloud'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
+                  </span>
+                </summary>
+                <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Provider</label>
+                    <select
+                      value={currentProvider}
+                      onChange={(e) => handleProviderChange(e.target.value as TTSProvider)}
+                      className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
+                    >
+                      {availableProviders.map(provider => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.name} {!provider.configured ? '(Not configured)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Voice</label>
+                    <select
+                      value={currentVoice}
+                      onChange={(e) => setCurrentVoice(e.target.value)}
+                      className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
+                    >
+                      {aiVoiceService.getAvailableVoices().map(voice => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </details>
+            </div>
             {/* Transcript */}
             <div className="flex-1 overflow-auto p-4 space-y-4" ref={transcriptRef}>
               {/* Topic Header */}
