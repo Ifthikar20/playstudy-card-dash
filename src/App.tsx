@@ -8,7 +8,7 @@ import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { LoadingBrain } from "@/components/LoadingSpinner";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -92,7 +92,7 @@ const AuthenticatedApp = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <LoadingBrain message="Loading your dashboard..." />
+        <LoadingSpinner message="Loading your dashboard..." size="lg" />
       </div>
     );
   }
