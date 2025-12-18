@@ -324,9 +324,9 @@ Keep the tone friendly, encouraging, and clear.
 Make sure to use the exact emoji markers listed above.
 """
 
-        # Call DeepSeek AI
+        # Call DeepSeek AI (with extended timeout for comprehensive content generation)
         logger.info("[Mentor Content] Calling DeepSeek AI...")
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:  # 3 minutes for long lessons
             response = await client.post(
                 "https://api.deepseek.com/chat/completions",
                 headers={
