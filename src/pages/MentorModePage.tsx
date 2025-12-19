@@ -417,17 +417,6 @@ export default function MentorModePage() {
       setIsReading(false);
       setIsPlaying(false);
       setIsLoading(false);
-    } catch (error) {
-      console.error('[Mentor Mode] Error in speakContent:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-      setError(`⚠️ ${errorMessage}`);
-      if (transcriptInterval) {
-        clearInterval(transcriptInterval);
-        transcriptInterval = null;
-      }
-      setIsReading(false);
-      setIsPlaying(false);
-      setIsLoading(false);
     }
   };
 
