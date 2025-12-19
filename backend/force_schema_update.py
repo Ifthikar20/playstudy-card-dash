@@ -25,8 +25,17 @@ def force_schema_update():
     try:
         with engine.begin() as conn:
             # Drop tables in reverse dependency order (with CASCADE for PostgreSQL)
+            print("  Dropping questions table...")
+            conn.execute(text(f"DROP TABLE IF EXISTS questions{cascade}"))
+
+            print("  Dropping topics table...")
+            conn.execute(text(f"DROP TABLE IF EXISTS topics{cascade}"))
+
             print("  Dropping study_sessions table...")
             conn.execute(text(f"DROP TABLE IF EXISTS study_sessions{cascade}"))
+
+            print("  Dropping folders table...")
+            conn.execute(text(f"DROP TABLE IF EXISTS folders{cascade}"))
 
             print("  Dropping games table...")
             conn.execute(text(f"DROP TABLE IF EXISTS games{cascade}"))
