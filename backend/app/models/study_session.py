@@ -53,6 +53,7 @@ class StudySession(Base):
     id = Column(GUID(), primary_key=True, default=uuid.uuid4, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     game_id = Column(Integer, ForeignKey("games.id", ondelete="SET NULL"), nullable=True)
+    folder_id = Column(Integer, ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)  # Folder organization
     title = Column(String, nullable=False)  # Study session title
     topic = Column(String, nullable=False)
     study_content = Column(Text, nullable=True)  # Original uploaded content
@@ -72,6 +73,7 @@ class StudySession(Base):
 
     # Relationships
     user = relationship("User", back_populates="study_sessions")
+    folder = relationship("Folder", back_populates="study_sessions")
     topics = relationship("Topic", back_populates="study_session", cascade="all, delete-orphan")
 
     def __repr__(self):

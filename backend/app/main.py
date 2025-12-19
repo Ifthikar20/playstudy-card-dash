@@ -11,7 +11,7 @@ from app.core.rate_limit import limiter
 from app.core.cache import redis_client
 from app.core.nonce_manager import nonce_manager
 from app.middleware.encryption_middleware import EncryptionMiddleware
-from app.api import auth, app_data, questions, study_sessions, tts, crypto
+from app.api import auth, app_data, questions, study_sessions, tts, crypto, folders
 from app.database import Base, engine
 import logging
 
@@ -133,6 +133,12 @@ app.include_router(
     crypto.router,
     prefix=settings.API_V1_PREFIX,
     tags=["Cryptography"],
+)
+
+app.include_router(
+    folders.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["Folders"],
 )
 
 

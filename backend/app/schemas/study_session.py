@@ -44,6 +44,7 @@ class StudySessionResponse(BaseModel):
     hasFullStudy: bool
     hasSpeedRun: bool
     hasQuiz: bool
+    folderId: Optional[int] = None  # Folder organization
 
     class Config:
         from_attributes = True
@@ -81,4 +82,5 @@ class StudySessionResponse(BaseModel):
             hasFullStudy=session.has_full_study,
             hasSpeedRun=session.has_speed_run,
             hasQuiz=session.has_quiz,
+            folderId=session.folder_id,
         )

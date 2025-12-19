@@ -24,6 +24,7 @@ class User(Base):
 
     # Relationships
     study_sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
+    folders = relationship("Folder", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, name={self.name})>"

@@ -10,10 +10,12 @@ from app.schemas.app_data import AppDataResponse
 from app.schemas.user import UserProfile, UserStats
 from app.schemas.game import GameResponse
 from app.schemas.study_session import StudySessionResponse
+from app.schemas.folder import FolderResponse
 from app.models.user import User
 from app.models.game import Game
 from app.models.study_session import StudySession
 from app.models.topic import Topic
+from app.models.folder import Folder
 from app.core.cache import get_cache, set_cache
 from app.core.rate_limit import limiter
 from app.config import settings
@@ -70,6 +72,13 @@ async def get_app_data(
     # Fetch all games (active only)
     games = db.query(Game).filter(Game.is_active == True).all()
     logger.debug(f"📊 Found {len(games)} active games")
+
+    # Fetch user's folders
+    folders = db.query(Folder).filter(
+        Folder.user_id == current_user.id,
+        Folder.is_archived == False
+    ).order_by(Folder.created_at.desc()).all()
+    logger.debug(f"📊 Found {len(folders)} folders")
 
     # Fetch user's study sessions - ordered by title (content-based) instead of date
     study_sessions = (
@@ -144,10 +153,21 @@ async def get_app_data(
         StudySessionResponse.from_db_model(session) for session in study_sessions
     ]
 
+    # Build folder responses with session counts
+    folders_response = []
+    for folder in folders:
+        session_count = db.query(StudySession).filter(
+            StudySession.folder_id == folder.id
+        ).count()
+        folders_response.append(
+            FolderResponse.from_db_model(folder, session_count=session_count)
+        )
+
     # Build final response
     response_data = AppDataResponse(
         games=games_response,
         studySessions=sessions_response,
+        folders=folders_response,
         userProfile=user_profile,
         stats=user_stats,
     )
