@@ -49,6 +49,7 @@ export default function MentorModePage() {
   const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
+  const [topicImages, setTopicImages] = useState<any[]>([]);
 
   // Quiz state
   const [showQuiz, setShowQuiz] = useState(false);
@@ -169,6 +170,12 @@ export default function MentorModePage() {
             console.log(`[Mentor Mode] ✅ Narrative loaded from database (${data.narrative.length} chars, ~${data.estimated_duration_seconds}s)`);
             setFullNarrative(data.narrative);
             setCurrentTranscript(data.narrative); // Show full transcript immediately
+
+            // Load images if available
+            if (data.images && data.images.length > 0) {
+              console.log(`[Mentor Mode] 🖼️ Loaded ${data.images.length} cached images`);
+              setTopicImages(data.images);
+            }
           } else {
             console.log('[Mentor Mode] ⚠️ Response OK but no narrative in response');
           }
@@ -258,6 +265,14 @@ export default function MentorModePage() {
 
       console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
       console.log(`[Mentor Mode] Narrative length: ${narrative.length} characters`);
+
+      // Store images if available
+      if (data.images && data.images.length > 0) {
+        console.log(`[Mentor Mode] 🖼️ Received ${data.images.length} images`);
+        setTopicImages(data.images);
+      } else {
+        setTopicImages([]);
+      }
 
       setFullNarrative(narrative);
       setCurrentTranscript('');
@@ -458,6 +473,7 @@ export default function MentorModePage() {
       setIsPlaying(false);
       setIsReading(false);
       setCurrentTranscript('');
+      setTopicImages([]); // Reset images for next topic
       setQuizCompleted(false); // Reset for next topic
       setProgress(((currentTopicIndex + 1) / topics.length) * 100);
     }
@@ -470,6 +486,7 @@ export default function MentorModePage() {
       setIsPlaying(false);
       setIsReading(false);
       setCurrentTranscript('');
+      setTopicImages([]); // Reset images for previous topic
       setQuizCompleted(false); // Reset for previous topic
       setProgress(((currentTopicIndex - 1) / topics.length) * 100);
     }
@@ -519,6 +536,7 @@ export default function MentorModePage() {
       setCurrentTopicIndex(currentTopicIndex + 1);
       setCurrentTranscript('');
       setFullNarrative('');
+      setTopicImages([]); // Reset images for next topic
       setProgress(((currentTopicIndex + 1) / topics.length) * 100);
       console.log('[Mentor Mode] Moving to next topic:', currentTopicIndex + 1);
     } else {
@@ -621,6 +639,38 @@ export default function MentorModePage() {
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4">
                   <h3 className="font-semibold text-foreground mb-2">{currentTopic.title}</h3>
                   <p className="text-sm text-muted-foreground">{currentTopic.description}</p>
+                </div>
+              )}
+
+              {/* Visual Examples Section */}
+              {topicImages.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-muted-foreground">📸 Visual Examples</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {topicImages.map((image, index) => (
+                      <div key={index} className="relative group overflow-hidden rounded-lg border border-border bg-muted">
+                        <img
+                          src={image.thumb_url}
+                          alt={image.description}
+                          className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                          <p className="text-xs text-white line-clamp-2">{image.description}</p>
+                          <a
+                            href={image.unsplash_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-white/70 hover:text-white"
+                          >
+                            Photo by {image.author}
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

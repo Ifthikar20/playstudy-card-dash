@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from app.services.tts_service import tts_service
+from app.services.image_search_service import image_search_service
 from app.dependencies import get_current_user, get_db
 from app.core.rate_limit import limiter
 from slowapi import Limiter
@@ -234,6 +235,7 @@ class MentorContentResponse(BaseModel):
     """Response model for mentor content."""
     narrative: str = Field(..., description="Formatted narrative for the mentor")
     estimated_duration_seconds: int = Field(..., description="Estimated speech duration")
+    images: Optional[List[Dict]] = Field(default=None, description="Related images for visual examples")
 
 
 @router.post(
@@ -368,9 +370,25 @@ Write this as you would naturally explain it to a student, not following a stric
                 db.commit()
                 logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
 
+        # Search for relevant images
+        images = None
+        if image_search_service.is_configured():
+            try:
+                logger.info(f"[Mentor Content] 🖼️ Searching for images: {content_request.topic_title}")
+                images = await image_search_service.search_images(
+                    query=content_request.topic_title,
+                    per_page=3
+                )
+                logger.info(f"[Mentor Content] Found {len(images) if images else 0} images")
+            except Exception as img_error:
+                logger.warning(f"[Mentor Content] Image search failed: {img_error}")
+                # Don't fail the entire request if image search fails
+                images = None
+
         return MentorContentResponse(
             narrative=narrative,
-            estimated_duration_seconds=estimated_seconds
+            estimated_duration_seconds=estimated_seconds,
+            images=images
         )
 
     except httpx.TimeoutException:
