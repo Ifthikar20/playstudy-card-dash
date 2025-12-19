@@ -67,19 +67,22 @@ def analyze_content_complexity(text: str) -> dict:
     # Recommend topics based on word count and complexity
     # Short content (< 500 words): 2-4 topics
     # Medium content (500-2000 words): 4-8 topics
-    # Long content (2000-5000 words): 8-12 topics
-    # Very long content (5000+ words): 12-20 topics
+    # Long content (2000-5000 words): 8-15 topics
+    # Very long content (5000-10000 words): 15-30 topics
+    # Extremely long content (10000+ words): 30-50 topics
     if word_count < 500:
         base_topics = 3
     elif word_count < 2000:
         base_topics = 6
     elif word_count < 5000:
-        base_topics = 10
+        base_topics = 12
+    elif word_count < 10000:
+        base_topics = 20
     else:
-        base_topics = 15
+        base_topics = 35
 
     # Adjust based on complexity
-    recommended_topics = max(2, min(20, round(base_topics * (0.7 + complexity_score * 0.6))))
+    recommended_topics = max(2, min(50, round(base_topics * (0.7 + complexity_score * 0.6))))
 
     # Recommend questions per topic based on content depth
     # More complex content = more questions to test understanding
@@ -215,7 +218,7 @@ class CreateStudySessionRequest(BaseModel):
     """Request schema for creating a study session."""
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
-    num_topics: int = Field(default=4, ge=2, le=20)  # Increased from 10 to 20
+    num_topics: int = Field(default=4, ge=2, le=50)  # Increased to 50 for comprehensive coverage
     questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
 
 

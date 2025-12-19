@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession, updateTopicProgress, updateUserXP } from '@/services/api';
 
-interface Game {
+export interface Game {
   id: number;
   title: string;
   description: string;
@@ -37,7 +37,17 @@ interface Topic {
   subtopics?: Topic[];
 }
 
-interface StudySession {
+export interface Folder {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  is_archived: boolean;
+  created_at: string;
+  session_count: number;
+}
+
+export interface StudySession {
   id: string;
   title: string;
   progress: number;
@@ -49,6 +59,7 @@ interface StudySession {
   hasQuiz: boolean;
   studyContent?: string;
   extractedTopics?: Topic[];
+  folderId?: number | null;
 }
 
 interface AppState {
@@ -76,6 +87,12 @@ interface AppState {
   // Games
   games: Game[];
   likeGame: (id: number) => void;
+
+  // Folders
+  folders: Folder[];
+  addFolder: (folder: Folder) => void;
+  updateFolder: (folderId: number, updates: Partial<Folder>) => void;
+  deleteFolder: (folderId: number) => void;
 
   // Speed Run Mode
   speedRunMode: 'cards' | 'mcq';
@@ -243,6 +260,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       isInitialized: true,
       games: data.games,
       studySessions: data.studySessions,
+      folders: data.folders || [],
       xp: data.userProfile.xp,
       userProfile: {
         id: data.userProfile.id,
@@ -683,6 +701,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     games: state.games.map((game) =>
       game.id === id ? { ...game, likes: game.likes + 1 } : game
     ),
+  })),
+
+  // Folders data - Start empty, will be populated by API
+  folders: [],
+
+  addFolder: (folder) => set((state) => ({
+    folders: [...state.folders, folder],
+  })),
+
+  updateFolder: (folderId, updates) => set((state) => ({
+    folders: state.folders.map((folder) =>
+      folder.id === folderId ? { ...folder, ...updates } : folder
+    ),
+  })),
+
+  deleteFolder: (folderId) => set((state) => ({
+    folders: state.folders.filter((folder) => folder.id !== folderId),
   })),
 
   // Speed Run Mode

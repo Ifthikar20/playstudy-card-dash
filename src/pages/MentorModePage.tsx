@@ -49,12 +49,14 @@ export default function MentorModePage() {
   const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
+  const [topicImages, setTopicImages] = useState<any[]>([]);
 
   // Quiz state
   const [showQuiz, setShowQuiz] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [quizCompleted, setQuizCompleted] = useState(false); // Track if current topic's quiz was attempted
 
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
@@ -168,6 +170,12 @@ export default function MentorModePage() {
             console.log(`[Mentor Mode] ✅ Narrative loaded from database (${data.narrative.length} chars, ~${data.estimated_duration_seconds}s)`);
             setFullNarrative(data.narrative);
             setCurrentTranscript(data.narrative); // Show full transcript immediately
+
+            // Load images if available
+            if (data.images && data.images.length > 0) {
+              console.log(`[Mentor Mode] 🖼️ Loaded ${data.images.length} cached images`);
+              setTopicImages(data.images);
+            }
           } else {
             console.log('[Mentor Mode] ⚠️ Response OK but no narrative in response');
           }
@@ -258,6 +266,14 @@ export default function MentorModePage() {
       console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
       console.log(`[Mentor Mode] Narrative length: ${narrative.length} characters`);
 
+      // Store images if available
+      if (data.images && data.images.length > 0) {
+        console.log(`[Mentor Mode] 🖼️ Received ${data.images.length} images`);
+        setTopicImages(data.images);
+      } else {
+        setTopicImages([]);
+      }
+
       setFullNarrative(narrative);
       setCurrentTranscript('');
 
@@ -287,7 +303,7 @@ export default function MentorModePage() {
         };
       };
 
-      const handleEnd = () => {
+      const handleEnd = async () => {
         if (transcriptInterval) {
           clearInterval(transcriptInterval);
           transcriptInterval = null;
@@ -296,9 +312,38 @@ export default function MentorModePage() {
         setIsReading(false);
         setIsPlaying(false);
 
-        // Show quiz after topic explanation completes
-        console.log('[Mentor Mode] Topic explanation complete - showing quiz');
-        setShowQuiz(true);
+        // Play quiz announcement before showing quiz
+        console.log('[Mentor Mode] Topic explanation complete - playing quiz announcement');
+
+        const quizAnnouncement = "Great! Now let me test you on what you've learned so far. This will help reinforce the concepts we just covered.";
+
+        try {
+          await aiVoiceService.speak(
+            quizAnnouncement,
+            {
+              voice: currentVoice,
+              speed: 1.0,
+              model: currentProvider === 'openai' ? 'tts-1' : undefined,
+              pitch: 0,
+              provider: currentProvider
+            },
+            {
+              onEnd: () => {
+                console.log('[Mentor Mode] Quiz announcement complete - showing quiz');
+                setShowQuiz(true);
+              },
+              onError: (error) => {
+                console.error('[Mentor Mode] Quiz announcement failed:', error);
+                // Show quiz anyway if announcement fails
+                setShowQuiz(true);
+              }
+            }
+          );
+        } catch (error) {
+          console.error('[Mentor Mode] Failed to play quiz announcement:', error);
+          // Show quiz anyway if announcement fails
+          setShowQuiz(true);
+        }
       };
 
       const handleError = (error: Error) => {
@@ -421,12 +466,15 @@ export default function MentorModePage() {
   };
 
   const handleNext = () => {
-    if (currentTopicIndex < topics.length - 1) {
+    // Can only proceed if quiz has been completed
+    if (currentTopicIndex < topics.length - 1 && quizCompleted) {
       aiVoiceService.stop();
       setCurrentTopicIndex(currentTopicIndex + 1);
       setIsPlaying(false);
       setIsReading(false);
       setCurrentTranscript('');
+      setTopicImages([]); // Reset images for next topic
+      setQuizCompleted(false); // Reset for next topic
       setProgress(((currentTopicIndex + 1) / topics.length) * 100);
     }
   };
@@ -438,6 +486,8 @@ export default function MentorModePage() {
       setIsPlaying(false);
       setIsReading(false);
       setCurrentTranscript('');
+      setTopicImages([]); // Reset images for previous topic
+      setQuizCompleted(false); // Reset for previous topic
       setProgress(((currentTopicIndex - 1) / topics.length) * 100);
     }
   };
@@ -464,6 +514,7 @@ export default function MentorModePage() {
 
     setIsCorrect(correct);
     setShowFeedback(true);
+    setQuizCompleted(true); // Mark quiz as completed/attempted
 
     console.log('[Mentor Mode] Quiz submitted:', {
       selected: selectedAnswer,
@@ -478,12 +529,14 @@ export default function MentorModePage() {
     setSelectedAnswer(null);
     setShowFeedback(false);
     setIsCorrect(false);
+    setQuizCompleted(false); // Reset for next topic
 
     // Move to next topic
     if (currentTopicIndex < topics.length - 1) {
       setCurrentTopicIndex(currentTopicIndex + 1);
       setCurrentTranscript('');
       setFullNarrative('');
+      setTopicImages([]); // Reset images for next topic
       setProgress(((currentTopicIndex + 1) / topics.length) * 100);
       console.log('[Mentor Mode] Moving to next topic:', currentTopicIndex + 1);
     } else {
@@ -589,6 +642,38 @@ export default function MentorModePage() {
                 </div>
               )}
 
+              {/* Visual Examples Section */}
+              {topicImages.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-muted-foreground">📸 Visual Examples</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {topicImages.map((image, index) => (
+                      <div key={index} className="relative group overflow-hidden rounded-lg border border-border bg-muted">
+                        <img
+                          src={image.thumb_url}
+                          alt={image.description}
+                          className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                          <p className="text-xs text-white line-clamp-2">{image.description}</p>
+                          <a
+                            href={image.unsplash_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-white/70 hover:text-white"
+                          >
+                            Photo by {image.author}
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Live Transcript */}
               {currentTranscript && (
                 <div className="flex gap-3">
@@ -599,33 +684,30 @@ export default function MentorModePage() {
                     <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
                     <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                       {currentTranscript.split('\n').map((line, index) => {
-                        // Format special lines with styling
-                        if (line.startsWith('🎯 CONCEPT')) {
-                          return <div key={index} className="font-bold text-primary text-lg mt-6 mb-3 border-l-4 border-primary pl-3">{line}</div>;
-                        } else if (line.startsWith('💡 Let me explain')) {
-                          return <div key={index} className="font-semibold text-blue-600 dark:text-blue-400 mt-4 mb-2">{line}</div>;
-                        } else if (line.startsWith('✅ KEY ANSWER:')) {
-                          return <div key={index} className="font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-950 p-3 rounded-lg mt-3 mb-2 border-l-4 border-green-600">{line}</div>;
-                        } else if (line.startsWith('🌍 REAL-WORLD EXAMPLES:')) {
-                          return <div key={index} className="font-bold text-orange-600 dark:text-orange-400 mt-4 mb-2 text-base">{line}</div>;
-                        } else if (line.startsWith('❓ WHY THIS MATTERS:')) {
-                          return <div key={index} className="font-bold text-indigo-600 dark:text-indigo-400 mt-4 mb-2 text-base">{line}</div>;
-                        } else if (line.startsWith('📌 REMEMBER THIS:')) {
-                          return <div key={index} className="font-bold text-purple-600 dark:text-purple-400 mt-4 mb-2 text-base">{line}</div>;
-                        } else if (line.startsWith('🎓 LESSON SUMMARY:')) {
-                          return <div key={index} className="font-bold text-primary text-lg mt-6 mb-3 border-l-4 border-primary pl-3">{line}</div>;
-                        } else if (line.startsWith('📚 What is')) {
-                          return <div key={index} className="font-bold text-blue-600 dark:text-blue-400 mt-4 mb-2 text-base">{line}</div>;
-                        } else if (line.startsWith('Example 1:') || line.startsWith('Example 2:')) {
-                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-orange-300 dark:border-orange-700 pl-3">{line}</div>;
-                        } else if (line.match(/^\d+\./)) {
-                          return <div key={index} className="ml-4 mt-1 font-medium">{line}</div>;
-                        } else if (line.startsWith('━━━')) {
-                          return <div key={index} className="border-t-2 border-primary/30 my-4"></div>;
-                        } else if (line.trim() === '') {
-                          return <div key={index} className="h-3"></div>;
-                        } else {
-                          return <div key={index} className="leading-relaxed">{line}</div>;
+                        // Format with minimal styling for natural flow
+                        // Headers with emojis or ALL CAPS
+                        if (line.match(/^[🎯📚💡✅🌍❓📌🎓]/)) {
+                          return <div key={index} className="font-semibold text-primary mt-4 mb-2">{line}</div>;
+                        }
+                        // Examples
+                        else if (line.match(/^(Example \d+:|For example,|Consider)/i)) {
+                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-primary/30 pl-3">{line}</div>;
+                        }
+                        // Numbered or bulleted lists
+                        else if (line.match(/^(\d+\.|-|\*)\s/)) {
+                          return <div key={index} className="ml-4 mt-1">{line}</div>;
+                        }
+                        // Section dividers
+                        else if (line.match(/^[━─-]{3,}$/)) {
+                          return <div key={index} className="border-t border-border my-4"></div>;
+                        }
+                        // Empty lines for spacing
+                        else if (line.trim() === '') {
+                          return <div key={index} className="h-2"></div>;
+                        }
+                        // Regular paragraphs
+                        else {
+                          return <div key={index} className="leading-relaxed mt-1">{line}</div>;
                         }
                       })}
                       {isPlaying && currentTranscript !== fullNarrative && (
@@ -650,6 +732,15 @@ export default function MentorModePage() {
 
             {/* Controls */}
             <div className="border-t p-4">
+              {/* Quiz completion hint */}
+              {!quizCompleted && currentTopicIndex < topics.length - 1 && currentTranscript && (
+                <div className="text-center mb-3">
+                  <p className="text-xs text-muted-foreground">
+                    Complete the quiz after the lesson to proceed to the next topic
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center justify-center gap-3">
                 <Button
                   variant="outline"
@@ -680,8 +771,8 @@ export default function MentorModePage() {
                   variant="outline"
                   size="icon"
                   onClick={handleNext}
-                  disabled={currentTopicIndex === topics.length - 1}
-                  title="Next Topic"
+                  disabled={currentTopicIndex === topics.length - 1 || !quizCompleted}
+                  title={!quizCompleted ? "Complete the quiz to proceed" : "Next Topic"}
                 >
                   <SkipForward size={18} />
                 </Button>

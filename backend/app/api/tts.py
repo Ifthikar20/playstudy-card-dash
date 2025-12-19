@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from app.services.tts_service import tts_service
+from app.services.image_search_service import image_search_service
 from app.dependencies import get_current_user, get_db
 from app.core.rate_limit import limiter
 from slowapi import Limiter
@@ -234,6 +235,7 @@ class MentorContentResponse(BaseModel):
     """Response model for mentor content."""
     narrative: str = Field(..., description="Formatted narrative for the mentor")
     estimated_duration_seconds: int = Field(..., description="Estimated speech duration")
+    images: Optional[List[Dict]] = Field(default=None, description="Related images for visual examples")
 
 
 @router.post(
@@ -283,32 +285,12 @@ async def generate_mentor_content(
         logger.info(f"[Mentor Content] Generating new content for: {content_request.topic_title}")
 
         # Build the prompt for DeepSeek
-        prompt = f"""You are an expert AI mentor creating an engaging, comprehensive lesson.
+        prompt = f"""You are a friendly AI tutor explaining concepts clearly and naturally.
 
 Topic: {content_request.topic_title}
 Description: {content_request.topic_description or 'No description provided'}
 
-Create an extensive, conversational lesson that includes:
-1. A friendly introduction
-2. For each concept below, provide:
-   - Clear, detailed explanation
-   - Real-world examples (2-3 per concept)
-   - Why it matters
-   - Key takeaways
-
-Format your response with these EXACT section markers:
-- Start with: "Hey there! I'm your AI mentor..."
-- Use: 🎯 CONCEPT [number]: [question]
-- Use: 💡 Let me explain this clearly:
-- Use: ✅ KEY ANSWER:
-- Use: 🌍 REAL-WORLD EXAMPLES:
-- Use: Example 1: and Example 2:
-- Use: ❓ WHY THIS MATTERS:
-- Use: 📌 REMEMBER THIS:
-- Use: 🎓 LESSON SUMMARY:
-- Use: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ for dividers
-
-Concepts to teach:
+Create a natural, conversational lesson that covers the following concepts:
 """
 
         # Add each question/concept
@@ -318,16 +300,24 @@ Concepts to teach:
             explanation = q.get('explanation', '')
 
             prompt += f"\n{idx}. {question}\n"
-            prompt += f"   Correct Answer: {correct_answer}\n"
+            if correct_answer:
+                prompt += f"   Answer: {correct_answer}\n"
             if explanation:
                 prompt += f"   Context: {explanation}\n"
 
         prompt += """
 
-Make this extensive and conversational, like a real teacher explaining to students.
-Include multiple real-world examples for each concept.
-Keep the tone friendly, encouraging, and clear.
-Make sure to use the exact emoji markers listed above.
+Guidelines:
+- Start with a brief, friendly introduction (1-2 sentences)
+- For each concept, explain it clearly with 1-2 relevant examples
+- Use simple, conversational language as if talking to a student
+- Break complex ideas into digestible pieces
+- End each concept with a brief "why it matters" note
+- Keep it focused and avoid excessive repetition
+- Use minimal formatting - occasional bullet points are fine, but don't overuse emojis
+- Aim for clarity and engagement over rigid structure
+
+Write this as you would naturally explain it to a student, not following a strict template.
 """
 
         # Call DeepSeek AI (with extended timeout for comprehensive content generation)
@@ -344,7 +334,7 @@ Make sure to use the exact emoji markers listed above.
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are an expert educator who creates engaging, comprehensive lessons with real-world examples. Always use the exact formatting markers provided."
+                            "content": "You are a friendly, knowledgeable tutor who explains concepts clearly and naturally. You use simple language, relevant examples, and focus on helping students truly understand the material rather than memorizing facts."
                         },
                         {
                             "role": "user",
@@ -380,9 +370,25 @@ Make sure to use the exact emoji markers listed above.
                 db.commit()
                 logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
 
+        # Search for relevant images
+        images = None
+        if image_search_service.is_configured():
+            try:
+                logger.info(f"[Mentor Content] 🖼️ Searching for images: {content_request.topic_title}")
+                images = await image_search_service.search_images(
+                    query=content_request.topic_title,
+                    per_page=3
+                )
+                logger.info(f"[Mentor Content] Found {len(images) if images else 0} images")
+            except Exception as img_error:
+                logger.warning(f"[Mentor Content] Image search failed: {img_error}")
+                # Don't fail the entire request if image search fails
+                images = None
+
         return MentorContentResponse(
             narrative=narrative,
-            estimated_duration_seconds=estimated_seconds
+            estimated_duration_seconds=estimated_seconds,
+            images=images
         )
 
     except httpx.TimeoutException:

@@ -6,6 +6,7 @@ from typing import List
 from app.schemas.game import GameResponse
 from app.schemas.study_session import StudySessionResponse
 from app.schemas.user import UserProfile, UserStats
+from app.schemas.folder import FolderResponse
 
 
 class AppDataResponse(BaseModel):
@@ -15,6 +16,7 @@ class AppDataResponse(BaseModel):
     """
     games: List[GameResponse]
     studySessions: List[StudySessionResponse]
+    folders: List[FolderResponse]
     userProfile: UserProfile
     stats: UserStats
 

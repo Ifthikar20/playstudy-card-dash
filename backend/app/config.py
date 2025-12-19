@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_CLOUD_API_KEY: Optional[str] = None
 
+    # Unsplash Image Search (Optional)
+    UNSPLASH_ACCESS_KEY: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

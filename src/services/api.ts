@@ -150,9 +150,20 @@ export interface UserProfile {
   avatar?: string;
 }
 
+export interface Folder {
+  id: number;
+  name: string;
+  color: string;
+  icon: string;
+  is_archived: boolean;
+  created_at: string;
+  session_count: number;
+}
+
 export interface AppData {
   games: Game[];
   studySessions: StudySession[];
+  folders: Folder[];
   userProfile: UserProfile;
   stats: {
     totalSessions: number;
