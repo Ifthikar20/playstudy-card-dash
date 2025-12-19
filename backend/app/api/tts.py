@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from app.services.tts_service import tts_service
-from app.services.image_search_service import image_search_service
+from app.services.unsplash_service import unsplash_service
 from app.dependencies import get_current_user, get_db
 from app.core.rate_limit import limiter
 from slowapi import Limiter
@@ -370,14 +370,14 @@ Write this as you would naturally explain it to a student, not following a stric
                 db.commit()
                 logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
 
-        # Search for relevant images
+        # Search for relevant images using Unsplash
         images = None
-        if image_search_service.is_configured():
+        if unsplash_service.enabled:
             try:
                 logger.info(f"[Mentor Content] 🖼️ Searching for images: {content_request.topic_title}")
-                images = await image_search_service.search_images(
-                    query=content_request.topic_title,
-                    per_page=3
+                images = unsplash_service.get_topic_images(
+                    topic=content_request.topic_title,
+                    num_images=2
                 )
                 logger.info(f"[Mentor Content] Found {len(images) if images else 0} images")
             except Exception as img_error:

@@ -648,24 +648,24 @@ export default function MentorModePage() {
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-sm font-medium text-muted-foreground">📸 Visual Examples</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {topicImages.map((image, index) => (
-                      <div key={index} className="relative group overflow-hidden rounded-lg border border-border bg-muted">
+                      <div key={image.id || index} className="relative group overflow-hidden rounded-lg border border-border bg-muted">
                         <img
-                          src={image.thumb_url}
-                          alt={image.description}
+                          src={image.thumb}
+                          alt={image.alt}
                           className="w-full h-48 object-cover transition-transform group-hover:scale-105"
                           loading="lazy"
                         />
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                          <p className="text-xs text-white line-clamp-2">{image.description}</p>
+                          <p className="text-xs text-white line-clamp-2">{image.alt}</p>
                           <a
-                            href={image.unsplash_url}
+                            href={image.photographer_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-white/70 hover:text-white"
+                            className="text-xs text-white/70 hover:text-white transition-colors"
                           >
-                            Photo by {image.author}
+                            📷 {image.photographer}
                           </a>
                         </div>
                       </div>
