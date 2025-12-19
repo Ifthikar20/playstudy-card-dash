@@ -55,6 +55,7 @@ export default function MentorModePage() {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [quizCompleted, setQuizCompleted] = useState(false); // Track if current topic's quiz was attempted
 
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
@@ -450,12 +451,14 @@ export default function MentorModePage() {
   };
 
   const handleNext = () => {
-    if (currentTopicIndex < topics.length - 1) {
+    // Can only proceed if quiz has been completed
+    if (currentTopicIndex < topics.length - 1 && quizCompleted) {
       aiVoiceService.stop();
       setCurrentTopicIndex(currentTopicIndex + 1);
       setIsPlaying(false);
       setIsReading(false);
       setCurrentTranscript('');
+      setQuizCompleted(false); // Reset for next topic
       setProgress(((currentTopicIndex + 1) / topics.length) * 100);
     }
   };
@@ -467,6 +470,7 @@ export default function MentorModePage() {
       setIsPlaying(false);
       setIsReading(false);
       setCurrentTranscript('');
+      setQuizCompleted(false); // Reset for previous topic
       setProgress(((currentTopicIndex - 1) / topics.length) * 100);
     }
   };
@@ -493,6 +497,7 @@ export default function MentorModePage() {
 
     setIsCorrect(correct);
     setShowFeedback(true);
+    setQuizCompleted(true); // Mark quiz as completed/attempted
 
     console.log('[Mentor Mode] Quiz submitted:', {
       selected: selectedAnswer,
@@ -507,6 +512,7 @@ export default function MentorModePage() {
     setSelectedAnswer(null);
     setShowFeedback(false);
     setIsCorrect(false);
+    setQuizCompleted(false); // Reset for next topic
 
     // Move to next topic
     if (currentTopicIndex < topics.length - 1) {
@@ -676,6 +682,15 @@ export default function MentorModePage() {
 
             {/* Controls */}
             <div className="border-t p-4">
+              {/* Quiz completion hint */}
+              {!quizCompleted && currentTopicIndex < topics.length - 1 && currentTranscript && (
+                <div className="text-center mb-3">
+                  <p className="text-xs text-muted-foreground">
+                    Complete the quiz after the lesson to proceed to the next topic
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center justify-center gap-3">
                 <Button
                   variant="outline"
@@ -706,8 +721,8 @@ export default function MentorModePage() {
                   variant="outline"
                   size="icon"
                   onClick={handleNext}
-                  disabled={currentTopicIndex === topics.length - 1}
-                  title="Next Topic"
+                  disabled={currentTopicIndex === topics.length - 1 || !quizCompleted}
+                  title={!quizCompleted ? "Complete the quiz to proceed" : "Next Topic"}
                 >
                   <SkipForward size={18} />
                 </Button>
