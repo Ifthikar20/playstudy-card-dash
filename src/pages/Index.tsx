@@ -20,8 +20,20 @@ export default function Index() {
 
 
   return (
-    <div className="min-h-screen bg-background flex w-full">
-      <Sidebar />
+    <>
+      <style>{`
+        @keyframes fire-flicker {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          25% { opacity: 0.9; transform: scale(1.05); }
+          50% { opacity: 0.95; transform: scale(1.02); }
+          75% { opacity: 0.92; transform: scale(1.08); }
+        }
+        .fire-badge {
+          animation: fire-flicker 2s ease-in-out infinite;
+        }
+      `}</style>
+      <div className="min-h-screen bg-background flex w-full">
+        <Sidebar />
       
       <div className="flex-1 p-4 md:p-8 overflow-auto">
         <div className="max-w-5xl mx-auto">
@@ -64,7 +76,8 @@ export default function Index() {
                       )
                     : session.progress;
 
-                  const isNew = session.createdAt && (Date.now() - session.createdAt) < 24 * 60 * 60 * 1000;
+                  // Show NEW badge for sessions created within the last 48 hours
+                  const isNew = session.createdAt && (Date.now() - session.createdAt) < 48 * 60 * 60 * 1000;
 
                   return (
                     <div
@@ -77,9 +90,18 @@ export default function Index() {
                           {session.title}
                         </div>
                         {isNew && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                            New
-                          </Badge>
+                          <div className="relative">
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px] px-2 py-0.5 h-5 font-bold bg-gradient-to-r from-orange-500 to-red-500 border-0 fire-badge"
+                            >
+                              🔥 NEW
+                            </Badge>
+                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+                            </span>
+                          </div>
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground">
@@ -95,10 +117,11 @@ export default function Index() {
         </div>
       </div>
 
-      <CreateStudySessionDialog 
-        open={showCreateSession} 
-        onOpenChange={setShowCreateSession} 
+      <CreateStudySessionDialog
+        open={showCreateSession}
+        onOpenChange={setShowCreateSession}
       />
-    </div>
+      </div>
+    </>
   );
 }
