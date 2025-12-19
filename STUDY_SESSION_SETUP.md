@@ -103,8 +103,8 @@ Visit http://localhost:5173
 3. Frontend calls `POST /api/study-sessions/create-with-ai` with:
    - Title
    - Content (study material text)
-   - Number of topics (2-10, default: 4)
-   - Questions per topic (5-20, default: 10)
+   - Number of topics (2-50, default: 4)
+   - Questions per topic (5-50, default: 10)
 
 ### 2. AI Processing (Backend)
 

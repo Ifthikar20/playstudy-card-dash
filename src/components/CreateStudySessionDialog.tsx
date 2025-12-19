@@ -372,9 +372,9 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                                 )}
                               </span>
                             </div>
-                            <Slider value={topicCount} onValueChange={setTopicCount} min={2} max={20} step={1} />
+                            <Slider value={topicCount} onValueChange={setTopicCount} min={2} max={50} step={1} />
                             <p className="text-xs text-muted-foreground mt-1">
-                              More topics = more comprehensive coverage
+                              More topics = more comprehensive coverage (up to 50 topics)
                             </p>
                           </div>
                           <div>
