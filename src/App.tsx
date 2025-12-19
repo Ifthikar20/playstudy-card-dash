@@ -7,8 +7,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { apiClient } from "@/services/apiClient";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { LoadingBrain } from "@/components/LoadingSpinner";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -27,6 +29,11 @@ import MentorModePage from "./pages/MentorModePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// Initialize API client on app startup
+apiClient.initialize().catch((error) => {
+  console.error('[App] Failed to initialize API client:', error);
+});
 
 const AppContent = () => {
   return (
@@ -83,22 +90,28 @@ const AuthenticatedApp = () => {
 
   // Initialize store when data is loaded
   useEffect(() => {
+    console.log('[AuthenticatedApp] Data loaded:', !!data, 'isInitialized:', isInitialized);
     if (data && !isInitialized) {
+      console.log('[AuthenticatedApp] Initializing store with data...');
       initializeFromAPI(data);
     }
   }, [data, isInitialized, initializeFromAPI]);
 
+  console.log('[AuthenticatedApp] State:', { isLoading, isError, hasData: !!data });
+
   // Show loading state
   if (isLoading) {
+    console.log('[AuthenticatedApp] Showing loading spinner...');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <LoadingBrain message="Loading your dashboard..." />
+        <LoadingSpinner message="Loading your dashboard..." size="lg" />
       </div>
     );
   }
 
   // Show error state
   if (isError) {
+    console.log('[AuthenticatedApp] Showing error state...');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md">
@@ -115,16 +128,19 @@ const AuthenticatedApp = () => {
   }
 
   // Render the outlet for nested routes
+  console.log('[AuthenticatedApp] Rendering dashboard content...');
   return <Outlet />;
 };
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AppContent />
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <AppContent />
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

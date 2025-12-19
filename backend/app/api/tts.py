@@ -264,15 +264,21 @@ async def generate_mentor_content(
 
         # Check if narrative already exists for this topic
         if content_request.topic_id:
+            logger.info(f"[Mentor Content] Checking database for topic_id={content_request.topic_id}")
             topic = db.query(Topic).filter(Topic.id == content_request.topic_id).first()
-            if topic and topic.mentor_narrative:
-                logger.info(f"[Mentor Content] ✅ Using cached narrative for topic {content_request.topic_id}")
-                word_count = len(topic.mentor_narrative.split())
-                estimated_seconds = int((word_count / 150) * 60)
-                return MentorContentResponse(
-                    narrative=topic.mentor_narrative,
-                    estimated_duration_seconds=estimated_seconds
-                )
+            if topic:
+                if topic.mentor_narrative:
+                    logger.info(f"[Mentor Content] ✅ CACHE HIT - Returning cached narrative for topic {content_request.topic_id}")
+                    word_count = len(topic.mentor_narrative.split())
+                    estimated_seconds = int((word_count / 150) * 60)
+                    return MentorContentResponse(
+                        narrative=topic.mentor_narrative,
+                        estimated_duration_seconds=estimated_seconds
+                    )
+                else:
+                    logger.info(f"[Mentor Content] ⚠️ Topic exists but no cached narrative - will generate new")
+            else:
+                logger.info(f"[Mentor Content] ⚠️ Topic ID {content_request.topic_id} not found in database - will generate new")
 
         logger.info(f"[Mentor Content] Generating new content for: {content_request.topic_title}")
 
@@ -324,9 +330,9 @@ Keep the tone friendly, encouraging, and clear.
 Make sure to use the exact emoji markers listed above.
 """
 
-        # Call DeepSeek AI
+        # Call DeepSeek AI (with extended timeout for comprehensive content generation)
         logger.info("[Mentor Content] Calling DeepSeek AI...")
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:  # 3 minutes for long lessons
             response = await client.post(
                 "https://api.deepseek.com/chat/completions",
                 headers={

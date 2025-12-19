@@ -4,8 +4,16 @@ import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAppStore } from "@/store/appStore";
 import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import {
   Play,
   Pause,
@@ -16,7 +24,9 @@ import {
   ArrowLeft,
   Mic,
   Settings,
-  MessageSquare
+  MessageSquare,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 
 export default function MentorModePage() {
@@ -39,6 +49,12 @@ export default function MentorModePage() {
   const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
+
+  // Quiz state
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
 
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
@@ -108,6 +124,65 @@ export default function MentorModePage() {
   const topics = session.extractedTopics || [];
   const currentTopic = topics[currentTopicIndex];
 
+  // Load cached narrative when topic changes
+  useEffect(() => {
+    const loadCachedNarrative = async () => {
+      if (!currentTopic) return;
+
+      const topicDbId = typeof currentTopic.db_id === 'number' ? currentTopic.db_id : null;
+      console.log(`[Mentor Mode] Current topic:`, {
+        id: currentTopic.id,
+        db_id: currentTopic.db_id,
+        topicDbId,
+        title: currentTopic.title
+      });
+
+      if (!topicDbId) {
+        console.log('[Mentor Mode] ⚠️ No db_id available, skipping cache check');
+        return;
+      }
+
+      const token = localStorage.getItem('auth_token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+      try {
+        console.log(`[Mentor Mode] 📡 Fetching cached narrative from DB for topic ID ${topicDbId}`);
+
+        const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            topic_id: topicDbId,
+            topic_title: currentTopic.title || 'Untitled Topic',
+            topic_description: currentTopic.description || null,
+            questions: Array.isArray(currentTopic.questions) ? currentTopic.questions : [],
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.narrative) {
+            console.log(`[Mentor Mode] ✅ Narrative loaded from database (${data.narrative.length} chars, ~${data.estimated_duration_seconds}s)`);
+            setFullNarrative(data.narrative);
+            setCurrentTranscript(data.narrative); // Show full transcript immediately
+          } else {
+            console.log('[Mentor Mode] ⚠️ Response OK but no narrative in response');
+          }
+        } else {
+          console.log(`[Mentor Mode] ⚠️ Response not OK: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error('[Mentor Mode] Error loading cached narrative:', error);
+        // Silently fail - user can still click play to generate new content
+      }
+    };
+
+    loadCachedNarrative();
+  }, [currentTopic?.id, currentTopic?.db_id]);
+
   const handlePlayPause = () => {
     if (isPlaying) {
       setIsPlaying(false);
@@ -146,31 +221,17 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
+    let transcriptInterval: NodeJS.Timeout | null = null;
+    let currentAudioElement: HTMLAudioElement | null = null;
+
     try {
       // Get AI-generated content from DeepSeek
       const token = localStorage.getItem('auth_token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
       console.log('[Mentor Mode] Requesting AI-generated content from DeepSeek...');
-      console.log('[Mentor Mode] Topic data:', {
-        id: topic.id,
-        db_id: topic.db_id,
-        title: topic.title,
-        description: topic.description,
-        questionsCount: topic.questions?.length || 0
-      });
 
-      // Only use db_id if it's a valid number (not string like "category-1")
       const topicDbId = typeof topic.db_id === 'number' ? topic.db_id : null;
-
-      const requestBody = {
-        topic_id: topicDbId,  // Use database ID only if it's a number
-        topic_title: topic.title || 'Untitled Topic',
-        topic_description: topic.description || null,
-        questions: Array.isArray(topic.questions) ? topic.questions : [],
-      };
-
-      console.log('[Mentor Mode] Request body:', requestBody);
 
       const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
         method: 'POST',
@@ -178,108 +239,181 @@ export default function MentorModePage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          topic_id: topicDbId,
+          topic_title: topic.title || 'Untitled Topic',
+          topic_description: topic.description || null,
+          questions: Array.isArray(topic.questions) ? topic.questions : [],
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Failed to generate AI content' }));
-        const errorMessage = typeof errorData.detail === 'string'
-          ? errorData.detail
-          : JSON.stringify(errorData, null, 2);
-        console.error('[Mentor Mode] API Error Response:', errorData);
-        throw new Error(errorMessage);
+        throw new Error(errorData.detail || 'Failed to generate AI content');
       }
 
       const data = await response.json();
       const narrative = data.narrative;
 
       console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
+      console.log(`[Mentor Mode] Narrative length: ${narrative.length} characters`);
 
       setFullNarrative(narrative);
       setCurrentTranscript('');
 
-    // Simulate live transcript
-    const words = narrative.split(' ');
-    let wordIndex = 0;
-    let transcriptInterval: NodeJS.Timeout;
+      // Sync transcript with audio playback using actual audio timing
+      const syncTranscriptWithAudio = (audio: HTMLAudioElement, fullText: string) => {
+        const words = fullText.split(' ');
+        const totalWords = words.length;
 
-      const startTranscript = () => {
-        transcriptInterval = setInterval(() => {
-          if (wordIndex < words.length) {
-            setCurrentTranscript(prev => {
-              const newText = prev + (prev ? ' ' : '') + words[wordIndex];
-              wordIndex++;
-              return newText;
-            });
-          } else {
-            clearInterval(transcriptInterval);
-          }
-        }, 350); // Synced with OpenAI TTS speed (~170 words/minute)
+        const updateTranscript = () => {
+          if (!audio.duration || audio.duration === 0) return;
+
+          // Calculate how many words to show based on actual playback progress
+          const progress = audio.currentTime / audio.duration;
+          const wordsToShow = Math.min(Math.floor(progress * totalWords), totalWords);
+
+          const displayedText = words.slice(0, wordsToShow).join(' ');
+          setCurrentTranscript(displayedText);
+        };
+
+        // Update transcript every 100ms for smooth animation
+        transcriptInterval = setInterval(updateTranscript, 100);
+        audio.addEventListener('timeupdate', updateTranscript);
+
+        return () => {
+          if (transcriptInterval) clearInterval(transcriptInterval);
+          audio.removeEventListener('timeupdate', updateTranscript);
+        };
       };
 
-    const handleEnd = () => {
-      if (transcriptInterval) clearInterval(transcriptInterval);
-      setCurrentTranscript(narrative);
-      setIsReading(false);
-      setIsPlaying(false);
-      if (currentTopicIndex < topics.length - 1) {
-        setProgress(((currentTopicIndex + 1) / topics.length) * 100);
-      } else {
-        setProgress(100);
-      }
-    };
-
-    const handleError = (error: Error) => {
-      if (transcriptInterval) clearInterval(transcriptInterval);
-      console.error('[TTS Error]:', error);
-      setError(`Unable to play audio: ${error.message}`);
-      setIsReading(false);
-      setIsPlaying(false);
-      setIsLoading(false);
-    };
-
-    try {
-      setIsLoading(true);
-
-      // Start transcript animation slightly before audio starts
-      setTimeout(startTranscript, 500);
-
-      await aiVoiceService.speak(
-        narrative,
-        {
-          voice: currentVoice,
-          speed: 1.0, // Normal speed for natural conversation
-          model: currentProvider === 'openai' ? 'tts-1' : undefined, // Fast, high-quality OpenAI model
-          pitch: 0,
-          provider: currentProvider
-        },
-        {
-          onEnd: handleEnd,
-          onError: handleError
+      const handleEnd = () => {
+        if (transcriptInterval) {
+          clearInterval(transcriptInterval);
+          transcriptInterval = null;
         }
-      );
-        setIsLoading(false);
-      } catch (aiError) {
-        console.error('[Mentor Mode] Failed to get AI content:', aiError);
-        const errorMessage = aiError instanceof Error ? aiError.message : 'Failed to generate lesson content';
+        setCurrentTranscript(narrative);
+        setIsReading(false);
+        setIsPlaying(false);
 
-        // Check for specific error types
-        if (errorMessage.includes('API key') || errorMessage.includes('not configured')) {
-          setError('⚙️ API keys not configured. Please add DEEPSEEK_API_KEY and OPENAI_API_KEY to backend/.env file.');
-        } else if (errorMessage.includes('timeout')) {
-          setError('⏱️ Request timed out. The AI is taking too long. Please try again.');
-        } else {
-          setError(`❌ ${errorMessage}`);
+        // Show quiz after topic explanation completes
+        console.log('[Mentor Mode] Topic explanation complete - showing quiz');
+        setShowQuiz(true);
+      };
+
+      const handleError = (error: Error) => {
+        if (transcriptInterval) {
+          clearInterval(transcriptInterval);
+          transcriptInterval = null;
         }
-
+        console.error('[TTS Error]:', error);
+        setError(`Unable to play audio: ${error.message}`);
         setIsReading(false);
         setIsPlaying(false);
         setIsLoading(false);
+      };
+
+      // Chunk text at sentence boundaries for TTS
+      const chunkText = (text: string, maxLength: number = 4000): string[] => {
+        if (text.length <= maxLength) return [text];
+
+        const chunks: string[] = [];
+        const sentences = text.split(/(?<=[.!?])\s+/);
+        let currentChunk = '';
+
+        for (const sentence of sentences) {
+          if ((currentChunk + sentence).length <= maxLength) {
+            currentChunk += (currentChunk ? ' ' : '') + sentence;
+          } else {
+            if (currentChunk) chunks.push(currentChunk);
+            if (sentence.length > maxLength) {
+              const words = sentence.split(' ');
+              let wordChunk = '';
+              for (const word of words) {
+                if ((wordChunk + word).length <= maxLength) {
+                  wordChunk += (wordChunk ? ' ' : '') + word;
+                } else {
+                  if (wordChunk) chunks.push(wordChunk);
+                  wordChunk = word;
+                }
+              }
+              currentChunk = wordChunk;
+            } else {
+              currentChunk = sentence;
+            }
+          }
+        }
+        if (currentChunk) chunks.push(currentChunk);
+        return chunks;
+      };
+
+      // Play audio chunks sequentially with synced transcript
+      const playChunksSequentially = async (chunks: string[]) => {
+        console.log(`[Mentor Mode] Playing ${chunks.length} audio chunks`);
+
+        for (let i = 0; i < chunks.length; i++) {
+          console.log(`[Mentor Mode] Playing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
+
+          await new Promise<void>((resolve, reject) => {
+            aiVoiceService.speak(
+              chunks[i],
+              {
+                voice: currentVoice,
+                speed: 1.0,
+                model: currentProvider === 'openai' ? 'tts-1' : undefined,
+                pitch: 0,
+                provider: currentProvider
+              },
+              {
+                onEnd: () => {
+                  console.log(`[Mentor Mode] ✅ Chunk ${i + 1}/${chunks.length} complete`);
+                  resolve();
+                },
+                onError: (error) => {
+                  console.error(`[Mentor Mode] ❌ Chunk ${i + 1}/${chunks.length} failed:`, error);
+                  reject(error);
+                }
+              }
+            ).then((audio) => {
+              // Sync transcript with FIRST audio chunk
+              if (audio && i === 0) {
+                console.log('[Mentor Mode] 🎯 Syncing transcript with audio playback');
+                currentAudioElement = audio;
+                syncTranscriptWithAudio(audio, narrative);
+              }
+            }).catch(reject);
+          });
+        }
+      };
+
+      setIsLoading(true);
+
+      // Chunk and play
+      const chunks = chunkText(narrative);
+      console.log(`[Mentor Mode] Split narrative into ${chunks.length} chunks`);
+
+      await playChunksSequentially(chunks);
+
+      // All chunks played
+      handleEnd();
+      setIsLoading(false);
+
+    } catch (aiError) {
+      console.error('[Mentor Mode] Failed to get AI content:', aiError);
+      const errorMessage = aiError instanceof Error ? aiError.message : 'Failed to generate lesson content';
+
+      if (errorMessage.includes('API key') || errorMessage.includes('not configured')) {
+        setError('⚙️ API keys not configured. Please add DEEPSEEK_API_KEY and OPENAI_API_KEY to backend/.env file.');
+      } else if (errorMessage.includes('timeout')) {
+        setError('⏱️ Request timed out. The AI is taking too long. Please try again.');
+      } else {
+        setError(`❌ ${errorMessage}`);
       }
-    } catch (error) {
-      console.error('[Mentor Mode] Error in speakContent:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-      setError(`⚠️ ${errorMessage}`);
+
+      if (transcriptInterval) {
+        clearInterval(transcriptInterval);
+        transcriptInterval = null;
+      }
       setIsReading(false);
       setIsPlaying(false);
       setIsLoading(false);
@@ -314,96 +448,89 @@ export default function MentorModePage() {
     aiVoiceService.setVolume(newMutedState ? 0 : 1);
   };
 
+  // Quiz handlers
+  const handleAnswerSelect = (answerIndex: number) => {
+    if (!showFeedback) {
+      setSelectedAnswer(answerIndex);
+    }
+  };
+
+  const handleQuizSubmit = () => {
+    if (selectedAnswer === null || !currentTopic) return;
+
+    // Get a random question from the current topic
+    const question = currentTopic.questions[0]; // For now, use first question
+    const correct = selectedAnswer === question.correctAnswer;
+
+    setIsCorrect(correct);
+    setShowFeedback(true);
+
+    console.log('[Mentor Mode] Quiz submitted:', {
+      selected: selectedAnswer,
+      correct: question.correctAnswer,
+      isCorrect: correct
+    });
+  };
+
+  const handleQuizNext = () => {
+    // Reset quiz state
+    setShowQuiz(false);
+    setSelectedAnswer(null);
+    setShowFeedback(false);
+    setIsCorrect(false);
+
+    // Move to next topic
+    if (currentTopicIndex < topics.length - 1) {
+      setCurrentTopicIndex(currentTopicIndex + 1);
+      setCurrentTranscript('');
+      setFullNarrative('');
+      setProgress(((currentTopicIndex + 1) / topics.length) * 100);
+      console.log('[Mentor Mode] Moving to next topic:', currentTopicIndex + 1);
+    } else {
+      setProgress(100);
+      console.log('[Mentor Mode] All topics completed!');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex">
       <Sidebar />
 
       <div className="flex-1 flex flex-col h-screen">
         {/* Header */}
-        <div className="p-4 md:p-6 border-b">
+        <div className="px-4 py-2 md:px-6 md:py-3 border-b">
           <Button
             variant="ghost"
-            className="mb-2"
+            size="sm"
+            className="mb-1"
             onClick={() => navigate('/dashboard')}
           >
-            <ArrowLeft size={18} className="mr-2" />
+            <ArrowLeft size={16} className="mr-2" />
             Back to Dashboard
           </Button>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Mic className="text-primary" size={24} />
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10">
+                <Mic className="text-primary" size={20} />
               </div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-foreground">
+                <h1 className="text-lg font-bold text-foreground">
                   AI Mentor Session
                 </h1>
-                <p className="text-sm text-muted-foreground">{session.title}</p>
+                <p className="text-xs text-muted-foreground">{session.title}</p>
               </div>
             </div>
 
-            {/* Progress */}
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">
-                Topic {currentTopicIndex + 1} / {topics.length}
-              </div>
-              <div className="text-xs font-medium text-foreground">
-                {Math.round(progress)}% Complete
-              </div>
+            {/* Topic Counter */}
+            <div className="text-sm text-muted-foreground">
+              Topic {currentTopicIndex + 1} / {topics.length}
             </div>
           </div>
-
-          <Progress value={progress} className="h-1 mt-3" />
         </div>
 
         {/* Main Content Area */}
         <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col gap-4">
-          {/* Settings Card - Collapsible */}
-          <Card className="p-3">
-            <details className="group">
-              <summary className="flex items-center justify-between cursor-pointer list-none">
-                <div className="flex items-center gap-2">
-                  <Settings size={16} className="text-primary" />
-                  <span className="text-sm font-medium">Voice Settings</span>
-                </div>
-                <span className="text-xs text-muted-foreground group-open:hidden">
-                  {currentProvider === 'openai' ? 'OpenAI' : 'Google Cloud'} • {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
-                </span>
-              </summary>
-              <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Provider</label>
-                  <select
-                    value={currentProvider}
-                    onChange={(e) => handleProviderChange(e.target.value as TTSProvider)}
-                    className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
-                  >
-                    {availableProviders.map(provider => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name} {!provider.configured ? '(Not configured)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Voice</label>
-                  <select
-                    value={currentVoice}
-                    onChange={(e) => setCurrentVoice(e.target.value)}
-                    className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
-                  >
-                    {aiVoiceService.getAvailableVoices().map(voice => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </details>
-          </Card>
-
           {/* Error */}
           {error && (
             <Card className="p-3 border-destructive bg-destructive/10">
@@ -420,8 +547,38 @@ export default function MentorModePage() {
             </Card>
           )}
 
-          {/* Conversation Area */}
+          {/* Combined Conversation Area with Settings */}
           <Card className="flex-1 flex flex-col overflow-hidden">
+            {/* Voice Settings - Collapsible */}
+            <div className="border-b p-3">
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer list-none">
+                  <div className="flex items-center gap-2">
+                    <Settings size={16} className="text-primary" />
+                    <span className="text-sm font-medium">Voice Settings</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground group-open:hidden">
+                    {aiVoiceService.getAvailableVoices().find(v => v.id === currentVoice)?.name || 'Default'}
+                  </span>
+                </summary>
+                <div className="mt-3 pt-3 border-t">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Voice</label>
+                    <select
+                      value={currentVoice}
+                      onChange={(e) => setCurrentVoice(e.target.value)}
+                      className="w-full text-sm border rounded px-2 py-1 mt-1 bg-background"
+                    >
+                      {aiVoiceService.getAvailableVoices().map(voice => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </details>
+            </div>
             {/* Transcript */}
             <div className="flex-1 overflow-auto p-4 space-y-4" ref={transcriptRef}>
               {/* Topic Header */}
@@ -539,22 +696,136 @@ export default function MentorModePage() {
                 </Button>
               </div>
 
-              <div className="text-center mt-3 text-xs text-muted-foreground">
-                {isLoading ? (
-                  'Preparing your lesson...'
-                ) : isPlaying ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                    Speaking
-                  </span>
-                ) : (
-                  'Ready to learn'
-                )}
-              </div>
+              {isLoading ? (
+                <div className="mt-4">
+                  <LoadingSpinner message="Preparing your lesson..." size="sm" />
+                </div>
+              ) : (
+                <div className="text-center mt-3 text-xs text-muted-foreground">
+                  {isPlaying ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                      Speaking
+                    </span>
+                  ) : (
+                    'Ready to learn'
+                  )}
+                </div>
+              )}
             </div>
           </Card>
         </div>
       </div>
+
+      {/* Quiz Modal */}
+      <Dialog open={showQuiz} onOpenChange={setShowQuiz}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="text-primary" size={24} />
+              Quick Knowledge Check
+            </DialogTitle>
+            <DialogDescription>
+              Test your understanding of what you just learned
+            </DialogDescription>
+          </DialogHeader>
+
+          {currentTopic && currentTopic.questions.length > 0 ? (
+            <div className="space-y-4 mt-4">
+              {/* Question */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="font-medium text-foreground">
+                  {currentTopic.questions[0].question}
+                </p>
+              </div>
+
+              {/* Answer Options */}
+              <div className="space-y-2">
+                {currentTopic.questions[0].options.map((option, index) => {
+                  const isSelected = selectedAnswer === index;
+                  const isCorrectAnswer = index === currentTopic.questions[0].correctAnswer;
+                  const showCorrect = showFeedback && isCorrectAnswer;
+                  const showIncorrect = showFeedback && isSelected && !isCorrect;
+
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleAnswerSelect(index)}
+                      disabled={showFeedback}
+                      className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+                        showCorrect
+                          ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                          : showIncorrect
+                          ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
+                          : isSelected
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50 hover:bg-accent'
+                      } ${showFeedback ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="flex-1">{option}</span>
+                        {showCorrect && <CheckCircle className="text-green-600" size={20} />}
+                        {showIncorrect && <XCircle className="text-red-600" size={20} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Feedback */}
+              {showFeedback && (
+                <div
+                  className={`p-4 rounded-lg ${
+                    isCorrect
+                      ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'
+                      : 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {isCorrect ? (
+                      <CheckCircle className="text-green-600 mt-0.5" size={20} />
+                    ) : (
+                      <MessageSquare className="text-blue-600 mt-0.5" size={20} />
+                    )}
+                    <div>
+                      <p className="font-medium mb-1">
+                        {isCorrect ? 'Correct! 🎉' : 'Good try! 💡'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {currentTopic.questions[0].explanation}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2">
+                {!showFeedback ? (
+                  <Button
+                    onClick={handleQuizSubmit}
+                    disabled={selectedAnswer === null}
+                    className="min-w-[120px]"
+                  >
+                    Submit Answer
+                  </Button>
+                ) : (
+                  <Button onClick={handleQuizNext} className="min-w-[120px]">
+                    {currentTopicIndex < topics.length - 1 ? 'Next Topic →' : 'Complete 🎉'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              No questions available for this topic.
+              <Button onClick={handleQuizNext} className="mt-4">
+                Continue to Next Topic
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

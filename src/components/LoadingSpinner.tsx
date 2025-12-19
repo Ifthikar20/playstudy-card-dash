@@ -4,43 +4,142 @@ interface LoadingSpinnerProps {
 }
 
 export function LoadingSpinner({ message = "Loading...", size = 'md' }: LoadingSpinnerProps) {
-  const sizeClasses = {
-    sm: 'h-8 w-8',
-    md: 'h-16 w-16',
-    lg: 'h-24 w-24'
+  const sizeConfig = {
+    sm: { container: 150, scale: 0.6 },
+    md: { container: 250, scale: 1 },
+    lg: { container: 350, scale: 1.4 }
   };
 
+  const config = sizeConfig[size];
+
   return (
-    <div className="text-center">
-      {/* Animated container with glow effect */}
-      <div className="relative inline-block">
-        {/* Pulsing glow background */}
-        <div className="absolute inset-0 rounded-full bg-[#97E35C]/20 blur-xl animate-pulse"></div>
+    <div className="text-center flex flex-col items-center justify-center">
+      {/* Breathing Donut Loader */}
+      <div
+        className="relative"
+        style={{
+          width: `${config.container}px`,
+          height: `${config.container}px`,
+          transform: `scale(${config.scale})`
+        }}
+      >
+        {/* Outer glow layer */}
+        <div
+          className="absolute inset-0 rounded-full donut-glow"
+          style={{
+            background: 'radial-gradient(circle at 50% 50%, transparent 30%, rgba(167, 139, 250, 0.3) 45%, rgba(96, 165, 250, 0.2) 55%, transparent 70%)',
+            filter: 'blur(35px)',
+            animation: 'glow-pulse 3s ease-in-out infinite'
+          }}
+        />
 
-        {/* Main spinner */}
-        <div className="relative">
-          {/* Outer rotating ring */}
-          <div className={`${sizeClasses[size]} rounded-full border-4 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin`}></div>
+        {/* Second layer for depth */}
+        <div
+          className="absolute inset-0 rounded-full donut-layer-2"
+          style={{
+            background: 'radial-gradient(circle at 50% 50%, transparent 38%, rgba(196, 181, 253, 0.55) 43%, rgba(167, 139, 250, 0.7) 50%, rgba(96, 165, 250, 0.5) 58%, transparent 68%)',
+            filter: 'blur(20px)',
+            animation: 'breathe-reverse 4s ease-in-out infinite, rotate-reverse 12s linear infinite'
+          }}
+        />
 
-          {/* Inner pulsing dot */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-3 w-3 rounded-full bg-[#97E35C] animate-ping"></div>
-            <div className="absolute h-2 w-2 rounded-full bg-[#97E35C]"></div>
-          </div>
-        </div>
+        {/* Main donut ring */}
+        <div
+          className="absolute inset-0 rounded-full donut-ring"
+          style={{
+            background: 'radial-gradient(circle at 50% 50%, transparent 35%, rgba(167, 139, 250, 0.45) 40%, rgba(139, 92, 246, 0.65) 50%, rgba(96, 165, 250, 0.5) 60%, rgba(147, 197, 253, 0.35) 70%, transparent 75%)',
+            filter: 'blur(25px)',
+            animation: 'breathe 4s ease-in-out infinite, rotate 10s linear infinite'
+          }}
+        />
+
+        {/* Inner shimmer */}
+        <div
+          className="absolute inset-0 rounded-full donut-shimmer"
+          style={{
+            background: 'radial-gradient(circle at 60% 40%, transparent 35%, rgba(220, 208, 255, 0.6) 42%, transparent 50%)',
+            filter: 'blur(15px)',
+            animation: 'shimmer 5s ease-in-out infinite'
+          }}
+        />
       </div>
 
-      {/* Loading text with gradient */}
-      <p className="mt-6 text-lg font-medium bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent animate-pulse">
+      {/* Loading text */}
+      <p className="mt-8 text-lg font-medium text-foreground/80">
         {message}
       </p>
 
       {/* Animated dots */}
       <div className="flex justify-center gap-1 mt-3">
-        <div className="h-2 w-2 rounded-full bg-[#97E35C] animate-bounce" style={{ animationDelay: '0ms' }}></div>
-        <div className="h-2 w-2 rounded-full bg-[#97E35C] animate-bounce" style={{ animationDelay: '150ms' }}></div>
-        <div className="h-2 w-2 rounded-full bg-[#97E35C] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+        <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+        <div className="h-2 w-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '300ms' }}></div>
       </div>
+
+      {/* Keyframe animations */}
+      <style>{`
+        @keyframes breathe {
+          0%, 100% {
+            transform: scale(0.8) rotate(0deg);
+            opacity: 0.7;
+          }
+          50% {
+            transform: scale(1.2) rotate(180deg);
+            opacity: 1;
+          }
+        }
+
+        @keyframes rotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes breathe-reverse {
+          0%, 100% {
+            transform: scale(1.2) rotate(0deg);
+            opacity: 0.6;
+          }
+          50% {
+            transform: scale(0.85) rotate(-180deg);
+            opacity: 0.9;
+          }
+        }
+
+        @keyframes rotate-reverse {
+          from { transform: rotate(360deg); }
+          to { transform: rotate(0deg); }
+        }
+
+        @keyframes glow-pulse {
+          0%, 100% {
+            transform: scale(0.9);
+            opacity: 0.5;
+          }
+          50% {
+            transform: scale(1.25);
+            opacity: 0.8;
+          }
+        }
+
+        @keyframes shimmer {
+          0%, 100% {
+            transform: rotate(0deg) scale(0.95);
+            opacity: 0.5;
+          }
+          25% {
+            transform: rotate(90deg) scale(1.15);
+            opacity: 0.8;
+          }
+          50% {
+            transform: rotate(180deg) scale(0.95);
+            opacity: 0.5;
+          }
+          75% {
+            transform: rotate(270deg) scale(1.15);
+            opacity: 0.8;
+          }
+        }
+      `}</style>
     </div>
   );
 }

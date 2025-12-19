@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   BookOpen,
@@ -34,13 +34,28 @@ const sessionNavigation: Array<{ name: string; href: (sessionId: string) => stri
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { currentSession, setCurrentSession } = useAppStore();
+
+  // Auto-collapse after 15 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsCollapsed(true);
+      console.log('[Sidebar] Auto-collapsed after 15 seconds');
+    }, 15000); // 15 seconds
+
+    // Clear timeout if component unmounts
+    return () => clearTimeout(timer);
+  }, []); // Only run once on mount
+
   return (
     <div className={cn(
       "bg-card border-r border-border transition-all duration-300 flex flex-col h-screen sticky top-0",
       isCollapsed ? "w-16" : "w-72"
     )}>
       <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between">
+        <div className={cn(
+          "flex items-center",
+          isCollapsed ? "justify-center" : "justify-between"
+        )}>
           {!isCollapsed && (
             <img
               src="/logo-new.png"
@@ -51,6 +66,7 @@ export function Sidebar() {
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="p-2 rounded-lg hover:bg-accent transition-colors"
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isCollapsed ? <Menu size={20} className="text-foreground" /> : <X size={20} className="text-foreground" />}
           </button>
@@ -68,12 +84,14 @@ export function Sidebar() {
             onClick={() => setCurrentSession(null)}
             className={({ isActive }) =>
               cn(
-                "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center rounded-lg text-sm font-medium transition-colors",
+                isCollapsed ? "justify-center p-3" : "px-3 py-2",
                 isActive
                   ? "bg-primary/10 text-primary border border-primary/20"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )
             }
+            title={isCollapsed ? item.name : undefined}
           >
             <item.icon size={20} className="flex-shrink-0" />
             {!isCollapsed && <span className="ml-3">{item.name}</span>}
@@ -94,13 +112,15 @@ export function Sidebar() {
                 to={item.href(currentSession!.id)}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    "flex items-center rounded-lg text-sm font-medium transition-colors",
+                    isCollapsed ? "justify-center p-3" : "px-3 py-2",
                     isActive
                       ? "bg-primary/10 text-primary border border-primary/20"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground",
                     item.gamified && "bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 hover:from-purple-500/20 hover:via-pink-500/20 hover:to-orange-500/20"
                   )
                 }
+                title={isCollapsed ? item.name : undefined}
               >
                 <item.icon size={20} className={cn("flex-shrink-0", item.gamified && "text-purple-500")} />
                 {!isCollapsed && (
@@ -119,23 +139,34 @@ export function Sidebar() {
           to="/dashboard/profile"
           className={({ isActive }) =>
             cn(
-              "flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              "flex items-center w-full rounded-lg text-sm font-medium transition-colors",
+              isCollapsed ? "justify-center p-3" : "px-3 py-2",
               isActive
                 ? "bg-primary/10 text-primary border border-primary/20"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"
             )
           }
+          title={isCollapsed ? "Profile & Settings" : undefined}
         >
           <User size={20} className="flex-shrink-0" />
           {!isCollapsed && <span className="ml-3">Profile & Settings</span>}
         </NavLink>
 
-        <div className="flex items-center justify-between">
+        <div className={cn(
+          "flex items-center",
+          isCollapsed ? "justify-center" : "justify-between"
+        )}>
           {!isCollapsed && <span className="text-sm text-muted-foreground">Theme</span>}
           <ThemeToggle />
         </div>
-        
-        <button className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors">
+
+        <button
+          className={cn(
+            "flex items-center w-full rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors",
+            isCollapsed ? "justify-center p-3" : "px-3 py-2"
+          )}
+          title={isCollapsed ? "Share for Free Credits" : undefined}
+        >
           <Share2 size={20} className="flex-shrink-0" />
           {!isCollapsed && <span className="ml-3">Share for Free Credits</span>}
         </button>

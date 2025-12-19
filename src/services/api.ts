@@ -118,6 +118,7 @@ export interface Question {
 
 export interface Topic {
   id: string;
+  db_id?: number;  // Database ID for syncing cached audio/narratives
   title: string;
   description: string;
   questions: Question[];
@@ -255,18 +256,19 @@ export const fetchAppData = async (): Promise<AppData> => {
 
     // If no token, try to use mock data
     if (!token) {
-      console.warn('No authentication token found. Using mock data.');
+      console.warn('[fetchAppData] No authentication token found. Using mock data.');
       return getMockAppData();
     }
 
     // Try to load from browser storage first (instant load)
     const cachedSessions = BrowserStorage.loadSessions();
     if (cachedSessions && cachedSessions.length > 0) {
-      console.log('⚡ Using cached sessions from browser storage');
+      console.log('[fetchAppData] ⚡ Using cached sessions from browser storage');
       // Fetch in background to update cache
       fetchAndCacheAppData(token);
     }
 
+    console.log('[fetchAppData] Fetching app data from API...');
     const response = await fetch(`${API_URL}/app-data`, {
       method: 'GET',
       headers: {
@@ -275,28 +277,32 @@ export const fetchAppData = async (): Promise<AppData> => {
       },
     });
 
+    console.log(`[fetchAppData] Response status: ${response.status}`);
+
     if (!response.ok) {
       if (response.status === 401) {
-        // Token expired or invalid
-        removeAuthToken();
-        console.warn('Authentication failed. Using mock data.');
+        // Token expired or invalid - let AuthContext handle logout
+        console.error('[fetchAppData] ❌ 401 Unauthorized - token invalid or expired');
+        // Don't remove token here - let the auth system handle it
+        // This will cause a proper redirect via ProtectedRoute
       }
       throw new Error(`API request failed with status ${response.status}`);
     }
 
     const data: AppData = await response.json();
+    console.log('[fetchAppData] ✅ App data fetched successfully');
 
     // Save sessions to browser storage for next time
     BrowserStorage.saveSessions(data.studySessions);
 
     return data;
   } catch (error) {
-    console.error('Failed to fetch app data:', error);
+    console.error('[fetchAppData] ❌ Failed to fetch app data:', error);
 
     // Try browser storage as fallback
     const cachedSessions = BrowserStorage.loadSessions();
     if (cachedSessions) {
-      console.log('📂 Using browser storage fallback');
+      console.log('[fetchAppData] 📂 Using browser storage fallback');
       const mockData = getMockAppData();
       return {
         ...mockData,
@@ -304,6 +310,7 @@ export const fetchAppData = async (): Promise<AppData> => {
       };
     }
 
+    console.warn('[fetchAppData] ⚠️ No cached data available, returning mock data');
     // Return mock data as final fallback
     return getMockAppData();
   }
@@ -466,6 +473,7 @@ export const createStudySessionWithAI = async (
       if (!topicList) return [];
       return topicList.map((t: any) => ({
         ...t,
+        db_id: t.db_id ?? t.id, // Preserve database ID for caching
         score: t.score ?? 0, // Ensure score is 0, not null
         currentQuestionIndex: t.currentQuestionIndex ?? 0,
         completed: t.completed ?? false,
@@ -535,6 +543,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       if (!topicList) return [];
       return topicList.map((t: any) => ({
         ...t,
+        db_id: t.db_id ?? t.id, // Preserve database ID for caching
         score: t.score ?? 0, // Ensure score is 0, not null
         currentQuestionIndex: t.currentQuestionIndex ?? 0,
         completed: t.completed ?? false,
