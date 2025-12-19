@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, register } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,7 @@ import ShootingStars from '@/components/ShootingStars';
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const { login: authLogin, register: authRegister } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'initial' | 'signin' | 'register'>('initial');
@@ -24,7 +25,7 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      const result = await login(email, password);
+      const result = await authLogin(email, password);
       if (result.success) {
         navigate('/');
       } else {
@@ -43,7 +44,7 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      const result = await register(email, name, password);
+      const result = await authRegister(email, name, password);
       if (result.success) {
         navigate('/');
       } else {

@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { apiClient } from "@/services/apiClient";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import LandingPage from "./pages/LandingPage";
@@ -27,6 +29,11 @@ import MentorModePage from "./pages/MentorModePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// Initialize API client on app startup
+apiClient.initialize().catch((error) => {
+  console.error('[App] Failed to initialize API client:', error);
+});
 
 const AppContent = () => {
   return (
@@ -120,11 +127,13 @@ const AuthenticatedApp = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AppContent />
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <AppContent />
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
