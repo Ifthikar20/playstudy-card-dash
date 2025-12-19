@@ -90,13 +90,18 @@ const AuthenticatedApp = () => {
 
   // Initialize store when data is loaded
   useEffect(() => {
+    console.log('[AuthenticatedApp] Data loaded:', !!data, 'isInitialized:', isInitialized);
     if (data && !isInitialized) {
+      console.log('[AuthenticatedApp] Initializing store with data...');
       initializeFromAPI(data);
     }
   }, [data, isInitialized, initializeFromAPI]);
 
+  console.log('[AuthenticatedApp] State:', { isLoading, isError, hasData: !!data });
+
   // Show loading state
   if (isLoading) {
+    console.log('[AuthenticatedApp] Showing loading spinner...');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <LoadingSpinner message="Loading your dashboard..." size="lg" />
@@ -106,6 +111,7 @@ const AuthenticatedApp = () => {
 
   // Show error state
   if (isError) {
+    console.log('[AuthenticatedApp] Showing error state...');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md">
@@ -122,6 +128,7 @@ const AuthenticatedApp = () => {
   }
 
   // Render the outlet for nested routes
+  console.log('[AuthenticatedApp] Rendering dashboard content...');
   return <Outlet />;
 };
 
