@@ -15,6 +15,7 @@ import { useAppStore } from "@/store/appStore";
 import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
+import { parseKeyTerms, parseProgressiveKeyTerms } from "@/utils/keyTerms";
 import {
   Play,
   Pause,
@@ -51,6 +52,7 @@ export default function MentorModePage() {
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
   const [mermaidCode, setMermaidCode] = useState<string | null>(null);
+  const [keyTerms, setKeyTerms] = useState<string[]>([]);
 
   // Quiz state
   const [showQuiz, setShowQuiz] = useState(false);
@@ -273,6 +275,14 @@ export default function MentorModePage() {
         setMermaidCode(data.mermaid_code);
       } else {
         setMermaidCode(null);
+      }
+
+      // Store key terms if available
+      if (data.key_terms && data.key_terms.length > 0) {
+        console.log(`[Mentor Mode] 🔑 Received ${data.key_terms.length} key terms`);
+        setKeyTerms(data.key_terms);
+      } else {
+        setKeyTerms([]);
       }
 
       setFullNarrative(narrative);
@@ -653,6 +663,25 @@ export default function MentorModePage() {
                 </div>
               )}
 
+              {/* Key Terms Section */}
+              {keyTerms.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-muted-foreground">🔑 Key Terms to Know</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {keyTerms.map((term, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                      >
+                        {term}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Live Transcript */}
               {currentTranscript && (
                 <div className="flex gap-3">
@@ -663,18 +692,21 @@ export default function MentorModePage() {
                     <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
                     <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                       {currentTranscript.split('\n').map((line, index) => {
+                        // Parse and highlight key terms in the line
+                        const { highlightedText } = parseKeyTerms(line);
+
                         // Format with minimal styling for natural flow
                         // Headers with emojis or ALL CAPS
                         if (line.match(/^[🎯📚💡✅🌍❓📌🎓]/)) {
-                          return <div key={index} className="font-semibold text-primary mt-4 mb-2">{line}</div>;
+                          return <div key={index} className="font-semibold text-primary mt-4 mb-2">{highlightedText}</div>;
                         }
                         // Examples
                         else if (line.match(/^(Example \d+:|For example,|Consider)/i)) {
-                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-primary/30 pl-3">{line}</div>;
+                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-primary/30 pl-3">{highlightedText}</div>;
                         }
                         // Numbered or bulleted lists
                         else if (line.match(/^(\d+\.|-|\*)\s/)) {
-                          return <div key={index} className="ml-4 mt-1">{line}</div>;
+                          return <div key={index} className="ml-4 mt-1">{highlightedText}</div>;
                         }
                         // Section dividers
                         else if (line.match(/^[━─-]{3,}$/)) {
@@ -686,7 +718,7 @@ export default function MentorModePage() {
                         }
                         // Regular paragraphs
                         else {
-                          return <div key={index} className="leading-relaxed mt-1">{line}</div>;
+                          return <div key={index} className="leading-relaxed mt-1">{highlightedText}</div>;
                         }
                       })}
                       {isPlaying && currentTranscript !== fullNarrative && (

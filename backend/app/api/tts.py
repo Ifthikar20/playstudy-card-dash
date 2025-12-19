@@ -3,6 +3,7 @@ Text-to-Speech API endpoints.
 """
 import logging
 import httpx
+import re
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -235,6 +236,7 @@ class MentorContentResponse(BaseModel):
     narrative: str = Field(..., description="Formatted narrative for the mentor")
     estimated_duration_seconds: int = Field(..., description="Estimated speech duration")
     mermaid_code: Optional[str] = Field(default=None, description="Mermaid diagram code for visual representation")
+    key_terms: Optional[List[str]] = Field(default=None, description="List of important key terms")
 
 
 @router.post(
@@ -316,6 +318,10 @@ Guidelines:
 - Use minimal formatting - occasional bullet points are fine, but don't overuse emojis
 - Aim for clarity and engagement over rigid structure
 
+IMPORTANT: Mark key terms and important vocabulary words that students should remember.
+Wrap them like this: **TERM:photosynthesis** or **TERM:French Revolution**
+These will be highlighted for students. Mark 5-10 important terms throughout your explanation.
+
 IMPORTANT: After your explanation, create a Mermaid diagram to visualize the key concepts.
 Add this section at the very end:
 
@@ -385,8 +391,19 @@ Write this as you would naturally explain it to a student, not following a stric
             mermaid_code = mermaid_section
             logger.info(f"[Mentor Content] 📊 Extracted Mermaid diagram")
 
+        # Extract key terms from narrative
+        # Pattern: **TERM:word** or **TERM:multiple words**
+        key_terms = []
+        term_pattern = r'\*\*TERM:(.*?)\*\*'
+        matches = re.findall(term_pattern, narrative)
+        if matches:
+            key_terms = list(set(matches))  # Remove duplicates
+            logger.info(f"[Mentor Content] 🔑 Extracted {len(key_terms)} key terms")
+
         # Estimate duration (average speaking rate: ~150 words per minute)
-        word_count = len(narrative.split())
+        # Count words excluding the TERM markers
+        clean_text = re.sub(term_pattern, r'\1', narrative)
+        word_count = len(clean_text.split())
         estimated_seconds = int((word_count / 150) * 60)
 
         logger.info(f"[Mentor Content] ✅ Generated {word_count} words (~{estimated_seconds}s)")
@@ -402,7 +419,8 @@ Write this as you would naturally explain it to a student, not following a stric
         return MentorContentResponse(
             narrative=narrative,
             estimated_duration_seconds=estimated_seconds,
-            mermaid_code=mermaid_code
+            mermaid_code=mermaid_code,
+            key_terms=key_terms if key_terms else None
         )
 
     except httpx.TimeoutException:
