@@ -14,7 +14,7 @@ class Folder(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     color = Column(String, default="#3B82F6")  # Hex color code for folder
     icon = Column(String, default="📁")  # Emoji icon
     is_archived = Column(Boolean, default=False)
