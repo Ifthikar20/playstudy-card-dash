@@ -4,14 +4,17 @@ import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
+import { CreateFolderDialog } from "@/components/CreateFolderDialog";
 import UserMenu from "@/components/UserMenu";
 import { useAppStore } from "@/store/appStore";
-import { Plus } from "lucide-react";
+import { Plus, FolderPlus, Folder as FolderIcon } from "lucide-react";
 
 export default function Index() {
   const [showCreateSession, setShowCreateSession] = useState(false);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [expandedFolder, setExpandedFolder] = useState<number | null>(null);
   const navigate = useNavigate();
-  const { studySessions, setCurrentSession } = useAppStore();
+  const { studySessions, folders, setCurrentSession } = useAppStore();
 
   const handleSessionClick = (session: any) => {
     setCurrentSession(session);
@@ -49,6 +52,15 @@ export default function Index() {
             </div>
             <div className="flex items-center gap-3">
               <Button
+                size="default"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowCreateFolder(true)}
+              >
+                <FolderPlus size={18} />
+                New Folder
+              </Button>
+              <Button
                 size="lg"
                 className="gap-2 shadow-lg hover:shadow-xl transition-all"
                 onClick={() => setShowCreateSession(true)}
@@ -59,6 +71,31 @@ export default function Index() {
               <UserMenu />
             </div>
           </div>
+
+          {/* Folders */}
+          {folders.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-foreground mb-4">
+                📁 My Folders
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {folders.map((folder) => (
+                  <div
+                    key={folder.id}
+                    className="cursor-pointer hover:bg-accent/50 transition-colors p-4 rounded-lg border border-border flex flex-col items-center gap-2 text-center"
+                    style={{ borderLeftColor: folder.color, borderLeftWidth: '4px' }}
+                    onClick={() => setExpandedFolder(expandedFolder === folder.id ? null : folder.id)}
+                  >
+                    <div className="text-3xl">{folder.icon}</div>
+                    <div className="font-semibold text-sm">{folder.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {folder.session_count} session{folder.session_count !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* My Study Sessions */}
           {studySessions.length > 0 && (
@@ -120,6 +157,11 @@ export default function Index() {
       <CreateStudySessionDialog
         open={showCreateSession}
         onOpenChange={setShowCreateSession}
+      />
+
+      <CreateFolderDialog
+        open={showCreateFolder}
+        onOpenChange={setShowCreateFolder}
       />
       </div>
     </>
