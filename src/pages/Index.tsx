@@ -119,7 +119,7 @@ export default function Index() {
                   return (
                     <div
                       key={session.id}
-                      className="cursor-pointer hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border"
+                      className={`cursor-pointer hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border ${isNew ? 'new-session-card' : ''}`}
                       onClick={() => handleSessionClick(session)}
                     >
                       <div className="flex items-center gap-2">
