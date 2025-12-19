@@ -4,6 +4,13 @@ import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAppStore } from "@/store/appStore";
 import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -17,7 +24,9 @@ import {
   ArrowLeft,
   Mic,
   Settings,
-  MessageSquare
+  MessageSquare,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 
 export default function MentorModePage() {
@@ -40,6 +49,12 @@ export default function MentorModePage() {
   const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
+
+  // Quiz state
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
 
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
@@ -280,11 +295,10 @@ export default function MentorModePage() {
         setCurrentTranscript(narrative);
         setIsReading(false);
         setIsPlaying(false);
-        if (currentTopicIndex < topics.length - 1) {
-          setProgress(((currentTopicIndex + 1) / topics.length) * 100);
-        } else {
-          setProgress(100);
-        }
+
+        // Show quiz after topic explanation completes
+        console.log('[Mentor Mode] Topic explanation complete - showing quiz');
+        setShowQuiz(true);
       };
 
       const handleError = (error: Error) => {
@@ -443,6 +457,50 @@ export default function MentorModePage() {
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
     aiVoiceService.setVolume(newMutedState ? 0 : 1);
+  };
+
+  // Quiz handlers
+  const handleAnswerSelect = (answerIndex: number) => {
+    if (!showFeedback) {
+      setSelectedAnswer(answerIndex);
+    }
+  };
+
+  const handleQuizSubmit = () => {
+    if (selectedAnswer === null || !currentTopic) return;
+
+    // Get a random question from the current topic
+    const question = currentTopic.questions[0]; // For now, use first question
+    const correct = selectedAnswer === question.correctAnswer;
+
+    setIsCorrect(correct);
+    setShowFeedback(true);
+
+    console.log('[Mentor Mode] Quiz submitted:', {
+      selected: selectedAnswer,
+      correct: question.correctAnswer,
+      isCorrect: correct
+    });
+  };
+
+  const handleQuizNext = () => {
+    // Reset quiz state
+    setShowQuiz(false);
+    setSelectedAnswer(null);
+    setShowFeedback(false);
+    setIsCorrect(false);
+
+    // Move to next topic
+    if (currentTopicIndex < topics.length - 1) {
+      setCurrentTopicIndex(currentTopicIndex + 1);
+      setCurrentTranscript('');
+      setFullNarrative('');
+      setProgress(((currentTopicIndex + 1) / topics.length) * 100);
+      console.log('[Mentor Mode] Moving to next topic:', currentTopicIndex + 1);
+    } else {
+      setProgress(100);
+      console.log('[Mentor Mode] All topics completed!');
+    }
   };
 
   return (
@@ -669,6 +727,116 @@ export default function MentorModePage() {
           </Card>
         </div>
       </div>
+
+      {/* Quiz Modal */}
+      <Dialog open={showQuiz} onOpenChange={setShowQuiz}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="text-primary" size={24} />
+              Quick Knowledge Check
+            </DialogTitle>
+            <DialogDescription>
+              Test your understanding of what you just learned
+            </DialogDescription>
+          </DialogHeader>
+
+          {currentTopic && currentTopic.questions.length > 0 ? (
+            <div className="space-y-4 mt-4">
+              {/* Question */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="font-medium text-foreground">
+                  {currentTopic.questions[0].question}
+                </p>
+              </div>
+
+              {/* Answer Options */}
+              <div className="space-y-2">
+                {currentTopic.questions[0].options.map((option, index) => {
+                  const isSelected = selectedAnswer === index;
+                  const isCorrectAnswer = index === currentTopic.questions[0].correctAnswer;
+                  const showCorrect = showFeedback && isCorrectAnswer;
+                  const showIncorrect = showFeedback && isSelected && !isCorrect;
+
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleAnswerSelect(index)}
+                      disabled={showFeedback}
+                      className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+                        showCorrect
+                          ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                          : showIncorrect
+                          ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
+                          : isSelected
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50 hover:bg-accent'
+                      } ${showFeedback ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="flex-1">{option}</span>
+                        {showCorrect && <CheckCircle className="text-green-600" size={20} />}
+                        {showIncorrect && <XCircle className="text-red-600" size={20} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Feedback */}
+              {showFeedback && (
+                <div
+                  className={`p-4 rounded-lg ${
+                    isCorrect
+                      ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'
+                      : 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {isCorrect ? (
+                      <CheckCircle className="text-green-600 mt-0.5" size={20} />
+                    ) : (
+                      <MessageSquare className="text-blue-600 mt-0.5" size={20} />
+                    )}
+                    <div>
+                      <p className="font-medium mb-1">
+                        {isCorrect ? 'Correct! 🎉' : 'Good try! 💡'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {currentTopic.questions[0].explanation}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2">
+                {!showFeedback ? (
+                  <Button
+                    onClick={handleQuizSubmit}
+                    disabled={selectedAnswer === null}
+                    className="min-w-[120px]"
+                  >
+                    Submit Answer
+                  </Button>
+                ) : (
+                  <Button onClick={handleQuizNext} className="min-w-[120px]">
+                    {currentTopicIndex < topics.length - 1 ? 'Next Topic →' : 'Complete 🎉'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              No questions available for this topic.
+              <Button onClick={handleQuizNext} className="mt-4">
+                Continue to Next Topic
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
