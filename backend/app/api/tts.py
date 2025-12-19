@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from app.services.tts_service import tts_service
-from app.services.unsplash_service import unsplash_service
 from app.dependencies import get_current_user, get_db
 from app.core.rate_limit import limiter
 from slowapi import Limiter
@@ -235,7 +234,7 @@ class MentorContentResponse(BaseModel):
     """Response model for mentor content."""
     narrative: str = Field(..., description="Formatted narrative for the mentor")
     estimated_duration_seconds: int = Field(..., description="Estimated speech duration")
-    images: Optional[List[Dict]] = Field(default=None, description="Related images for visual examples")
+    mermaid_code: Optional[str] = Field(default=None, description="Mermaid diagram code for visual representation")
 
 
 @router.post(
@@ -317,6 +316,25 @@ Guidelines:
 - Use minimal formatting - occasional bullet points are fine, but don't overuse emojis
 - Aim for clarity and engagement over rigid structure
 
+IMPORTANT: After your explanation, create a Mermaid diagram to visualize the key concepts.
+Add this section at the very end:
+
+---MERMAID---
+[Your Mermaid.js diagram code here]
+---END_MERMAID---
+
+Mermaid diagram guidelines:
+- Use flowcharts (graph TD/LR), mindmaps, or sequence diagrams as appropriate
+- Keep it simple and focused on the main concept
+- Use clear, short labels
+- Examples:
+  * Flowchart: graph LR; A[Start] --> B[Process] --> C[End]
+  * Mind map: mindmap
+  root((Topic))
+    Concept1
+    Concept2
+  * Sequence: sequenceDiagram; A->>B: Message
+
 Write this as you would naturally explain it to a student, not following a strict template.
 """
 
@@ -354,7 +372,18 @@ Write this as you would naturally explain it to a student, not following a stric
             )
 
         result = response.json()
-        narrative = result['choices'][0]['message']['content']
+        full_content = result['choices'][0]['message']['content']
+
+        # Extract Mermaid diagram code if present
+        mermaid_code = None
+        narrative = full_content
+
+        if "---MERMAID---" in full_content and "---END_MERMAID---" in full_content:
+            parts = full_content.split("---MERMAID---")
+            narrative = parts[0].strip()
+            mermaid_section = parts[1].split("---END_MERMAID---")[0].strip()
+            mermaid_code = mermaid_section
+            logger.info(f"[Mentor Content] 📊 Extracted Mermaid diagram")
 
         # Estimate duration (average speaking rate: ~150 words per minute)
         word_count = len(narrative.split())
@@ -370,25 +399,10 @@ Write this as you would naturally explain it to a student, not following a stric
                 db.commit()
                 logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
 
-        # Search for relevant images using Unsplash
-        images = None
-        if unsplash_service.enabled:
-            try:
-                logger.info(f"[Mentor Content] 🖼️ Searching for images: {content_request.topic_title}")
-                images = unsplash_service.get_topic_images(
-                    topic=content_request.topic_title,
-                    num_images=2
-                )
-                logger.info(f"[Mentor Content] Found {len(images) if images else 0} images")
-            except Exception as img_error:
-                logger.warning(f"[Mentor Content] Image search failed: {img_error}")
-                # Don't fail the entire request if image search fails
-                images = None
-
         return MentorContentResponse(
             narrative=narrative,
             estimated_duration_seconds=estimated_seconds,
-            images=images
+            mermaid_code=mermaid_code
         )
 
     except httpx.TimeoutException:

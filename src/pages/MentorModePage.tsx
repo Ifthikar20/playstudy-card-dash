@@ -14,6 +14,7 @@ import {
 import { useAppStore } from "@/store/appStore";
 import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
 import {
   Play,
   Pause,
@@ -49,7 +50,7 @@ export default function MentorModePage() {
   const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
-  const [topicImages, setTopicImages] = useState<any[]>([]);
+  const [mermaidCode, setMermaidCode] = useState<string | null>(null);
 
   // Quiz state
   const [showQuiz, setShowQuiz] = useState(false);
@@ -266,12 +267,12 @@ export default function MentorModePage() {
       console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
       console.log(`[Mentor Mode] Narrative length: ${narrative.length} characters`);
 
-      // Store images if available
-      if (data.images && data.images.length > 0) {
-        console.log(`[Mentor Mode] 🖼️ Received ${data.images.length} images`);
-        setTopicImages(data.images);
+      // Store Mermaid diagram if available
+      if (data.mermaid_code) {
+        console.log(`[Mentor Mode] 📊 Received Mermaid diagram`);
+        setMermaidCode(data.mermaid_code);
       } else {
-        setTopicImages([]);
+        setMermaidCode(null);
       }
 
       setFullNarrative(narrative);
@@ -642,35 +643,13 @@ export default function MentorModePage() {
                 </div>
               )}
 
-              {/* Visual Examples Section */}
-              {topicImages.length > 0 && (
+              {/* Visual Diagram Section */}
+              {mermaidCode && (
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-muted-foreground">📸 Visual Examples</span>
+                    <span className="text-sm font-medium text-muted-foreground">📊 Visual Concept Map</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {topicImages.map((image, index) => (
-                      <div key={image.id || index} className="relative group overflow-hidden rounded-lg border border-border bg-muted">
-                        <img
-                          src={image.thumb}
-                          alt={image.alt}
-                          className="w-full h-48 object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
-                        />
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                          <p className="text-xs text-white line-clamp-2">{image.alt}</p>
-                          <a
-                            href={image.photographer_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-white/70 hover:text-white transition-colors"
-                          >
-                            📷 {image.photographer}
-                          </a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <MermaidDiagram code={mermaidCode} className="w-full" />
                 </div>
               )}
 
