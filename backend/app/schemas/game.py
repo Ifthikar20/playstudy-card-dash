@@ -47,6 +47,8 @@ class GameResponse(BaseModel):
     rating: float
     image: str
     difficulty: str
+    questionCount: int  # For frontend compatibility
+    points: int  # For frontend compatibility (same as xp_reward)
 
     class Config:
         from_attributes = True
@@ -66,4 +68,6 @@ class GameResponse(BaseModel):
             rating=float(game.rating),
             image=game.image,
             difficulty=difficulty_display,
+            questionCount=10,  # Default question count
+            points=game.xp_reward,  # Use xp_reward as points
         )
