@@ -206,31 +206,17 @@ export default function MentorModePage() {
     setIsLoading(true);
     setError(null);
 
+    let transcriptInterval: NodeJS.Timeout | null = null;
+    let currentAudioElement: HTMLAudioElement | null = null;
+
     try {
       // Get AI-generated content from DeepSeek
       const token = localStorage.getItem('auth_token');
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
       console.log('[Mentor Mode] Requesting AI-generated content from DeepSeek...');
-      console.log('[Mentor Mode] Topic data:', {
-        id: topic.id,
-        db_id: topic.db_id,
-        title: topic.title,
-        description: topic.description,
-        questionsCount: topic.questions?.length || 0
-      });
 
-      // Only use db_id if it's a valid number (not string like "category-1")
       const topicDbId = typeof topic.db_id === 'number' ? topic.db_id : null;
-
-      const requestBody = {
-        topic_id: topicDbId,  // Use database ID only if it's a number
-        topic_title: topic.title || 'Untitled Topic',
-        topic_description: topic.description || null,
-        questions: Array.isArray(topic.questions) ? topic.questions : [],
-      };
-
-      console.log('[Mentor Mode] Request body:', requestBody);
 
       const response = await fetch(`${apiUrl}/tts/generate-mentor-content`, {
         method: 'POST',
@@ -238,16 +224,17 @@ export default function MentorModePage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          topic_id: topicDbId,
+          topic_title: topic.title || 'Untitled Topic',
+          topic_description: topic.description || null,
+          questions: Array.isArray(topic.questions) ? topic.questions : [],
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Failed to generate AI content' }));
-        const errorMessage = typeof errorData.detail === 'string'
-          ? errorData.detail
-          : JSON.stringify(errorData, null, 2);
-        console.error('[Mentor Mode] API Error Response:', errorData);
-        throw new Error(errorMessage);
+        throw new Error(errorData.detail || 'Failed to generate AI content');
       }
 
       const data = await response.json();
@@ -259,151 +246,171 @@ export default function MentorModePage() {
       setFullNarrative(narrative);
       setCurrentTranscript('');
 
-    // Simulate live transcript
-    const words = narrative.split(' ');
-    let wordIndex = 0;
-    let transcriptInterval: NodeJS.Timeout;
+      // Sync transcript with audio playback using actual audio timing
+      const syncTranscriptWithAudio = (audio: HTMLAudioElement, fullText: string) => {
+        const words = fullText.split(' ');
+        const totalWords = words.length;
 
-      const startTranscript = () => {
-        transcriptInterval = setInterval(() => {
-          if (wordIndex < words.length) {
-            setCurrentTranscript(prev => {
-              const newText = prev + (prev ? ' ' : '') + words[wordIndex];
-              wordIndex++;
-              return newText;
-            });
-          } else {
-            clearInterval(transcriptInterval);
-          }
-        }, 350); // Synced with OpenAI TTS speed (~170 words/minute)
+        const updateTranscript = () => {
+          if (!audio.duration || audio.duration === 0) return;
+
+          // Calculate how many words to show based on actual playback progress
+          const progress = audio.currentTime / audio.duration;
+          const wordsToShow = Math.min(Math.floor(progress * totalWords), totalWords);
+
+          const displayedText = words.slice(0, wordsToShow).join(' ');
+          setCurrentTranscript(displayedText);
+        };
+
+        // Update transcript every 100ms for smooth animation
+        transcriptInterval = setInterval(updateTranscript, 100);
+        audio.addEventListener('timeupdate', updateTranscript);
+
+        return () => {
+          if (transcriptInterval) clearInterval(transcriptInterval);
+          audio.removeEventListener('timeupdate', updateTranscript);
+        };
       };
 
-    const handleEnd = () => {
-      if (transcriptInterval) clearInterval(transcriptInterval);
-      setCurrentTranscript(narrative);
-      setIsReading(false);
-      setIsPlaying(false);
-      if (currentTopicIndex < topics.length - 1) {
-        setProgress(((currentTopicIndex + 1) / topics.length) * 100);
-      } else {
-        setProgress(100);
-      }
-    };
-
-    const handleError = (error: Error) => {
-      if (transcriptInterval) clearInterval(transcriptInterval);
-      console.error('[TTS Error]:', error);
-      setError(`Unable to play audio: ${error.message}`);
-      setIsReading(false);
-      setIsPlaying(false);
-      setIsLoading(false);
-    };
-
-    // Helper function to chunk text at sentence boundaries
-    const chunkText = (text: string, maxLength: number = 4000): string[] => {
-      if (text.length <= maxLength) return [text];
-
-      const chunks: string[] = [];
-      const sentences = text.split(/(?<=[.!?])\s+/); // Split at sentence boundaries
-      let currentChunk = '';
-
-      for (const sentence of sentences) {
-        if ((currentChunk + sentence).length <= maxLength) {
-          currentChunk += (currentChunk ? ' ' : '') + sentence;
+      const handleEnd = () => {
+        if (transcriptInterval) {
+          clearInterval(transcriptInterval);
+          transcriptInterval = null;
+        }
+        setCurrentTranscript(narrative);
+        setIsReading(false);
+        setIsPlaying(false);
+        if (currentTopicIndex < topics.length - 1) {
+          setProgress(((currentTopicIndex + 1) / topics.length) * 100);
         } else {
-          if (currentChunk) chunks.push(currentChunk);
-          // If single sentence is too long, split by words
-          if (sentence.length > maxLength) {
-            const words = sentence.split(' ');
-            let wordChunk = '';
-            for (const word of words) {
-              if ((wordChunk + word).length <= maxLength) {
-                wordChunk += (wordChunk ? ' ' : '') + word;
-              } else {
-                if (wordChunk) chunks.push(wordChunk);
-                wordChunk = word;
-              }
-            }
-            currentChunk = wordChunk;
+          setProgress(100);
+        }
+      };
+
+      const handleError = (error: Error) => {
+        if (transcriptInterval) {
+          clearInterval(transcriptInterval);
+          transcriptInterval = null;
+        }
+        console.error('[TTS Error]:', error);
+        setError(`Unable to play audio: ${error.message}`);
+        setIsReading(false);
+        setIsPlaying(false);
+        setIsLoading(false);
+      };
+
+      // Chunk text at sentence boundaries for TTS
+      const chunkText = (text: string, maxLength: number = 4000): string[] => {
+        if (text.length <= maxLength) return [text];
+
+        const chunks: string[] = [];
+        const sentences = text.split(/(?<=[.!?])\s+/);
+        let currentChunk = '';
+
+        for (const sentence of sentences) {
+          if ((currentChunk + sentence).length <= maxLength) {
+            currentChunk += (currentChunk ? ' ' : '') + sentence;
           } else {
-            currentChunk = sentence;
+            if (currentChunk) chunks.push(currentChunk);
+            if (sentence.length > maxLength) {
+              const words = sentence.split(' ');
+              let wordChunk = '';
+              for (const word of words) {
+                if ((wordChunk + word).length <= maxLength) {
+                  wordChunk += (wordChunk ? ' ' : '') + word;
+                } else {
+                  if (wordChunk) chunks.push(wordChunk);
+                  wordChunk = word;
+                }
+              }
+              currentChunk = wordChunk;
+            } else {
+              currentChunk = sentence;
+            }
           }
         }
-      }
-      if (currentChunk) chunks.push(currentChunk);
+        if (currentChunk) chunks.push(currentChunk);
+        return chunks;
+      };
 
-      return chunks;
-    };
+      // Play audio chunks sequentially with synced transcript
+      const playChunksSequentially = async (chunks: string[]) => {
+        console.log(`[Mentor Mode] Playing ${chunks.length} audio chunks`);
 
-    // Play audio chunks sequentially
-    const playChunksSequentially = async (chunks: string[]) => {
-      console.log(`[Mentor Mode] Playing ${chunks.length} audio chunks`);
+        for (let i = 0; i < chunks.length; i++) {
+          console.log(`[Mentor Mode] Playing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
 
-      for (let i = 0; i < chunks.length; i++) {
-        console.log(`[Mentor Mode] Playing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
-
-        await new Promise<void>((resolve, reject) => {
-          aiVoiceService.speak(
-            chunks[i],
-            {
-              voice: currentVoice,
-              speed: 1.0,
-              model: currentProvider === 'openai' ? 'tts-1' : undefined,
-              pitch: 0,
-              provider: currentProvider
-            },
-            {
-              onEnd: () => {
-                console.log(`[Mentor Mode] ✅ Chunk ${i + 1}/${chunks.length} complete`);
-                resolve();
+          await new Promise<void>((resolve, reject) => {
+            aiVoiceService.speak(
+              chunks[i],
+              {
+                voice: currentVoice,
+                speed: 1.0,
+                model: currentProvider === 'openai' ? 'tts-1' : undefined,
+                pitch: 0,
+                provider: currentProvider
               },
-              onError: (error) => {
-                console.error(`[Mentor Mode] ❌ Chunk ${i + 1}/${chunks.length} failed:`, error);
-                reject(error);
+              {
+                onEnd: () => {
+                  console.log(`[Mentor Mode] ✅ Chunk ${i + 1}/${chunks.length} complete`);
+                  resolve();
+                },
+                onError: (error) => {
+                  console.error(`[Mentor Mode] ❌ Chunk ${i + 1}/${chunks.length} failed:`, error);
+                  reject(error);
+                }
               }
-            }
-          ).catch(reject);
-        });
-      }
-    };
+            ).then((audio) => {
+              // Sync transcript with FIRST audio chunk
+              if (audio && i === 0) {
+                console.log('[Mentor Mode] 🎯 Syncing transcript with audio playback');
+                currentAudioElement = audio;
+                syncTranscriptWithAudio(audio, narrative);
+              }
+            }).catch(reject);
+          });
+        }
+      };
 
-    try {
       setIsLoading(true);
 
-      // Start transcript animation slightly before audio starts
-      setTimeout(startTranscript, 500);
-
-      // Chunk the narrative and play sequentially
+      // Chunk and play
       const chunks = chunkText(narrative);
       console.log(`[Mentor Mode] Split narrative into ${chunks.length} chunks`);
 
       await playChunksSequentially(chunks);
 
-      // All chunks played successfully
+      // All chunks played
       handleEnd();
+      setIsLoading(false);
 
-        setIsLoading(false);
-      } catch (aiError) {
-        console.error('[Mentor Mode] Failed to get AI content:', aiError);
-        const errorMessage = aiError instanceof Error ? aiError.message : 'Failed to generate lesson content';
+    } catch (aiError) {
+      console.error('[Mentor Mode] Failed to get AI content:', aiError);
+      const errorMessage = aiError instanceof Error ? aiError.message : 'Failed to generate lesson content';
 
-        // Check for specific error types
-        if (errorMessage.includes('API key') || errorMessage.includes('not configured')) {
-          setError('⚙️ API keys not configured. Please add DEEPSEEK_API_KEY and OPENAI_API_KEY to backend/.env file.');
-        } else if (errorMessage.includes('timeout')) {
-          setError('⏱️ Request timed out. The AI is taking too long. Please try again.');
-        } else {
-          setError(`❌ ${errorMessage}`);
-        }
-
-        setIsReading(false);
-        setIsPlaying(false);
-        setIsLoading(false);
+      if (errorMessage.includes('API key') || errorMessage.includes('not configured')) {
+        setError('⚙️ API keys not configured. Please add DEEPSEEK_API_KEY and OPENAI_API_KEY to backend/.env file.');
+      } else if (errorMessage.includes('timeout')) {
+        setError('⏱️ Request timed out. The AI is taking too long. Please try again.');
+      } else {
+        setError(`❌ ${errorMessage}`);
       }
+
+      if (transcriptInterval) {
+        clearInterval(transcriptInterval);
+        transcriptInterval = null;
+      }
+      setIsReading(false);
+      setIsPlaying(false);
+      setIsLoading(false);
     } catch (error) {
       console.error('[Mentor Mode] Error in speakContent:', error);
       const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       setError(`⚠️ ${errorMessage}`);
+      if (transcriptInterval) {
+        clearInterval(transcriptInterval);
+        transcriptInterval = null;
+      }
       setIsReading(false);
       setIsPlaying(false);
       setIsLoading(false);
