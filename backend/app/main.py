@@ -8,7 +8,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.api import auth, app_data, questions, study_sessions, tts
+from app.api import auth, app_data, questions, study_sessions, tts, crypto
 from app.database import Base, engine
 
 # Create database tables
@@ -110,6 +110,12 @@ app.include_router(
     tts.router,
     prefix=settings.API_V1_PREFIX,
     tags=["Text-to-Speech"],
+)
+
+app.include_router(
+    crypto.router,
+    prefix=settings.API_V1_PREFIX,
+    tags=["Cryptography"],
 )
 
 
