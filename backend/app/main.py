@@ -8,11 +8,24 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.core.rate_limit import limiter
+from app.core.cache import redis_client
+from app.core.nonce_manager import nonce_manager
+from app.middleware.encryption_middleware import EncryptionMiddleware
 from app.api import auth, app_data, questions, study_sessions, tts, crypto
 from app.database import Base, engine
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Initialize nonce manager with Redis
+try:
+    nonce_manager.redis = redis_client
+    logger.info("[Startup] ✅ Nonce manager initialized with Redis")
+except Exception as e:
+    logger.warning(f"[Startup] ⚠️ Redis connection failed, using fallback: {e}")
 
 # Create FastAPI application
 app = FastAPI(
@@ -56,6 +69,10 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
 )
+
+# Encryption middleware (for encrypted API requests)
+app.add_middleware(EncryptionMiddleware)
+logger.info("[Startup] ✅ Encryption middleware registered")
 
 
 # Health check endpoint
