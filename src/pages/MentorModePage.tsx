@@ -451,41 +451,35 @@ export default function MentorModePage() {
 
       <div className="flex-1 flex flex-col h-screen">
         {/* Header */}
-        <div className="p-4 md:p-6 border-b">
+        <div className="px-4 py-2 md:px-6 md:py-3 border-b">
           <Button
             variant="ghost"
-            className="mb-2"
+            size="sm"
+            className="mb-1"
             onClick={() => navigate('/dashboard')}
           >
-            <ArrowLeft size={18} className="mr-2" />
+            <ArrowLeft size={16} className="mr-2" />
             Back to Dashboard
           </Button>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Mic className="text-primary" size={24} />
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10">
+                <Mic className="text-primary" size={20} />
               </div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-foreground">
+                <h1 className="text-lg font-bold text-foreground">
                   AI Mentor Session
                 </h1>
-                <p className="text-sm text-muted-foreground">{session.title}</p>
+                <p className="text-xs text-muted-foreground">{session.title}</p>
               </div>
             </div>
 
-            {/* Progress */}
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">
-                Topic {currentTopicIndex + 1} / {topics.length}
-              </div>
-              <div className="text-xs font-medium text-foreground">
-                {Math.round(progress)}% Complete
-              </div>
+            {/* Topic Counter */}
+            <div className="text-sm text-muted-foreground">
+              Topic {currentTopicIndex + 1} / {topics.length}
             </div>
           </div>
-
-          <Progress value={progress} className="h-1 mt-3" />
         </div>
 
         {/* Main Content Area */}
