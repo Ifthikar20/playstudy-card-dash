@@ -132,7 +132,10 @@ export default function Index() {
               </Button>
               <Button
                 size="lg"
-                className="gap-2 shadow-lg hover:shadow-xl transition-all"
+                className="gap-2 shadow-lg hover:shadow-xl transition-all relative overflow-hidden"
+                style={{
+                  boxShadow: '0 0 20px rgba(59, 130, 246, 0.3), 0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                }}
                 onClick={() => setShowCreateSession(true)}
               >
                 <Plus size={20} />
@@ -145,10 +148,15 @@ export default function Index() {
           {/* Folders - Show first 5 */}
           {folders.length > 0 && (
             <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-foreground">
-                  📁 My Folders
-                </h2>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground mb-0.5">
+                    📁 My Folders
+                  </h2>
+                  <p className="text-[10px] text-muted-foreground/60">
+                    drag and drop sessions into folders
+                  </p>
+                </div>
                 {folders.length > 5 && (
                   <Link to="/folders">
                     <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
@@ -158,18 +166,19 @@ export default function Index() {
                   </Link>
                 )}
               </div>
-              <div className="flex gap-3 overflow-x-auto pb-2">
+              <div className="flex gap-4 overflow-x-auto pb-2">
                 {folders.slice(0, 5).map((folder) => (
                   <div
                     key={folder.id}
-                    className={`flex-shrink-0 cursor-pointer hover:bg-accent/50 transition-all p-3 rounded-lg border-2 flex flex-col items-center gap-1.5 text-center min-w-[100px] ${
+                    className={`group flex-shrink-0 cursor-pointer transition-all duration-200 p-4 rounded-xl flex flex-col items-center gap-2 text-center min-w-[110px] ${
                       dropTarget === folder.id
-                        ? 'border-primary bg-primary/10 scale-105'
-                        : 'border-border'
+                        ? 'bg-primary/5 scale-105 shadow-lg'
+                        : 'bg-card hover:bg-accent/30 hover:shadow-md'
                     }`}
                     style={{
-                      borderLeftColor: folder.color,
-                      borderLeftWidth: dropTarget === folder.id ? '4px' : '3px',
+                      border: dropTarget === folder.id
+                        ? `2px solid ${folder.color}`
+                        : '1px solid hsl(var(--border))',
                     }}
                     onDragOver={(e) => handleDragOver(e, folder.id)}
                     onDragLeave={handleDragLeave}
@@ -180,13 +189,24 @@ export default function Index() {
                       }
                     }}
                   >
-                    <div className="text-2xl">{folder.icon}</div>
-                    <div className="font-semibold text-xs truncate w-full">{folder.name}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div
+                      className="text-3xl transition-transform group-hover:scale-110"
+                      style={{
+                        filter: dropTarget === folder.id ? `drop-shadow(0 0 8px ${folder.color}80)` : 'none'
+                      }}
+                    >
+                      {folder.icon}
+                    </div>
+                    <div className="font-medium text-xs truncate w-full text-foreground">
+                      {folder.name}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
                       {folder.session_count} {folder.session_count !== 1 ? 'sessions' : 'session'}
                     </div>
                     {dropTarget === folder.id && (
-                      <div className="text-[10px] text-primary font-semibold mt-1">Drop here</div>
+                      <div className="text-[9px] font-semibold mt-0.5" style={{ color: folder.color }}>
+                        Drop here
+                      </div>
                     )}
                   </div>
                 ))}
