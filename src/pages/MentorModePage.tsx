@@ -645,31 +645,34 @@ export default function MentorModePage() {
               </details>
             </div>
             {/* Transcript */}
-            <div className="flex-1 overflow-auto p-4 space-y-4" ref={transcriptRef}>
+            <div className="flex-1 overflow-auto px-6 py-8 space-y-6" ref={transcriptRef}>
               {/* Topic Header */}
               {currentTopic && (
-                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-foreground mb-2">{currentTopic.title}</h3>
-                  <p className="text-sm text-muted-foreground">{currentTopic.description}</p>
+                <div className="max-w-4xl mx-auto mb-8">
+                  <div className="mb-2 text-sm font-medium text-primary uppercase tracking-wide">
+                    Topic {currentTopicIndex + 1} of {topics.length}
+                  </div>
+                  <h1 className="text-4xl font-bold text-foreground mb-4 leading-tight tracking-tight">
+                    {currentTopic.title}
+                  </h1>
+                  <p className="text-lg text-muted-foreground leading-relaxed">
+                    {currentTopic.description}
+                  </p>
                 </div>
               )}
 
               {/* Visual Diagram Section */}
               {mermaidCode && (
-                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-muted-foreground">📊 Visual Concept Map</span>
-                  </div>
+                <div className="max-w-4xl mx-auto mb-10">
+                  <h3 className="text-xl font-semibold text-foreground mb-4">📊 Visual Concept Map</h3>
                   <MermaidDiagram code={mermaidCode} className="w-full" />
                 </div>
               )}
 
               {/* Key Terms Section */}
               {keyTerms.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-muted-foreground">🔑 Key Terms to Know</span>
-                  </div>
+                <div className="max-w-4xl mx-auto mb-10">
+                  <h3 className="text-xl font-semibold text-foreground mb-4">🔑 Key Terms</h3>
                   <div className="flex flex-wrap gap-2">
                     {keyTerms.map((term, index) => {
                       const termId = `keyterm-${term.toLowerCase().replace(/\s+/g, '-')}`;
@@ -687,7 +690,7 @@ export default function MentorModePage() {
                               }, 2000);
                             }
                           }}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors cursor-pointer hover:scale-105 active:scale-95"
+                          className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all cursor-pointer hover:scale-105 active:scale-95"
                         >
                           {term}
                         </button>
@@ -699,73 +702,105 @@ export default function MentorModePage() {
 
               {/* Live Transcript */}
               {currentTranscript && (
-                <div className="flex gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <MessageSquare size={20} className="text-primary" />
-                  </div>
-                  <div className="flex-1 bg-accent/50 rounded-lg p-6">
-                    <div className="text-xs font-medium text-primary mb-4">Your AI Mentor</div>
-                    <div className="text-[15px] text-foreground whitespace-pre-wrap leading-[1.7] font-sans" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', letterSpacing: '-0.011em' }}>
-                      {currentTranscript.split('\n').map((line, index) => {
-                        // Parse and highlight key terms in the line
-                        const { highlightedText } = parseKeyTerms(line);
+                <div className="max-w-4xl mx-auto">
+                  <div className="prose prose-lg max-w-none" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}>
+                    {currentTranscript.split('\n').map((line, index) => {
+                      // Parse and highlight key terms in the line
+                      const { highlightedText } = parseKeyTerms(line);
 
-                        // Format with clean documentation styling matching Framer
-                        // H2-style headers (major sections)
-                        if (line.match(/^(Connect an Item to AI|How .* Work|What .* Can|Managing Connections|Best Practices|Common Questions)/i) ||
-                            line.match(/^[A-Z][a-z]+ [A-Z][a-z]+/) && line.length < 50 && !line.match(/^\d+\./)) {
-                          return <h2 key={index} className="text-lg font-bold text-foreground mt-8 mb-3 leading-tight">{highlightedText}</h2>;
-                        }
-                        // H3-style headers (subsections like "Method 1:", "Step 1:")
-                        else if (line.match(/^(Method \d+:|Step \d+:)/i) ||
-                                 line.match(/^(See What|Disconnect|Reconnect|Connect Only|Use Multiple|Start Focused|Label Your)/)) {
-                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2 ml-4">{highlightedText}</h3>;
-                        }
-                        // Question headers (in FAQ sections)
-                        else if (line.match(/^(Do I|Can I|Can AI|What if|Does the)/)) {
-                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2 ml-4">{highlightedText}</h3>;
-                        }
-                        // Numbered lists - clean spacing with proper indentation
-                        else if (line.match(/^\d+\.\s/)) {
-                          return <p key={index} className="ml-8 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
-                        }
-                        // Bulleted lists - clean spacing with proper indentation
-                        else if (line.match(/^[-\*•]\s/)) {
-                          return <p key={index} className="ml-8 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
-                        }
-                        // Nested numbered lists (e.g., "  1." or "    1.")
-                        else if (line.match(/^\s{2,}\d+\.\s/)) {
-                          return <p key={index} className="ml-12 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
-                        }
-                        // Nested bulleted lists
-                        else if (line.match(/^\s{2,}[-\*•]\s/)) {
-                          return <p key={index} className="ml-12 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
-                        }
-                        // Quote or example blocks with indentation
-                        else if (line.match(/^["'"]/)) {
-                          return <p key={index} className="ml-8 mt-2 leading-[1.7] italic text-foreground/90 border-l-2 border-primary/30 pl-4">{highlightedText}</p>;
-                        }
-                        // Code or technical blocks
-                        else if (line.match(/^```/) || line.match(/^`/)) {
-                          return <p key={index} className="ml-8 mt-2 leading-[1.7] font-mono text-sm bg-muted/50 px-3 py-1 rounded">{highlightedText}</p>;
-                        }
-                        // Section dividers
-                        else if (line.match(/^[━─-]{3,}$/)) {
-                          return <div key={index} className="border-t border-border/30 my-6"></div>;
-                        }
-                        // Empty lines for spacing
-                        else if (line.trim() === '') {
-                          return <div key={index} className="h-2"></div>;
-                        }
-                        // Continuation lines (indented content under lists)
-                        else if (line.match(/^\s{2,}\S/) && !line.match(/^\s{2,}[-\*•\d]/)) {
-                          return <p key={index} className="ml-10 mt-1 leading-[1.7] text-foreground/90">{highlightedText}</p>;
-                        }
-                        // Regular paragraphs with documentation styling
-                        else {
-                          return <p key={index} className="mt-3 leading-[1.7] text-foreground/95">{highlightedText}</p>;
-                        }
-                      })}
+                      // Format with clean documentation styling
+                      // H1-style headers (main topic titles - very large and bold)
+                      if (line.match(/^#\s/) || (line.length < 60 && line.match(/^[A-Z][A-Za-z\s,]+$/) && !line.match(/^(See|Do|Can|What|How|The|A|An)\s/))) {
+                        return <h1 key={index} className="text-4xl font-bold text-foreground mt-12 mb-6 leading-[1.2] tracking-tight">{highlightedText}</h1>;
+                      }
+                      // H2-style headers (major sections)
+                      else if (line.match(/^##\s/) || line.match(/^(Connect an Item to AI|How .* Work|What .* Can|Managing Connections|Best Practices|Common Questions|Chaining AI Chats|One Item)/i)) {
+                        return <h2 key={index} className="text-3xl font-bold text-foreground mt-10 mb-5 leading-[1.3]">{highlightedText}</h2>;
+                      }
+                      // H3-style headers (subsections)
+                      else if (line.match(/^###\s/) || line.match(/^(Method \d+:|Step \d+:)/i) ||
+                               line.match(/^(See What|Disconnect|Reconnect|Connect Only|Use Multiple|Start Focused|Label Your)/)) {
+                        return <h3 key={index} className="text-xl font-semibold text-foreground mt-8 mb-3 leading-[1.4]">{highlightedText}</h3>;
+                      }
+                      // Question headers (in FAQ sections)
+                      else if (line.match(/^(Do I|Can I|Can AI|What if|Does the)/)) {
+                        return <h3 key={index} className="text-xl font-semibold text-foreground mt-8 mb-3 leading-[1.4]">{highlightedText}</h3>;
+                      }
+                      // Numbered lists - clean spacing
+                      else if (line.match(/^\d+\.\s/)) {
+                        const number = line.match(/^(\d+)\./)?.[1];
+                        return (
+                          <div key={index} className="flex gap-3 mt-3">
+                            <span className="text-foreground/70 font-medium min-w-[1.5rem]">{number}.</span>
+                            <div className="leading-[1.8] text-foreground/90 flex-1">{highlightedText}</div>
+                          </div>
+                        );
+                      }
+                      // Bulleted lists - clean spacing
+                      else if (line.match(/^[-\*•]\s/)) {
+                        return (
+                          <div key={index} className="flex gap-3 mt-2">
+                            <span className="text-foreground/70 mt-2">•</span>
+                            <div className="leading-[1.8] text-foreground/90 flex-1">{highlightedText}</div>
+                          </div>
+                        );
+                      }
+                      // Nested numbered lists
+                      else if (line.match(/^\s{2,}\d+\.\s/)) {
+                        const number = line.match(/(\d+)\./)?.[1];
+                        return (
+                          <div key={index} className="flex gap-3 mt-2 ml-8">
+                            <span className="text-foreground/70 font-medium min-w-[1.5rem]">{number}.</span>
+                            <div className="leading-[1.8] text-foreground/80 flex-1">{highlightedText}</div>
+                          </div>
+                        );
+                      }
+                      // Nested bulleted lists
+                      else if (line.match(/^\s{2,}[-\*•]\s/)) {
+                        return (
+                          <div key={index} className="flex gap-3 mt-2 ml-8">
+                            <span className="text-foreground/70 mt-2">•</span>
+                            <div className="leading-[1.8] text-foreground/80 flex-1">{highlightedText}</div>
+                          </div>
+                        );
+                      }
+                      // Bold text emphasis (like "Different purposes —")
+                      else if (line.match(/^[A-Z][a-z\s]+\s*—/)) {
+                        const dashIndex = line.indexOf('—');
+                        const beforeDash = line.substring(0, dashIndex);
+                        const afterDash = line.substring(dashIndex + 1);
+                        return (
+                          <div key={index} className="flex gap-1 mt-3 leading-[1.8]">
+                            <span className="font-semibold text-foreground">{beforeDash}—</span>
+                            <span className="text-foreground/90">{afterDash}</span>
+                          </div>
+                        );
+                      }
+                      // Quote or example blocks
+                      else if (line.match(/^["'"]/)) {
+                        return <p key={index} className="mt-4 mb-4 pl-6 leading-[1.8] italic text-foreground/80 border-l-3 border-primary/40">{highlightedText}</p>;
+                      }
+                      // Code blocks
+                      else if (line.match(/^```/) || line.match(/^`/)) {
+                        return <p key={index} className="mt-3 mb-3 leading-[1.6] font-mono text-sm bg-muted/50 px-4 py-2 rounded-md text-foreground/90">{highlightedText}</p>;
+                      }
+                      // Section dividers
+                      else if (line.match(/^[━─-]{3,}$/)) {
+                        return <div key={index} className="border-t border-border/20 my-10"></div>;
+                      }
+                      // Empty lines for spacing
+                      else if (line.trim() === '') {
+                        return <div key={index} className="h-4"></div>;
+                      }
+                      // Continuation lines (indented content under lists)
+                      else if (line.match(/^\s{2,}\S/) && !line.match(/^\s{2,}[-\*•\d]/)) {
+                        return <p key={index} className="ml-11 mt-1 leading-[1.8] text-foreground/80">{highlightedText}</p>;
+                      }
+                      // Regular paragraphs
+                      else {
+                        return <p key={index} className="mt-4 leading-[1.8] text-foreground/90 text-base">{highlightedText}</p>;
+                      }
+                    })}
                       {isPlaying && currentTranscript !== fullNarrative && (
                         <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
                       )}
@@ -776,11 +811,11 @@ export default function MentorModePage() {
 
               {/* Placeholder */}
               {!currentTranscript && !isLoading && (
-                <div className="flex items-center justify-center h-full text-center">
+                <div className="flex items-center justify-center h-full text-center max-w-4xl mx-auto">
                   <div className="text-muted-foreground">
-                    <Mic size={48} className="mx-auto mb-4 opacity-20" />
-                    <p className="text-sm">Click play to start your lesson</p>
-                    <p className="text-xs mt-2">Your AI mentor will explain the concepts here</p>
+                    <Mic size={56} className="mx-auto mb-6 opacity-15" />
+                    <p className="text-lg font-medium mb-2">Ready to Learn</p>
+                    <p className="text-sm">Click play to start your AI mentor lesson</p>
                   </div>
                 </div>
               )}
