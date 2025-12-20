@@ -53,6 +53,7 @@ export default function MentorModePage() {
   const [fullNarrative, setFullNarrative] = useState<string>('');
   const [mermaidCode, setMermaidCode] = useState<string | null>(null);
   const [keyTerms, setKeyTerms] = useState<string[]>([]);
+  const [topicImages, setTopicImages] = useState<string[]>([]);
 
   // Quiz state
   const [showQuiz, setShowQuiz] = useState(false);
@@ -670,14 +671,28 @@ export default function MentorModePage() {
                     <span className="text-sm font-medium text-muted-foreground">🔑 Key Terms to Know</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {keyTerms.map((term, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-                      >
-                        {term}
-                      </span>
-                    ))}
+                    {keyTerms.map((term, index) => {
+                      const termId = `keyterm-${term.toLowerCase().replace(/\s+/g, '-')}`;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            const element = document.getElementById(termId);
+                            if (element) {
+                              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              // Add a brief highlight effect
+                              element.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+                              setTimeout(() => {
+                                element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
+                              }, 2000);
+                            }
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors cursor-pointer hover:scale-105 active:scale-95"
+                        >
+                          {term}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -704,23 +719,35 @@ export default function MentorModePage() {
                         // H3-style headers (subsections like "Method 1:", "Step 1:")
                         else if (line.match(/^(Method \d+:|Step \d+:)/i) ||
                                  line.match(/^(See What|Disconnect|Reconnect|Connect Only|Use Multiple|Start Focused|Label Your)/)) {
-                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2">{highlightedText}</h3>;
+                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2 ml-4">{highlightedText}</h3>;
                         }
                         // Question headers (in FAQ sections)
                         else if (line.match(/^(Do I|Can I|Can AI|What if|Does the)/)) {
-                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2">{highlightedText}</h3>;
+                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2 ml-4">{highlightedText}</h3>;
                         }
-                        // Numbered lists - clean spacing
+                        // Numbered lists - clean spacing with proper indentation
                         else if (line.match(/^\d+\.\s/)) {
-                          return <p key={index} className="ml-6 mt-2 leading-[1.7]">{highlightedText}</p>;
+                          return <p key={index} className="ml-8 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
                         }
-                        // Bulleted lists - clean spacing
+                        // Bulleted lists - clean spacing with proper indentation
                         else if (line.match(/^[-\*•]\s/)) {
-                          return <p key={index} className="ml-6 mt-2 leading-[1.7]">{highlightedText}</p>;
+                          return <p key={index} className="ml-8 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
                         }
-                        // Quote or example blocks
+                        // Nested numbered lists (e.g., "  1." or "    1.")
+                        else if (line.match(/^\s{2,}\d+\.\s/)) {
+                          return <p key={index} className="ml-12 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
+                        }
+                        // Nested bulleted lists
+                        else if (line.match(/^\s{2,}[-\*•]\s/)) {
+                          return <p key={index} className="ml-12 mt-2 leading-[1.7] pl-2">{highlightedText}</p>;
+                        }
+                        // Quote or example blocks with indentation
                         else if (line.match(/^["'"]/)) {
-                          return <p key={index} className="ml-6 mt-2 leading-[1.7] italic text-foreground/90">{highlightedText}</p>;
+                          return <p key={index} className="ml-8 mt-2 leading-[1.7] italic text-foreground/90 border-l-2 border-primary/30 pl-4">{highlightedText}</p>;
+                        }
+                        // Code or technical blocks
+                        else if (line.match(/^```/) || line.match(/^`/)) {
+                          return <p key={index} className="ml-8 mt-2 leading-[1.7] font-mono text-sm bg-muted/50 px-3 py-1 rounded">{highlightedText}</p>;
                         }
                         // Section dividers
                         else if (line.match(/^[━─-]{3,}$/)) {
@@ -729,6 +756,10 @@ export default function MentorModePage() {
                         // Empty lines for spacing
                         else if (line.trim() === '') {
                           return <div key={index} className="h-2"></div>;
+                        }
+                        // Continuation lines (indented content under lists)
+                        else if (line.match(/^\s{2,}\S/) && !line.match(/^\s{2,}[-\*•\d]/)) {
+                          return <p key={index} className="ml-10 mt-1 leading-[1.7] text-foreground/90">{highlightedText}</p>;
                         }
                         // Regular paragraphs with documentation styling
                         else {
@@ -813,8 +844,9 @@ export default function MentorModePage() {
               </div>
 
               {isLoading ? (
-                <div className="mt-4">
-                  <LoadingSpinner message="Preparing your lesson..." size="sm" />
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <div className="h-4 w-4 rounded-full bg-primary animate-pulse"></div>
+                  <span className="text-sm text-muted-foreground">Preparing your lesson...</span>
                 </div>
               ) : (
                 <div className="text-center mt-3 text-xs text-muted-foreground">
