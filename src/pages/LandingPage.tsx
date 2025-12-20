@@ -115,6 +115,11 @@ const LandingPage = () => {
                   Card 1
                 </h3>
               </div>
+              <img
+                src="/image-card-1.png"
+                alt="Card 1 feature"
+                className="w-full h-[180px] object-cover mt-auto"
+              />
             </div>
 
             {/* Card 2 - Center/Tall */}
