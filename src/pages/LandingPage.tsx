@@ -79,24 +79,82 @@ const LandingPage = () => {
         <div className="max-w-5xl mx-auto">
           <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-10">How It Works</p>
           <div className="grid md:grid-cols-3 gap-6">
-            <FeatureCard 
+            <FeatureCard
               icon={<Upload className="w-5 h-5" />}
               step="01"
-              title="Upload Content" 
+              title="Upload Content"
               description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
             />
-            <FeatureCard 
+            <FeatureCard
               icon={<Gamepad2 className="w-5 h-5" />}
               step="02"
-              title="Choose Your Game" 
+              title="Choose Your Game"
               description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
             />
-            <FeatureCard 
+            <FeatureCard
               icon={<TrendingUp className="w-5 h-5" />}
               step="03"
-              title="Track Progress" 
+              title="Track Progress"
               description="Watch your knowledge grow. Earn XP, unlock achievements, and master every topic."
             />
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Cards Grid - 5 Cards */}
+      <section className="relative z-10 px-6 py-16 lg:px-12">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-16">
+            Why Choose PlayStudy
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 auto-rows-auto">
+            {/* Card 1 */}
+            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-1 md:row-start-1">
+              <div className="p-8 flex-1 flex flex-col justify-start">
+                <h3 className="text-xl font-bold text-white leading-snug">
+                  Card 1
+                </h3>
+              </div>
+            </div>
+
+            {/* Card 2 - Center/Tall */}
+            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col md:min-h-[660px] md:col-start-2 md:row-span-2">
+              <div className="p-8 flex-1 flex flex-col justify-start items-center text-center">
+                <h3 className="text-4xl md:text-5xl font-bold text-white mb-0">
+                  Card 2
+                </h3>
+              </div>
+            </div>
+
+            {/* Card 3 */}
+            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] relative md:col-start-3 md:row-start-1">
+              <span className="absolute top-5 right-5 bg-primary text-white px-3 py-1.5 rounded-md text-xs font-semibold">
+                New
+              </span>
+              <div className="p-8 flex-1 flex flex-col justify-start">
+                <h3 className="text-xl font-bold text-white leading-snug">
+                  Card 3
+                </h3>
+              </div>
+            </div>
+
+            {/* Card 4 */}
+            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-1 md:row-start-2">
+              <div className="p-8 flex-1 flex flex-col justify-start">
+                <h3 className="text-xl font-bold text-white leading-snug">
+                  Card 4
+                </h3>
+              </div>
+            </div>
+
+            {/* Card 5 */}
+            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-3 md:row-start-2">
+              <div className="p-8 flex-1 flex flex-col justify-start">
+                <h3 className="text-xl font-bold text-white leading-snug">
+                  Card 5
+                </h3>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -123,19 +181,6 @@ const LandingPage = () => {
                 This is studying, reimagined. This is PlayStudy.
               </p>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Game Modes */}
-      <section className="relative z-10 px-6 py-16 lg:px-12">
-        <div className="max-w-4xl mx-auto text-center">
-          <p className="text-white/40 text-sm uppercase tracking-wider mb-8">Game Modes</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <GameCard emoji="❓" label="Quiz Mode" description="Test your knowledge" />
-            <GameCard emoji="🃏" label="Flashcards" description="Quick recall training" />
-            <GameCard emoji="⚡" label="Speed Run" description="Race against time" />
-            <GameCard emoji="🧠" label="Memory" description="Deep retention" />
           </div>
         </div>
       </section>
@@ -198,14 +243,6 @@ const FeatureCard = ({ icon, step, title, description }: { icon: React.ReactNode
     </div>
     <h3 className="text-white font-semibold mb-2">{title}</h3>
     <p className="text-white/50 text-sm leading-relaxed">{description}</p>
-  </div>
-);
-
-const GameCard = ({ emoji, label, description }: { emoji: string; label: string; description: string }) => (
-  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors text-center">
-    <span className="text-2xl mb-3 block">{emoji}</span>
-    <h3 className="text-white font-medium text-sm mb-1">{label}</h3>
-    <p className="text-white/40 text-xs">{description}</p>
   </div>
 );
 
