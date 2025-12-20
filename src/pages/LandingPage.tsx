@@ -113,7 +113,7 @@ const LandingPage = () => {
               <img
                 src="/image-card-1.png"
                 alt="New game added every week"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             </div>
 
