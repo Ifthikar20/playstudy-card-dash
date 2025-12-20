@@ -3,13 +3,13 @@
  */
 import { Folder } from './api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 /**
  * Get the authentication token from localStorage
  */
 function getAuthToken(): string | null {
-  return localStorage.getItem('token');
+  return localStorage.getItem('auth_token');
 }
 
 /**
