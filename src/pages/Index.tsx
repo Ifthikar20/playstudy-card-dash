@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog"
 import { CreateFolderDialog } from "@/components/CreateFolderDialog";
 import UserMenu from "@/components/UserMenu";
 import { useAppStore } from "@/store/appStore";
-import { Plus, FolderPlus, Folder as FolderIcon } from "lucide-react";
+import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight } from "lucide-react";
 
 export default function Index() {
   const [showCreateSession, setShowCreateSession] = useState(false);
@@ -72,26 +72,36 @@ export default function Index() {
             </div>
           </div>
 
-          {/* Folders */}
+          {/* Folders - Show first 5 */}
           {folders.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">
-                📁 My Folders
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {folders.map((folder) => (
-                  <div
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-foreground">
+                  📁 My Folders
+                </h2>
+                {folders.length > 5 && (
+                  <Link to="/folders">
+                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+                      View All ({folders.length})
+                      <ArrowRight size={16} />
+                    </Button>
+                  </Link>
+                )}
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {folders.slice(0, 5).map((folder) => (
+                  <Link
                     key={folder.id}
-                    className="cursor-pointer hover:bg-accent/50 transition-colors p-4 rounded-lg border border-border flex flex-col items-center gap-2 text-center"
-                    style={{ borderLeftColor: folder.color, borderLeftWidth: '4px' }}
-                    onClick={() => setExpandedFolder(expandedFolder === folder.id ? null : folder.id)}
+                    to="/folders"
+                    className="flex-shrink-0 cursor-pointer hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border flex flex-col items-center gap-1.5 text-center min-w-[100px]"
+                    style={{ borderLeftColor: folder.color, borderLeftWidth: '3px' }}
                   >
-                    <div className="text-3xl">{folder.icon}</div>
-                    <div className="font-semibold text-sm">{folder.name}</div>
+                    <div className="text-2xl">{folder.icon}</div>
+                    <div className="font-semibold text-xs truncate w-full">{folder.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {folder.session_count} session{folder.session_count !== 1 ? 's' : ''}
+                      {folder.session_count} {folder.session_count !== 1 ? 'sessions' : 'session'}
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
