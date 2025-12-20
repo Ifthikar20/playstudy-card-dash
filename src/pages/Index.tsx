@@ -14,7 +14,7 @@ export default function Index() {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [expandedFolder, setExpandedFolder] = useState<number | null>(null);
   const navigate = useNavigate();
-  const { studySessions, folders, setCurrentSession } = useAppStore();
+  const { studySessions, folders, setCurrentSession, userProfile } = useAppStore();
 
   const handleSessionClick = (session: any) => {
     setCurrentSession(session);
@@ -44,7 +44,7 @@ export default function Index() {
           <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-                Welcome Back!
+                {userProfile?.name ? `Welcome Back, ${userProfile.name}!` : 'Welcome Back!'}
               </h1>
               <p className="text-muted-foreground">
                 Transform your study materials into engaging, competitive quizzes
