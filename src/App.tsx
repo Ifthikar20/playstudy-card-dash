@@ -18,6 +18,7 @@ import TermsPage from "./pages/TermsPage";
 import ContactPage from "./pages/ContactPage";
 import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
+import FolderDetailPage from "./pages/FolderDetailPage";
 import QuizPage from "./pages/QuizPage";
 import SpeedRunPage from "./pages/SpeedRunPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -57,6 +58,7 @@ const AppContent = () => {
         >
           <Route index element={<Index />} />
           <Route path="folders" element={<StudyFolders />} />
+          <Route path="folder/:folderId" element={<FolderDetailPage />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />

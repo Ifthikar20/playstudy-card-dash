@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { FolderPlus, Folder, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 export default function StudyFolders() {
   const { folders } = useAppStore();
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <>
@@ -37,6 +39,7 @@ export default function StudyFolders() {
                     key={folder.id}
                     className="cursor-pointer hover:bg-accent/50 transition-colors p-4 rounded-lg border border-border flex flex-col items-center gap-2 text-center"
                     style={{ borderLeftColor: folder.color, borderLeftWidth: '4px' }}
+                    onClick={() => navigate(`/dashboard/folder/${folder.id}`)}
                   >
                     <div className="text-4xl">{folder.icon}</div>
                     <div className="font-semibold text-sm">{folder.name}</div>

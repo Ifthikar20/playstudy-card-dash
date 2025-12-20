@@ -8,6 +8,7 @@ import { CreateFolderDialog } from "@/components/CreateFolderDialog";
 import UserMenu from "@/components/UserMenu";
 import { useAppStore } from "@/store/appStore";
 import { moveSessionToFolder } from "@/services/folder-api";
+import { fetchAppData } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight } from "lucide-react";
 
@@ -18,7 +19,7 @@ export default function Index() {
   const [draggedSession, setDraggedSession] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
   const navigate = useNavigate();
-  const { studySessions, folders, setCurrentSession, userProfile } = useAppStore();
+  const { studySessions, folders, setCurrentSession, userProfile, initializeFromAPI } = useAppStore();
   const { toast } = useToast();
 
   const handleSessionClick = (session: any) => {
@@ -69,13 +70,14 @@ export default function Index() {
       const session = studySessions.find(s => s.id === sessionId);
       const folder = folders.find(f => f.id === folderId);
 
+      // Refresh data seamlessly without page reload
+      const updatedData = await fetchAppData();
+      initializeFromAPI(updatedData);
+
       toast({
         title: "Session moved!",
         description: `"${session?.title}" moved to "${folder?.name}"`,
       });
-
-      // Refresh the page data
-      window.location.reload();
     } catch (error) {
       console.error('Failed to move session:', error);
       toast({
@@ -174,7 +176,7 @@ export default function Index() {
                     onDrop={(e) => handleDrop(e, folder.id)}
                     onClick={(e) => {
                       if (!draggedSession) {
-                        navigate('/folders');
+                        navigate(`/dashboard/folder/${folder.id}`);
                       }
                     }}
                   >
