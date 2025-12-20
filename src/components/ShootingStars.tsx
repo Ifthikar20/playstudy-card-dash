@@ -173,9 +173,17 @@ export default function ShootingStars() {
     let time = 0;
     const animate = () => {
       time++;
-      
-      // Deep black space background
-      ctx.fillStyle = '#050508';
+
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Create gradient background that fades to transparent at bottom
+      const bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      bgGradient.addColorStop(0, '#050508'); // Deep black space at top
+      bgGradient.addColorStop(0.6, '#050508'); // Keep solid until 60%
+      bgGradient.addColorStop(1, 'transparent'); // Fade to transparent at bottom
+
+      ctx.fillStyle = bgGradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       drawStaticStars(time);
@@ -202,7 +210,7 @@ export default function ShootingStars() {
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ zIndex: 0, background: '#050508' }}
+      style={{ zIndex: 0 }}
     />
   );
 }

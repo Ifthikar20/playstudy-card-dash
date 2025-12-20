@@ -22,9 +22,11 @@ export default function BrowseGamesPage() {
 
   const handlePlayGame = (gameId: number) => {
     // Map game IDs to routes
-    // For now, only game ID 7 (platformer) has a playable route
     if (gameId === 7) {
       navigate("/dashboard/platformer-game");
+    } else if (gameId === 8) {
+      // Memory Match game
+      navigate("/dashboard/memory-match");
     } else {
       // Other games show the create session dialog
       setDialogOpen(true);

@@ -141,3 +141,62 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* New Session Badge Animations */
+@keyframes fire-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.5), 0 0 20px rgba(239, 68, 68, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.5);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes slide-in-bounce {
+  0% {
+    transform: translateX(-20px);
+    opacity: 0;
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes new-session-highlight {
+  0% {
+    background-color: rgba(249, 115, 22, 0);
+    border-color: inherit;
+  }
+  20% {
+    background-color: rgba(249, 115, 22, 0.1);
+    border-color: rgba(249, 115, 22, 0.5);
+  }
+  100% {
+    background-color: rgba(249, 115, 22, 0);
+    border-color: inherit;
+  }
+}
+
+.fire-badge {
+  animation: fire-glow 2s ease-in-out infinite, pulse-glow 1.5s ease-in-out infinite, slide-in-bounce 0.6s ease-out;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.new-session-card {
+  animation: new-session-highlight 2s ease-out;
+}

@@ -64,13 +64,17 @@ def analyze_content_complexity(text: str) -> dict:
     # Reading time (average reading speed: 200-250 words/minute)
     estimated_reading_time = max(1, round(word_count / 225))
 
-    # Recommend topics based on word count and complexity
-    # Short content (< 500 words): 2-4 topics
-    # Medium content (500-2000 words): 4-8 topics
-    # Long content (2000-5000 words): 8-15 topics
-    # Very long content (5000-10000 words): 15-30 topics
-    # Extremely long content (10000+ words): 30-50 topics
-    if word_count < 500:
+    # Recommend topics based on word count and complexity - TRULY DYNAMIC scaling
+    # Very short (< 100 words): 1 topic
+    # Short (100-500 words): 2-4 topics
+    # Medium (500-2000 words): 4-8 topics
+    # Long (2000-5000 words): 8-15 topics
+    # Very long (5000-10000 words): 15-30 topics
+    # Extremely long (10000-20000 words): 30-60 topics
+    # Massive (20000+ words): 60-100 topics
+    if word_count < 100:
+        base_topics = 1
+    elif word_count < 500:
         base_topics = 3
     elif word_count < 2000:
         base_topics = 6
@@ -78,11 +82,13 @@ def analyze_content_complexity(text: str) -> dict:
         base_topics = 12
     elif word_count < 10000:
         base_topics = 20
+    elif word_count < 20000:
+        base_topics = 45
     else:
-        base_topics = 35
+        base_topics = 70
 
     # Adjust based on complexity
-    recommended_topics = max(2, min(50, round(base_topics * (0.7 + complexity_score * 0.6))))
+    recommended_topics = max(1, min(100, round(base_topics * (0.7 + complexity_score * 0.6))))
 
     # Recommend questions per topic based on content depth
     # More complex content = more questions to test understanding
@@ -218,7 +224,7 @@ class CreateStudySessionRequest(BaseModel):
     """Request schema for creating a study session."""
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
-    num_topics: int = Field(default=4, ge=2, le=50)  # Increased to 50 for comprehensive coverage
+    num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
     questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
 
 

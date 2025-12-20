@@ -18,6 +18,7 @@ import TermsPage from "./pages/TermsPage";
 import ContactPage from "./pages/ContactPage";
 import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
+import FolderDetailPage from "./pages/FolderDetailPage";
 import QuizPage from "./pages/QuizPage";
 import SpeedRunPage from "./pages/SpeedRunPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -25,6 +26,7 @@ import FullStudyPage from "./pages/FullStudyPage";
 import BrowseGamesPage from "./pages/BrowseGamesPage";
 import GameModePage from "./pages/GameModePage";
 import PlatformerGamePage from "./pages/PlatformerGamePage";
+import MemoryMatchGamePage from "./pages/MemoryMatchGamePage";
 import MentorModePage from "./pages/MentorModePage";
 import NotFound from "./pages/NotFound";
 
@@ -57,6 +59,7 @@ const AppContent = () => {
         >
           <Route index element={<Index />} />
           <Route path="folders" element={<StudyFolders />} />
+          <Route path="folder/:folderId" element={<FolderDetailPage />} />
           <Route path="browse-games" element={<BrowseGamesPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
@@ -67,6 +70,7 @@ const AppContent = () => {
           <Route path=":sessionId/mentor" element={<MentorModePage />} />
           <Route path=":sessionId/browse-games" element={<BrowseGamesPage />} />
           <Route path=":sessionId/platformer-game" element={<PlatformerGamePage />} />
+          <Route path=":sessionId/memory-match" element={<MemoryMatchGamePage />} />
 
           {/* Legacy routes for backward compatibility */}
           <Route path="quiz/:topic" element={<QuizPage />} />
@@ -74,6 +78,7 @@ const AppContent = () => {
           <Route path="full-study" element={<FullStudyPage />} />
           <Route path="game-mode" element={<GameModePage />} />
           <Route path="platformer-game" element={<PlatformerGamePage />} />
+          <Route path="memory-match" element={<MemoryMatchGamePage />} />
         </Route>
 
         {/* 404 */}

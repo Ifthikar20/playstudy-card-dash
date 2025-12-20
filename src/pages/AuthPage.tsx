@@ -27,7 +27,7 @@ export default function AuthPage() {
     try {
       const result = await authLogin(email, password);
       if (result.success) {
-        navigate('/');
+        navigate('/dashboard');
       } else {
         setError(result.error || 'Login failed');
       }
@@ -46,7 +46,7 @@ export default function AuthPage() {
     try {
       const result = await authRegister(email, name, password);
       if (result.success) {
-        navigate('/');
+        navigate('/dashboard');
       } else {
         setError(result.error || 'Registration failed');
       }
@@ -253,6 +253,18 @@ export default function AuthPage() {
                     Register
                   </button>
                 </p>
+
+                <p className="text-center text-xs text-muted-foreground mt-4">
+                  By signing in, you agree to our{' '}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Terms & Conditions
+                  </a>
+                </p>
               </form>
             )}
 
@@ -327,6 +339,18 @@ export default function AuthPage() {
                   >
                     Sign In
                   </button>
+                </p>
+
+                <p className="text-center text-xs text-muted-foreground mt-4">
+                  By creating an account, you agree to our{' '}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Terms & Conditions
+                  </a>
                 </p>
               </form>
             )}

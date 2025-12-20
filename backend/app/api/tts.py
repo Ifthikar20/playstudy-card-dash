@@ -3,13 +3,13 @@ Text-to-Speech API endpoints.
 """
 import logging
 import httpx
+import re
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from app.services.tts_service import tts_service
-from app.services.image_search_service import image_search_service
 from app.dependencies import get_current_user, get_db
 from app.core.rate_limit import limiter
 from slowapi import Limiter
@@ -235,7 +235,8 @@ class MentorContentResponse(BaseModel):
     """Response model for mentor content."""
     narrative: str = Field(..., description="Formatted narrative for the mentor")
     estimated_duration_seconds: int = Field(..., description="Estimated speech duration")
-    images: Optional[List[Dict]] = Field(default=None, description="Related images for visual examples")
+    mermaid_code: Optional[str] = Field(default=None, description="Mermaid diagram code for visual representation")
+    key_terms: Optional[List[str]] = Field(default=None, description="List of important key terms")
 
 
 @router.post(
@@ -317,6 +318,29 @@ Guidelines:
 - Use minimal formatting - occasional bullet points are fine, but don't overuse emojis
 - Aim for clarity and engagement over rigid structure
 
+IMPORTANT: Mark key terms and important vocabulary words that students should remember.
+Wrap them like this: **TERM:photosynthesis** or **TERM:French Revolution**
+These will be highlighted for students. Mark 5-10 important terms throughout your explanation.
+
+IMPORTANT: After your explanation, create a Mermaid diagram to visualize the key concepts.
+Add this section at the very end:
+
+---MERMAID---
+[Your Mermaid.js diagram code here]
+---END_MERMAID---
+
+Mermaid diagram guidelines:
+- Use flowcharts (graph TD/LR), mindmaps, or sequence diagrams as appropriate
+- Keep it simple and focused on the main concept
+- Use clear, short labels
+- Examples:
+  * Flowchart: graph LR; A[Start] --> B[Process] --> C[End]
+  * Mind map: mindmap
+  root((Topic))
+    Concept1
+    Concept2
+  * Sequence: sequenceDiagram; A->>B: Message
+
 Write this as you would naturally explain it to a student, not following a strict template.
 """
 
@@ -354,10 +378,32 @@ Write this as you would naturally explain it to a student, not following a stric
             )
 
         result = response.json()
-        narrative = result['choices'][0]['message']['content']
+        full_content = result['choices'][0]['message']['content']
+
+        # Extract Mermaid diagram code if present
+        mermaid_code = None
+        narrative = full_content
+
+        if "---MERMAID---" in full_content and "---END_MERMAID---" in full_content:
+            parts = full_content.split("---MERMAID---")
+            narrative = parts[0].strip()
+            mermaid_section = parts[1].split("---END_MERMAID---")[0].strip()
+            mermaid_code = mermaid_section
+            logger.info(f"[Mentor Content] 📊 Extracted Mermaid diagram")
+
+        # Extract key terms from narrative
+        # Pattern: **TERM:word** or **TERM:multiple words**
+        key_terms = []
+        term_pattern = r'\*\*TERM:(.*?)\*\*'
+        matches = re.findall(term_pattern, narrative)
+        if matches:
+            key_terms = list(set(matches))  # Remove duplicates
+            logger.info(f"[Mentor Content] 🔑 Extracted {len(key_terms)} key terms")
 
         # Estimate duration (average speaking rate: ~150 words per minute)
-        word_count = len(narrative.split())
+        # Count words excluding the TERM markers
+        clean_text = re.sub(term_pattern, r'\1', narrative)
+        word_count = len(clean_text.split())
         estimated_seconds = int((word_count / 150) * 60)
 
         logger.info(f"[Mentor Content] ✅ Generated {word_count} words (~{estimated_seconds}s)")
@@ -370,25 +416,11 @@ Write this as you would naturally explain it to a student, not following a stric
                 db.commit()
                 logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
 
-        # Search for relevant images
-        images = None
-        if image_search_service.is_configured():
-            try:
-                logger.info(f"[Mentor Content] 🖼️ Searching for images: {content_request.topic_title}")
-                images = await image_search_service.search_images(
-                    query=content_request.topic_title,
-                    per_page=3
-                )
-                logger.info(f"[Mentor Content] Found {len(images) if images else 0} images")
-            except Exception as img_error:
-                logger.warning(f"[Mentor Content] Image search failed: {img_error}")
-                # Don't fail the entire request if image search fails
-                images = None
-
         return MentorContentResponse(
             narrative=narrative,
             estimated_duration_seconds=estimated_seconds,
-            images=images
+            mermaid_code=mermaid_code,
+            key_terms=key_terms if key_terms else None
         )
 
     except httpx.TimeoutException:

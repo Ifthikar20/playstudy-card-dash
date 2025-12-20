@@ -14,6 +14,8 @@ import {
 import { useAppStore } from "@/store/appStore";
 import { aiVoiceService, TTSProvider } from "@/services/aiVoice";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { MermaidDiagram } from "@/components/MermaidDiagram";
+import { parseKeyTerms, parseProgressiveKeyTerms } from "@/utils/keyTerms";
 import {
   Play,
   Pause,
@@ -49,7 +51,8 @@ export default function MentorModePage() {
   const [availableProviders, setAvailableProviders] = useState(aiVoiceService.getAvailableProviders());
   const [currentTranscript, setCurrentTranscript] = useState<string>('');
   const [fullNarrative, setFullNarrative] = useState<string>('');
-  const [topicImages, setTopicImages] = useState<any[]>([]);
+  const [mermaidCode, setMermaidCode] = useState<string | null>(null);
+  const [keyTerms, setKeyTerms] = useState<string[]>([]);
 
   // Quiz state
   const [showQuiz, setShowQuiz] = useState(false);
@@ -266,12 +269,20 @@ export default function MentorModePage() {
       console.log(`[Mentor Mode] ✅ Received AI content: ${data.estimated_duration_seconds}s estimated`);
       console.log(`[Mentor Mode] Narrative length: ${narrative.length} characters`);
 
-      // Store images if available
-      if (data.images && data.images.length > 0) {
-        console.log(`[Mentor Mode] 🖼️ Received ${data.images.length} images`);
-        setTopicImages(data.images);
+      // Store Mermaid diagram if available
+      if (data.mermaid_code) {
+        console.log(`[Mentor Mode] 📊 Received Mermaid diagram`);
+        setMermaidCode(data.mermaid_code);
       } else {
-        setTopicImages([]);
+        setMermaidCode(null);
+      }
+
+      // Store key terms if available
+      if (data.key_terms && data.key_terms.length > 0) {
+        console.log(`[Mentor Mode] 🔑 Received ${data.key_terms.length} key terms`);
+        setKeyTerms(data.key_terms);
+      } else {
+        setKeyTerms([]);
       }
 
       setFullNarrative(narrative);
@@ -642,33 +653,30 @@ export default function MentorModePage() {
                 </div>
               )}
 
-              {/* Visual Examples Section */}
-              {topicImages.length > 0 && (
+              {/* Visual Diagram Section */}
+              {mermaidCode && (
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-medium text-muted-foreground">📸 Visual Examples</span>
+                    <span className="text-sm font-medium text-muted-foreground">📊 Visual Concept Map</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {topicImages.map((image, index) => (
-                      <div key={index} className="relative group overflow-hidden rounded-lg border border-border bg-muted">
-                        <img
-                          src={image.thumb_url}
-                          alt={image.description}
-                          className="w-full h-48 object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
-                        />
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                          <p className="text-xs text-white line-clamp-2">{image.description}</p>
-                          <a
-                            href={image.unsplash_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-white/70 hover:text-white"
-                          >
-                            Photo by {image.author}
-                          </a>
-                        </div>
-                      </div>
+                  <MermaidDiagram code={mermaidCode} className="w-full" />
+                </div>
+              )}
+
+              {/* Key Terms Section */}
+              {keyTerms.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-muted-foreground">🔑 Key Terms to Know</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {keyTerms.map((term, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                      >
+                        {term}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -680,34 +688,51 @@ export default function MentorModePage() {
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <MessageSquare size={20} className="text-primary" />
                   </div>
-                  <div className="flex-1 bg-accent/50 rounded-lg p-4">
-                    <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
-                    <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                  <div className="flex-1 bg-accent/50 rounded-lg p-6">
+                    <div className="text-xs font-medium text-primary mb-4">Your AI Mentor</div>
+                    <div className="text-[15px] text-foreground whitespace-pre-wrap leading-[1.7] font-sans" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', letterSpacing: '-0.011em' }}>
                       {currentTranscript.split('\n').map((line, index) => {
-                        // Format with minimal styling for natural flow
-                        // Headers with emojis or ALL CAPS
-                        if (line.match(/^[🎯📚💡✅🌍❓📌🎓]/)) {
-                          return <div key={index} className="font-semibold text-primary mt-4 mb-2">{line}</div>;
+                        // Parse and highlight key terms in the line
+                        const { highlightedText } = parseKeyTerms(line);
+
+                        // Format with clean documentation styling matching Framer
+                        // H2-style headers (major sections)
+                        if (line.match(/^(Connect an Item to AI|How .* Work|What .* Can|Managing Connections|Best Practices|Common Questions)/i) ||
+                            line.match(/^[A-Z][a-z]+ [A-Z][a-z]+/) && line.length < 50 && !line.match(/^\d+\./)) {
+                          return <h2 key={index} className="text-lg font-bold text-foreground mt-8 mb-3 leading-tight">{highlightedText}</h2>;
                         }
-                        // Examples
-                        else if (line.match(/^(Example \d+:|For example,|Consider)/i)) {
-                          return <div key={index} className="ml-4 mt-2 text-foreground/90 italic border-l-2 border-primary/30 pl-3">{line}</div>;
+                        // H3-style headers (subsections like "Method 1:", "Step 1:")
+                        else if (line.match(/^(Method \d+:|Step \d+:)/i) ||
+                                 line.match(/^(See What|Disconnect|Reconnect|Connect Only|Use Multiple|Start Focused|Label Your)/)) {
+                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2">{highlightedText}</h3>;
                         }
-                        // Numbered or bulleted lists
-                        else if (line.match(/^(\d+\.|-|\*)\s/)) {
-                          return <div key={index} className="ml-4 mt-1">{line}</div>;
+                        // Question headers (in FAQ sections)
+                        else if (line.match(/^(Do I|Can I|Can AI|What if|Does the)/)) {
+                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2">{highlightedText}</h3>;
+                        }
+                        // Numbered lists - clean spacing
+                        else if (line.match(/^\d+\.\s/)) {
+                          return <p key={index} className="ml-6 mt-2 leading-[1.7]">{highlightedText}</p>;
+                        }
+                        // Bulleted lists - clean spacing
+                        else if (line.match(/^[-\*•]\s/)) {
+                          return <p key={index} className="ml-6 mt-2 leading-[1.7]">{highlightedText}</p>;
+                        }
+                        // Quote or example blocks
+                        else if (line.match(/^["'"]/)) {
+                          return <p key={index} className="ml-6 mt-2 leading-[1.7] italic text-foreground/90">{highlightedText}</p>;
                         }
                         // Section dividers
                         else if (line.match(/^[━─-]{3,}$/)) {
-                          return <div key={index} className="border-t border-border my-4"></div>;
+                          return <div key={index} className="border-t border-border/30 my-6"></div>;
                         }
                         // Empty lines for spacing
                         else if (line.trim() === '') {
                           return <div key={index} className="h-2"></div>;
                         }
-                        // Regular paragraphs
+                        // Regular paragraphs with documentation styling
                         else {
-                          return <div key={index} className="leading-relaxed mt-1">{line}</div>;
+                          return <p key={index} className="mt-3 leading-[1.7] text-foreground/95">{highlightedText}</p>;
                         }
                       })}
                       {isPlaying && currentTranscript !== fullNarrative && (
