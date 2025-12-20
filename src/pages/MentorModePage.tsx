@@ -688,45 +688,51 @@ export default function MentorModePage() {
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <MessageSquare size={20} className="text-primary" />
                   </div>
-                  <div className="flex-1 bg-accent/50 rounded-lg p-4">
-                    <div className="text-xs font-medium text-primary mb-2">Your AI Mentor</div>
-                    <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed font-sans" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', letterSpacing: '0.01em' }}>
+                  <div className="flex-1 bg-accent/50 rounded-lg p-6">
+                    <div className="text-xs font-medium text-primary mb-4">Your AI Mentor</div>
+                    <div className="text-[15px] text-foreground whitespace-pre-wrap leading-[1.7] font-sans" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', letterSpacing: '-0.011em' }}>
                       {currentTranscript.split('\n').map((line, index) => {
                         // Parse and highlight key terms in the line
                         const { highlightedText } = parseKeyTerms(line);
 
-                        // Format with clean, instructional styling
-                        // Main section headers (Method 1:, Method 2:, or emoji headers)
-                        if (line.match(/^(Method \d+:|Step \d+:|[🎯📚💡✅🌍❓📌🎓])/)) {
-                          return <div key={index} className="font-semibold text-primary mt-6 mb-3 text-base">{highlightedText}</div>;
+                        // Format with clean documentation styling matching Framer
+                        // H2-style headers (major sections)
+                        if (line.match(/^(Connect an Item to AI|How .* Work|What .* Can|Managing Connections|Best Practices|Common Questions)/i) ||
+                            line.match(/^[A-Z][a-z]+ [A-Z][a-z]+/) && line.length < 50 && !line.match(/^\d+\./)) {
+                          return <h2 key={index} className="text-lg font-bold text-foreground mt-8 mb-3 leading-tight">{highlightedText}</h2>;
                         }
-                        // Subsection headers (What, When, How, etc.)
-                        else if (line.match(/^(What|When|How|Why|Where|Best Practices)/)) {
-                          return <div key={index} className="font-semibold text-foreground mt-4 mb-2">{highlightedText}</div>;
+                        // H3-style headers (subsections like "Method 1:", "Step 1:")
+                        else if (line.match(/^(Method \d+:|Step \d+:)/i) ||
+                                 line.match(/^(See What|Disconnect|Reconnect|Connect Only|Use Multiple|Start Focused|Label Your)/)) {
+                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2">{highlightedText}</h3>;
                         }
-                        // Examples
-                        else if (line.match(/^(Example \d+:|For example,|Consider)/i)) {
-                          return <div key={index} className="ml-6 mt-2 text-foreground/90 italic border-l-3 border-primary/40 pl-4 py-1">{highlightedText}</div>;
+                        // Question headers (in FAQ sections)
+                        else if (line.match(/^(Do I|Can I|Can AI|What if|Does the)/)) {
+                          return <h3 key={index} className="text-base font-semibold text-foreground mt-6 mb-2">{highlightedText}</h3>;
                         }
-                        // Numbered lists with proper spacing
+                        // Numbered lists - clean spacing
                         else if (line.match(/^\d+\.\s/)) {
-                          return <div key={index} className="ml-6 mt-2 leading-relaxed">{highlightedText}</div>;
+                          return <p key={index} className="ml-6 mt-2 leading-[1.7]">{highlightedText}</p>;
                         }
-                        // Bulleted lists (-, *, •)
+                        // Bulleted lists - clean spacing
                         else if (line.match(/^[-\*•]\s/)) {
-                          return <div key={index} className="ml-8 mt-1.5 leading-relaxed">{highlightedText}</div>;
+                          return <p key={index} className="ml-6 mt-2 leading-[1.7]">{highlightedText}</p>;
+                        }
+                        // Quote or example blocks
+                        else if (line.match(/^["'"]/)) {
+                          return <p key={index} className="ml-6 mt-2 leading-[1.7] italic text-foreground/90">{highlightedText}</p>;
                         }
                         // Section dividers
                         else if (line.match(/^[━─-]{3,}$/)) {
-                          return <div key={index} className="border-t border-border/50 my-5"></div>;
+                          return <div key={index} className="border-t border-border/30 my-6"></div>;
                         }
-                        // Empty lines for proper spacing
+                        // Empty lines for spacing
                         else if (line.trim() === '') {
-                          return <div key={index} className="h-3"></div>;
+                          return <div key={index} className="h-2"></div>;
                         }
-                        // Regular paragraphs with better line height
+                        // Regular paragraphs with documentation styling
                         else {
-                          return <div key={index} className="leading-relaxed mt-2 text-foreground/95">{highlightedText}</div>;
+                          return <p key={index} className="mt-3 leading-[1.7] text-foreground/95">{highlightedText}</p>;
                         }
                       })}
                       {isPlaying && currentTranscript !== fullNarrative && (
