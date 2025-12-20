@@ -801,10 +801,9 @@ export default function MentorModePage() {
                         return <p key={index} className="mt-4 leading-[1.8] text-foreground/90 text-base">{highlightedText}</p>;
                       }
                     })}
-                      {isPlaying && currentTranscript !== fullNarrative && (
-                        <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
-                      )}
-                    </div>
+                    {isPlaying && currentTranscript !== fullNarrative && (
+                      <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
+                    )}
                   </div>
                 </div>
               )}
