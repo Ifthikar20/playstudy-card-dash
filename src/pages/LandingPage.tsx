@@ -110,15 +110,10 @@ const LandingPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 auto-rows-auto">
             {/* Card 1 */}
             <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-1 md:row-start-1">
-              <div className="p-8 flex-1 flex flex-col justify-start">
-                <h3 className="text-xl font-bold text-white leading-snug">
-                  Card 1
-                </h3>
-              </div>
               <img
                 src="/image-card-1.png"
-                alt="Card 1 feature"
-                className="w-full h-[180px] object-cover mt-auto"
+                alt="New game added every week"
+                className="w-full h-full object-cover"
               />
             </div>
 
