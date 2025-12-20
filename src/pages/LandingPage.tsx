@@ -140,11 +140,14 @@ const LandingPage = () => {
 
             {/* Card 4 */}
             <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-1 md:row-start-2">
-              <div className="p-8 flex-1 flex flex-col justify-start">
-                <h3 className="text-xl font-bold text-white leading-snug">
-                  Card 4
-                </h3>
-              </div>
+              <video
+                src="/video-card4.mp4"
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
+              />
             </div>
 
             {/* Card 5 */}
