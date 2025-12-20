@@ -22,8 +22,13 @@ The backend implements multiple layers of security:
 - TLS 1.2+ required
 - Strong cipher suites only
 
-### API Request Encryption (Optional)
-For sensitive operations, the API supports end-to-end encryption:
+### API Request/Response Encryption
+For sensitive operations, the API **requires** end-to-end encryption:
+
+**Endpoints Requiring Encryption:**
+- `/api/tts/generate-mentor-content` - AI-generated narratives
+- `/api/study-sessions/create` - User study content
+- `/api/study-sessions/upload` - Document uploads
 
 **Encryption Flow:**
 1. Client generates random AES-256 key
@@ -39,10 +44,18 @@ For sensitive operations, the API supports end-to-end encryption:
 3. Server validates nonce and timestamp
 4. Server verifies HMAC signature
 
+**Server Encryption (Response):**
+1. Server generates AES-256 key for response
+2. Server encrypts response with AES-256-GCM
+3. Server sends encrypted response with header:
+   - `X-Encrypted-Response: true`
+
 **Implementation:**
 - `app/middleware/encryption_middleware.py` - Request/response encryption
 - `app/core/crypto.py` - Cryptography service
 - `app/core/nonce_manager.py` - Replay protection
+
+**Detailed Documentation:** See [ENCRYPTION_IN_TRANSIT.md](./ENCRYPTION_IN_TRANSIT.md)
 
 ---
 
