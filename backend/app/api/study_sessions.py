@@ -711,9 +711,19 @@ async def get_study_session(
     Returns the complete session data including the hierarchical topic structure
     with all questions, allowing users to resume their study progress.
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'. This may be an old session that is no longer compatible."
+        )
+
     # Fetch session with eager loading of topics and questions
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -722,7 +732,7 @@ async def get_study_session(
 
     # Fetch all topics for this session
     all_topics = db.query(Topic).filter(
-        Topic.study_session_id == session_id
+        Topic.study_session_id == uuid_obj
     ).order_by(Topic.order_index).all()
 
     # Build hierarchical structure
@@ -811,8 +821,18 @@ async def delete_study_session(
 
     This will cascade delete all topics and questions associated with the session.
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -836,8 +856,18 @@ async def archive_study_session(
 
     Changes the session status to 'archived'.
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -881,9 +911,19 @@ async def update_topic_progress(
     Rate Limits:
         - 60 requests per minute per user
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     # Verify session belongs to user
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -893,7 +933,7 @@ async def update_topic_progress(
     # Find the topic
     topic = db.query(Topic).filter(
         Topic.id == topic_id,
-        Topic.study_session_id == session_id
+        Topic.study_session_id == uuid_obj
     ).first()
 
     if not topic:
@@ -906,7 +946,7 @@ async def update_topic_progress(
 
     # Update session progress (percentage of completed subtopics)
     all_topics = db.query(Topic).filter(
-        Topic.study_session_id == session_id,
+        Topic.study_session_id == uuid_obj,
         Topic.is_category == False  # Only count leaf topics
     ).all()
 
