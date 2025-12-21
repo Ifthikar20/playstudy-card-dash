@@ -58,6 +58,8 @@ export interface StudySession {
   hasSpeedRun: boolean;
   hasQuiz: boolean;
   studyContent?: string;
+  fileContent?: string; // Original file (base64)
+  fileType?: string; // File type: pdf, pptx, docx, txt
   extractedTopics?: Topic[];
   folderId?: number | null;
 }

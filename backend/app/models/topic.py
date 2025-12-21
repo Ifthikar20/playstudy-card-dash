@@ -19,6 +19,7 @@ class Topic(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     order_index = Column(Integer, nullable=False, default=0)  # Order in the session
+    page_number = Column(Integer, nullable=True)  # Page/slide number in original document (1-indexed)
     is_category = Column(Boolean, default=False)  # True if this is a category/section, False if it's a leaf topic with questions
     completed = Column(Boolean, default=False)
     score = Column(Integer, nullable=True)  # Score as percentage 0-100

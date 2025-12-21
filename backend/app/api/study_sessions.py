@@ -191,6 +191,85 @@ def analyze_content_complexity(text: str) -> dict:
     }
 
 
+def detect_file_type_and_extract(content: str) -> tuple[str, str, str]:
+    """
+    Detect file type and extract text from uploaded content.
+
+    Returns:
+        tuple: (extracted_text, file_type, original_base64_content)
+            - extracted_text: The text content extracted from the file
+            - file_type: One of: 'pdf', 'pptx', 'docx', 'txt'
+            - original_base64_content: The original base64 encoded file
+    """
+    import base64
+
+    content_bytes = None
+    file_type = 'txt'
+    original_base64 = content
+
+    # First, aggressively try base64 decode (most likely for file uploads)
+    try:
+        # Try base64 decode - this is the most common format for file uploads via JSON
+        decoded = base64.b64decode(content, validate=False)
+        # Check if it looks like a valid file (ZIP/docx or PDF)
+        if decoded.startswith(b'PK\x03\x04') or decoded.startswith(b'%PDF'):
+            content_bytes = decoded
+    except Exception:
+        pass
+
+    # Process based on file type if we have bytes
+    if content_bytes:
+        # Office documents (ZIP/docx/pptx)
+        if content_bytes.startswith(b'PK\x03\x04'):
+            # Try PowerPoint first
+            try:
+                prs = Presentation(io.BytesIO(content_bytes))
+                text_parts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            text_parts.append(shape.text)
+                text = '\n'.join(text_parts)
+                if text.strip():
+                    return (text, 'pptx', original_base64)
+                raise ValueError("No text content found in PowerPoint")
+            except Exception as pptx_error:
+                # If PowerPoint fails, try Word document
+                try:
+                    doc = Document(io.BytesIO(content_bytes))
+                    text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                    if text.strip():
+                        return (text, 'docx', original_base64)
+                    raise ValueError("No text content found in Word document")
+                except Exception as docx_error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to extract text from Office document. PowerPoint error: {str(pptx_error)}. Word error: {str(docx_error)}"
+                    )
+
+        # PDF file
+        elif content_bytes.startswith(b'%PDF'):
+            try:
+                pdf_reader = PdfReader(io.BytesIO(content_bytes))
+                text = '\n'.join([page.extract_text() for page in pdf_reader.pages])
+                if text.strip():
+                    return (text, 'pdf', original_base64)
+                raise ValueError("No text content found in PDF")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to extract text from PDF: {str(e)}"
+                )
+
+    # If we got here, treat as plain text
+    cleaned_text = content.replace('\ufffd', '').strip()
+    if cleaned_text and len(cleaned_text) > 10:
+        return (cleaned_text, 'txt', original_base64)
+
+    # Last resort - return original
+    return (content, 'txt', original_base64)
+
+
 def extract_text_from_content(content: str) -> str:
     """
     Extract readable text from uploaded content.
@@ -340,6 +419,8 @@ class CreateStudySessionResponse(BaseModel):
     id: str  # UUID as string
     title: str
     studyContent: str
+    fileContent: Optional[str] = None  # Original file (base64)
+    fileType: Optional[str] = None  # File type: pdf, pptx, docx, txt
     extractedTopics: List[TopicSchema]
     progress: int
     topics: int
@@ -424,8 +505,8 @@ async def create_study_session_with_ai(
         - 5 requests per minute per user
     """
     try:
-        # Extract text from content (handles Word docs, PDFs, plain text)
-        extracted_text = extract_text_from_content(data.content)
+        # Extract text and detect file type
+        extracted_text, file_type, file_content = detect_file_type_and_extract(data.content)
 
         if not extracted_text or len(extracted_text.strip()) < 50:
             raise HTTPException(
@@ -527,7 +608,9 @@ Return ONLY a valid JSON object in this EXACT format:
             user_id=current_user.id,
             title=session_title,
             topic=categories_data[0]["title"] if categories_data else "General Study",
-            study_content=extracted_text,  # Store the extracted text, not binary
+            study_content=extracted_text,  # Store the extracted text
+            file_content=file_content,  # Store original file (base64)
+            file_type=file_type,  # Store file type (pdf, pptx, docx, txt)
             topics_count=total_subtopics,
             has_full_study=True,
             has_speed_run=True,
@@ -682,6 +765,8 @@ Return in this EXACT format:
             id=str(study_session.id),  # Convert UUID to string
             title=study_session.title,
             studyContent=study_session.study_content,
+            fileContent=study_session.file_content,
+            fileType=study_session.file_type,
             extractedTopics=all_topics,
             progress=0,
             topics=len(all_topics),
@@ -802,6 +887,8 @@ async def get_study_session(
         id=str(session.id),  # Convert UUID to string
         title=session.title,
         studyContent=session.study_content or "",
+        fileContent=session.file_content,
+        fileType=session.file_type,
         extractedTopics=result_topics,
         progress=progress,
         topics=total_subtopics,
