@@ -724,7 +724,7 @@ export default function FullStudyPage() {
                   minZoom={0.5}
                   maxZoom={1.5}
                   defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
-                  attributionPosition="bottom-left"
+                  proOptions={{ hideAttribution: true }}
                   className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105 [&_.react-flow__node]:cursor-pointer"
                 >
                   <Controls 
