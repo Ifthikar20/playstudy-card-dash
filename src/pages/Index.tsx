@@ -41,6 +41,7 @@ export default function Index() {
   };
 
   const handleDragStart = (e: React.DragEvent, sessionId: string) => {
+    e.stopPropagation(); // Prevent event bubbling
     setDraggedSession(sessionId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', sessionId);
@@ -462,16 +463,22 @@ export default function Index() {
                   return (
                     <div
                       key={session.id}
-                      draggable
+                      draggable={true}
                       onDragStart={(e) => handleDragStart(e, session.id)}
                       onDragEnd={handleDragEnd}
                       className={`cursor-move hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border ${isNew ? 'new-session-card' : ''} ${
                         draggedSession === session.id ? 'opacity-50' : ''
                       }`}
                       onClick={(e) => {
+                        // Only handle click if we're not in the middle of a drag operation
                         if (!draggedSession) {
+                          e.stopPropagation();
                           handleSessionClick(session);
                         }
+                      }}
+                      onMouseDown={(e) => {
+                        // Allow drag to start
+                        e.stopPropagation();
                       }}
                       title="Drag to folder or click to open"
                     >
