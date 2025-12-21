@@ -615,9 +615,9 @@ export default function FullStudyPage() {
       <main className="flex-1 flex flex-col lg:flex-row min-h-0">
         <ResizablePanelGroup direction="horizontal" className="flex-1">
           {/* Left Side - Topic List & Quiz */}
-          <ResizablePanel defaultSize={50} minSize={30} maxSize={70}>
+          <ResizablePanel defaultSize={40} minSize={30} maxSize={70}>
             <div className="h-full overflow-y-auto overflow-x-hidden p-4 border-r border-border">
-              <div className="space-y-4 max-w-full">
+              <div className="space-y-4 w-full">
                 <div>
                   <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                     <BookOpen size={24} />
@@ -649,7 +649,7 @@ export default function FullStudyPage() {
 
                 {/* Quiz View */}
                 {selectedTopicId && selectedTopic && !showSummary && (
-                  <div className="space-y-4 max-w-full">
+                  <div className="space-y-4 w-full">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -658,7 +658,7 @@ export default function FullStudyPage() {
                       ← Back to Topics
                     </Button>
 
-                    <div className="max-w-full overflow-hidden">
+                    <div className="w-full">
                       <TopicQuizCard
                         key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
                         topicTitle={selectedTopic.title}
@@ -695,7 +695,7 @@ export default function FullStudyPage() {
           <ResizableHandle withHandle />
 
           {/* Right Side - Topic Tree View */}
-          <ResizablePanel defaultSize={50} minSize={30}>
+          <ResizablePanel defaultSize={60} minSize={30}>
             <div className="h-full flex flex-col">
               <div className="px-4 py-2 border-b border-border">
                 <h2 className="text-sm font-semibold text-foreground">Learning Progress Tree</h2>
