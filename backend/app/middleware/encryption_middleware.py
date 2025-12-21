@@ -38,10 +38,12 @@ EXEMPT_ENDPOINTS = [
 ]
 
 # Endpoints that REQUIRE encryption (sensitive data in transit)
+# TODO: Enable after implementing client-side encryption
+# Currently disabled to allow development without encryption
 ENCRYPTION_REQUIRED_ENDPOINTS = [
-    "/api/tts/generate-mentor-content",  # AI-generated mentor narratives
-    "/api/study-sessions/create",  # User study content
-    "/api/study-sessions/upload",  # Document uploads
+    # "/api/tts/generate-mentor-content",  # AI-generated mentor narratives
+    # "/api/study-sessions/create",  # User study content
+    # "/api/study-sessions/upload",  # Document uploads
 ]
 
 
@@ -86,7 +88,7 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
 
         elif requires_encryption and request.method in ["POST", "PUT", "PATCH"]:
             # Endpoint requires encryption but request is plain
-            logger.warning(f"[EncryptionMiddleware] Unencrypted request rejected for sensitive endpoint: {request.url.path}")
+            logger.warning(f"[EncryptionMiddleware] ⚠️ Unencrypted request to sensitive endpoint: {request.url.path}")
             return JSONResponse(
                 status_code=403,
                 content={
@@ -95,6 +97,15 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     "hint": "Use X-Encrypted-Request header with encrypted payload"
                 }
             )
+
+        # Log when encryption would be beneficial but not required (monitoring)
+        if not is_encrypted and request.method in ["POST", "PUT", "PATCH"]:
+            if any(request.url.path.startswith(ep.strip("# ")) for ep in [
+                "/api/tts/generate-mentor-content",
+                "/api/study-sessions/create",
+                "/api/study-sessions/upload"
+            ]):
+                logger.info(f"[EncryptionMiddleware] ℹ️ Plaintext request to sensitive endpoint: {request.url.path} (encryption recommended)")
 
         elif ENCRYPTION_REQUIRED and request.method in ["POST", "PUT", "PATCH"]:
             # Global encryption required but request is plain
