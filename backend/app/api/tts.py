@@ -383,15 +383,22 @@ Write this as you would naturally explain it to a student, not following a stric
         full_content = result['choices'][0]['message']['content']
 
         # Extract Mermaid diagram code if present
+        # Handle both "---END_MERMAID---" and "---END MERMAID---" variations
         mermaid_code = None
         narrative = full_content
 
-        if "---MERMAID---" in full_content and "---END_MERMAID---" in full_content:
-            parts = full_content.split("---MERMAID---")
-            narrative = parts[0].strip()
-            mermaid_section = parts[1].split("---END_MERMAID---")[0].strip()
-            mermaid_code = mermaid_section
-            logger.info(f"[Mentor Content] 📊 Extracted Mermaid diagram")
+        # Use regex to handle various end marker formats
+        mermaid_pattern = r'---MERMAID---(.*?)---END[_\s]?MERMAID---'
+        mermaid_match = re.search(mermaid_pattern, full_content, re.DOTALL | re.IGNORECASE)
+
+        if mermaid_match:
+            # Extract the Mermaid code
+            mermaid_code = mermaid_match.group(1).strip()
+            # Remove the entire Mermaid section from the narrative
+            narrative = re.sub(mermaid_pattern, '', full_content, flags=re.DOTALL | re.IGNORECASE).strip()
+            logger.info(f"[Mentor Content] 📊 Extracted Mermaid diagram ({len(mermaid_code)} chars)")
+        else:
+            logger.info(f"[Mentor Content] ℹ️ No Mermaid diagram found in content")
 
         # Extract key terms from narrative
         # Pattern: **TERM:word** or **TERM:multiple words**
