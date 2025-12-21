@@ -256,6 +256,36 @@ export default function FullStudyPage() {
     setShowSummary(false);
   }, [selectedTopicId]);
 
+  // Sync pending progress when component unmounts or user navigates away
+  const syncPendingProgress = useAppStore(state => state.syncPendingProgress);
+  useEffect(() => {
+    // Sync on component unmount
+    return () => {
+      console.log('[Progress] Component unmounting - syncing pending progress');
+      syncPendingProgress();
+    };
+  }, [syncPendingProgress]);
+
+  // Sync pending progress when user tries to leave the page
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const pendingUpdates = useAppStore.getState().pendingProgressUpdates;
+      const pendingXP = useAppStore.getState().pendingXPUpdates;
+
+      if (pendingUpdates.size > 0 || pendingXP > 0) {
+        console.log('[Progress] Page unload - syncing pending progress');
+        syncPendingProgress();
+
+        // Show warning if there are unsaved changes
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [syncPendingProgress]);
+
   // Flatten topics for easier access (includes both categories and subtopics)
   const flattenedTopics = useMemo(() => {
     const topics = currentSession?.extractedTopics || [];

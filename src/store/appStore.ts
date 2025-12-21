@@ -108,6 +108,11 @@ interface AppState {
     level: number;
   } | null;
 
+  // Progress batching for performance
+  pendingProgressUpdates: Map<string, { sessionId: string; topicId: number; score: number; currentQuestionIndex: number; completed: boolean }>;
+  pendingXPUpdates: number;
+  syncPendingProgress: () => Promise<void>;
+
   // Stats
   stats: {
     totalSessions: number;
@@ -461,21 +466,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     });
 
-    // Sync to backend if topic has database ID
+    // Queue progress update for batching (don't sync immediately for performance)
     if (topic.db_id) {
-      updateTopicProgress(
-        sessionId,
-        topic.db_id,
-        newScore,
-        topic.currentQuestionIndex,
-        false // Not completed yet
-      ).catch(err => console.warn('Failed to sync progress:', err));
+      const key = `${sessionId}-${topic.db_id}`;
+      set((state) => {
+        const newMap = new Map(state.pendingProgressUpdates);
+        newMap.set(key, {
+          sessionId,
+          topicId: topic.db_id!,
+          score: newScore,
+          currentQuestionIndex: topic.currentQuestionIndex,
+          completed: false,
+        });
+        return { pendingProgressUpdates: newMap };
+      });
+      console.log('[Progress] Queued update for batching:', key);
     }
 
     if (correct) {
-      get().addXp(10);
-      // Sync XP to backend
-      updateUserXP(10).catch(err => console.warn('Failed to sync XP:', err));
+      get().addXp(10); // This now also updates pendingXPUpdates
     }
 
     return { correct, explanation: question.explanation };
@@ -515,15 +524,38 @@ export const useAppStore = create<AppState>((set, get) => ({
             score: isComplete ? Math.round(t.score || 0) : t.score,
           };
 
-          // Sync to backend if topic has database ID
+          // Queue or sync progress update
           if (t.db_id) {
-            updateTopicProgress(
-              sessionId,
-              t.db_id,
-              Math.round(updatedTopic.score || 0),
-              updatedTopic.currentQuestionIndex,
-              updatedTopic.completed
-            ).catch(err => console.warn('Failed to sync progress on move:', err));
+            const key = `${sessionId}-${t.db_id}`;
+
+            if (isComplete) {
+              // Topic completed - sync immediately to ensure data is saved
+              console.log('[Progress] Topic completed - syncing immediately:', key);
+              get().syncPendingProgress().then(() => {
+                // After syncing pending updates, sync this final completion
+                updateTopicProgress(
+                  sessionId,
+                  t.db_id!,
+                  Math.round(updatedTopic.score || 0),
+                  updatedTopic.currentQuestionIndex,
+                  updatedTopic.completed
+                ).catch(err => console.warn('Failed to sync completion:', err));
+              });
+            } else {
+              // Not completed yet - queue for batching
+              set((state) => {
+                const newMap = new Map(state.pendingProgressUpdates);
+                newMap.set(key, {
+                  sessionId,
+                  topicId: t.db_id!,
+                  score: Math.round(updatedTopic.score || 0),
+                  currentQuestionIndex: updatedTopic.currentQuestionIndex,
+                  completed: updatedTopic.completed,
+                });
+                return { pendingProgressUpdates: newMap };
+              });
+              console.log('[Progress] Queued update for batching:', key);
+            }
           }
 
           return updatedTopic;
@@ -726,8 +758,42 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // XP and User Profile - Start with defaults, will be populated by API
   xp: 0,
-  addXp: (amount) => set((state) => ({ xp: state.xp + amount })),
+  addXp: (amount) => set((state) => ({ xp: state.xp + amount, pendingXPUpdates: state.pendingXPUpdates + amount })),
   userProfile: null,
+
+  // Progress batching for performance
+  pendingProgressUpdates: new Map(),
+  pendingXPUpdates: 0,
+  syncPendingProgress: async () => {
+    const state = get();
+    const updates = Array.from(state.pendingProgressUpdates.values());
+    const xpToSync = state.pendingXPUpdates;
+
+    console.log(`[Progress Sync] Syncing ${updates.length} progress updates and ${xpToSync} XP`);
+
+    // Clear pending updates first to avoid duplicate syncs
+    set({ pendingProgressUpdates: new Map(), pendingXPUpdates: 0 });
+
+    // Sync all progress updates in parallel
+    const progressPromises = updates.map(update =>
+      updateTopicProgress(
+        update.sessionId,
+        update.topicId,
+        update.score,
+        update.currentQuestionIndex,
+        update.completed
+      ).catch(err => console.warn('Failed to sync progress:', err))
+    );
+
+    // Sync XP if there are any updates
+    const xpPromise = xpToSync > 0
+      ? updateUserXP(xpToSync).catch(err => console.warn('Failed to sync XP:', err))
+      : Promise.resolve();
+
+    // Wait for all updates to complete
+    await Promise.all([...progressPromises, xpPromise]);
+    console.log('✅ All pending progress synced');
+  },
 
   // Stats - Start with defaults, will be populated by API
   stats: {
