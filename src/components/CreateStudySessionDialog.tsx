@@ -21,7 +21,9 @@ import {
   Gamepad2,
   Clock,
   Target,
-  Mic
+  Mic,
+  FileImage,
+  File
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
@@ -221,10 +223,15 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-xl">
-            {step === "upload" ? "Create Study Session" : "Choose Your Study Mode"}
+        <DialogHeader className="space-y-3 pb-4">
+          <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent">
+            {step === "upload" ? "✨ Create Study Session" : "🎯 Choose Your Study Mode"}
           </DialogTitle>
+          {step === "upload" && (
+            <p className="text-sm text-muted-foreground">
+              Upload your study material or paste text to generate personalized learning content
+            </p>
+          )}
         </DialogHeader>
 
         {step === "upload" && (
@@ -242,13 +249,13 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
             </div>
 
             {/* Upload Type Toggle */}
-            <div className="flex rounded-lg border border-border p-1 bg-muted/50">
+            <div className="flex rounded-xl border-2 border-border p-1.5 bg-gradient-to-r from-muted/50 to-muted/30 shadow-sm">
               <button
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-all",
-                  uploadType === "text" 
-                    ? "bg-background text-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
+                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all",
+                  uploadType === "text"
+                    ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md shadow-purple-500/30 scale-105"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
                 onClick={() => setUploadType("text")}
               >
@@ -257,10 +264,10 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               </button>
               <button
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-all",
-                  uploadType === "file" 
-                    ? "bg-background text-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
+                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all",
+                  uploadType === "file"
+                    ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/30 scale-105"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                 )}
                 onClick={() => setUploadType("file")}
               >
@@ -300,7 +307,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                 )}
               </div>
             ) : (
-              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
+              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-all hover:bg-primary/5">
                 <Input
                   type="file"
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
@@ -309,14 +316,72 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                   id="file-upload"
                 />
                 <label htmlFor="file-upload" className="cursor-pointer">
-                  <Upload className="mx-auto mb-3 text-muted-foreground" size={40} />
                   {selectedFile ? (
-                    <p className="text-foreground font-medium">{selectedFile.name}</p>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-center gap-2 text-primary">
+                        <FileText size={24} />
+                        <p className="text-foreground font-medium">{selectedFile.name}</p>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <p className="text-foreground font-medium">Drop your file here or click to browse</p>
-                      <p className="text-sm text-muted-foreground mt-1">PDF, DOC, DOCX, PPT, PPTX, TXT, MD supported</p>
-                    </>
+                    <div className="space-y-4">
+                      {/* Decorative File Icons */}
+                      <div className="flex items-center justify-center gap-3 mb-4">
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center transform -rotate-6 hover:rotate-0 transition-transform shadow-lg">
+                            <FileText className="text-white" size={28} />
+                          </div>
+                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
+                            W
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
+                            <FileText className="text-white" size={28} />
+                          </div>
+                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                            T
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center transform rotate-6 hover:rotate-0 transition-transform shadow-lg">
+                            <File className="text-white" size={28} />
+                          </div>
+                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-[10px] font-bold text-white">
+                            P
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center transform -rotate-3 hover:rotate-0 transition-transform shadow-lg">
+                            <FileImage className="text-white" size={28} />
+                          </div>
+                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white">
+                            P
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Upload Icon */}
+                      <div className="flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Upload className="text-primary" size={24} />
+                        </div>
+                      </div>
+
+                      {/* Text */}
+                      <div>
+                        <p className="text-lg font-semibold text-foreground mb-1">
+                          Drag & drop files to upload
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Supported types: PDF, Word, PPT, TXT, JPG, JPEG, PNG, HEIC, WebP, MP3, WAV, M4A
+                        </p>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-primary font-medium text-sm transition-colors">
+                          <Upload size={16} />
+                          Select file
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </label>
               </div>
@@ -324,23 +389,29 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
             {/* Content Analysis Info */}
             {contentAnalysis && (
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+              <div className="bg-gradient-to-br from-primary/10 via-blue-500/5 to-purple-500/10 border-2 border-primary/30 rounded-xl p-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center">
+                    <span className="text-white text-sm font-bold">✓</span>
+                  </div>
+                  <h3 className="font-semibold text-foreground">Content Analyzed</h3>
+                </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Word Count:</span>
-                    <span className="ml-2 font-medium">{contentAnalysis.word_count}</span>
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <span className="text-muted-foreground block text-xs">Word Count</span>
+                    <span className="font-bold text-foreground">{contentAnalysis.word_count}</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Reading Time:</span>
-                    <span className="ml-2 font-medium">{contentAnalysis.estimated_reading_time} min</span>
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <span className="text-muted-foreground block text-xs">Reading Time</span>
+                    <span className="font-bold text-foreground">{contentAnalysis.estimated_reading_time} min</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Complexity:</span>
-                    <span className="ml-2 font-medium">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <span className="text-muted-foreground block text-xs">Complexity</span>
+                    <span className="font-bold text-foreground">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground">Recommended:</span>
-                    <span className="ml-2 font-medium">{contentAnalysis.recommended_topics} topics</span>
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <span className="text-muted-foreground block text-xs">Recommended</span>
+                    <span className="font-bold text-primary">{contentAnalysis.recommended_topics} topics</span>
                   </div>
                 </div>
               </div>
@@ -348,7 +419,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
             {/* Process Button */}
             <Button
-              className="w-full gap-2"
+              className="w-full gap-2 bg-gradient-to-r from-primary via-blue-500 to-purple-500 hover:from-primary/90 hover:via-blue-500/90 hover:to-purple-500/90 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
               size="lg"
               disabled={!canProceed || isProcessing || isAnalyzing}
               onClick={handleProcessContent}
@@ -356,17 +427,17 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-1 py-1">
                   <div className="flex items-center gap-1">
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }}></div>
                   </div>
-                  <span className="text-xs text-muted-foreground animate-pulse">
+                  <span className="text-xs text-white/90 animate-pulse">
                     {loadingMessages[loadingMessageIndex]}
                   </span>
                 </div>
               ) : (
                 <>
-                  Process Content
+                  ✨ Process Content
                   <ArrowRight size={18} />
                 </>
               )}
