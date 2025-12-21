@@ -41,7 +41,7 @@ export default function Index() {
   };
 
   const handleDragStart = (e: React.DragEvent, sessionId: string) => {
-    e.stopPropagation(); // Prevent event bubbling
+    console.log('[Drag] Starting drag for session:', sessionId);
     setDraggedSession(sessionId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', sessionId);
@@ -63,21 +63,29 @@ export default function Index() {
 
   const handleDragOver = (e: React.DragEvent, folderId: number) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
+    console.log('[Drag] Drag over folder:', folderId);
     setDropTarget(folderId);
   };
 
   const handleDragLeave = () => {
+    console.log('[Drag] Drag leave');
     setDropTarget(null);
   };
 
   const handleDrop = async (e: React.DragEvent, folderId: number) => {
     e.preventDefault();
     e.stopPropagation();
+    console.log('[Drag] Drop on folder:', folderId);
 
     const sessionId = e.dataTransfer.getData('text/plain');
+    console.log('[Drag] Session ID from dataTransfer:', sessionId);
 
-    if (!sessionId) return;
+    if (!sessionId) {
+      console.error('[Drag] No session ID found in dataTransfer');
+      return;
+    }
 
     try {
       await moveSessionToFolder(sessionId, folderId);
@@ -298,7 +306,7 @@ export default function Index() {
                   </p>
                 </div>
                 {folders.length > 5 && (
-                  <Link to="/folders">
+                  <Link to="/dashboard/folders">
                     <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
                       View All ({folders.length})
                       <ArrowRight size={16} />
@@ -466,17 +474,31 @@ export default function Index() {
                       draggable={true}
                       onDragStart={(e) => handleDragStart(e, session.id)}
                       onDragEnd={handleDragEnd}
-                      className={`cursor-move hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border ${isNew ? 'new-session-card' : ''} ${
+                      className={`cursor-move hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border select-none ${isNew ? 'new-session-card' : ''} ${
                         draggedSession === session.id ? 'opacity-50' : ''
                       }`}
-                      title="Drag to folder"
+                      style={{
+                        WebkitUserDrag: 'element',
+                        userSelect: 'none',
+                      }}
+                      title="Drag to folder or click title to open"
                     >
                       <div className="flex items-center gap-2">
                         <div
-                          className="font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
+                          className="font-semibold text-foreground cursor-pointer hover:text-primary transition-colors select-text"
+                          style={{ userSelect: 'text' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSessionClick(session);
+                          }}
+                          onMouseDown={(e) => {
+                            // Prevent drag when clicking on title
+                            e.stopPropagation();
+                          }}
+                          onDragStart={(e) => {
+                            // Prevent drag from starting on title text
+                            e.preventDefault();
+                            e.stopPropagation();
                           }}
                         >
                           {session.title}
