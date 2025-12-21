@@ -8,9 +8,19 @@ import { CreateFolderDialog } from "@/components/CreateFolderDialog";
 import UserMenu from "@/components/UserMenu";
 import { useAppStore } from "@/store/appStore";
 import { moveSessionToFolder } from "@/services/folder-api";
-import { fetchAppData } from "@/services/api";
+import { fetchAppData, deleteStudySession } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight, Upload } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight, Upload, Trash2, AlertTriangle } from "lucide-react";
 
 export default function Index() {
   const [showCreateSession, setShowCreateSession] = useState(false);
@@ -18,6 +28,9 @@ export default function Index() {
   const [expandedFolder, setExpandedFolder] = useState<number | null>(null);
   const [draggedSession, setDraggedSession] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const [isDeleteZoneActive, setIsDeleteZoneActive] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const navigate = useNavigate();
   const { studySessions, folders, setCurrentSession, userProfile, initializeFromAPI } = useAppStore();
   const { toast } = useToast();
@@ -91,6 +104,60 @@ export default function Index() {
     }
   };
 
+  const handleDeleteZoneDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDeleteZoneActive(true);
+    setDropTarget(null); // Clear folder drop target
+  };
+
+  const handleDeleteZoneDragLeave = () => {
+    setIsDeleteZoneActive(false);
+  };
+
+  const handleDeleteZoneDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const sessionId = e.dataTransfer.getData('text/plain');
+    if (!sessionId) return;
+
+    // Set session to delete and show confirmation
+    setSessionToDelete(sessionId);
+    setShowDeleteConfirm(true);
+    setIsDeleteZoneActive(false);
+    setDraggedSession(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!sessionToDelete) return;
+
+    try {
+      await deleteStudySession(sessionToDelete);
+
+      const session = studySessions.find(s => s.id === sessionToDelete);
+
+      // Refresh data seamlessly
+      const updatedData = await fetchAppData();
+      initializeFromAPI(updatedData);
+
+      toast({
+        title: "Session deleted",
+        description: `"${session?.title}" has been permanently deleted`,
+      });
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      toast({
+        title: "Failed to delete session",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setShowDeleteConfirm(false);
+      setSessionToDelete(null);
+    }
+  };
+
 
   return (
     <>
@@ -145,6 +212,35 @@ export default function Index() {
         @keyframes bounce {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-5px); }
+        }
+
+        @keyframes delete-pulse {
+          0%, 100% {
+            border-width: 3px;
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+          }
+          50% {
+            border-width: 3px;
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
+          }
+        }
+
+        .delete-zone-active {
+          animation: delete-pulse 1s ease-in-out infinite !important;
+          border-color: #ef4444 !important;
+          background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.15) 100%) !important;
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+
+        .delete-zone-hover {
+          animation: shake 0.5s ease-in-out;
         }
       `}</style>
       <div className="min-h-screen bg-background flex w-full">
@@ -300,6 +396,49 @@ export default function Index() {
             </div>
           )}
 
+          {/* Delete Zone - Shows when dragging */}
+          {draggedSession && (
+            <div className="mb-8">
+              <div
+                className={`group cursor-pointer transition-all duration-200 p-6 rounded-xl border-4 border-dashed flex flex-col items-center justify-center gap-3 min-h-[120px] ${
+                  isDeleteZoneActive
+                    ? 'delete-zone-active'
+                    : 'border-red-400/40 bg-red-50/30 dark:bg-red-950/10 hover:border-red-500/60 hover:bg-red-50/50 dark:hover:bg-red-950/20'
+                }`}
+                onDragOver={handleDeleteZoneDragOver}
+                onDragLeave={handleDeleteZoneDragLeave}
+                onDrop={handleDeleteZoneDrop}
+              >
+                {/* Delete icon with animation */}
+                <div className={`transition-all ${isDeleteZoneActive ? 'scale-125 delete-zone-hover' : 'scale-100'}`}>
+                  <Trash2
+                    size={isDeleteZoneActive ? 48 : 40}
+                    className="text-red-500"
+                    strokeWidth={2.5}
+                  />
+                </div>
+
+                {/* Text */}
+                <div className="text-center">
+                  <div className={`font-bold ${isDeleteZoneActive ? 'text-red-600 text-lg' : 'text-red-500'}`}>
+                    {isDeleteZoneActive ? '🗑️ Drop to Delete' : 'Drag here to delete'}
+                  </div>
+                  <div className="text-xs text-red-400 mt-1">
+                    {isDeleteZoneActive ? 'Release to confirm deletion' : 'This action will require confirmation'}
+                  </div>
+                </div>
+
+                {/* Warning badge */}
+                {isDeleteZoneActive && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-800 animate-pulse">
+                    <AlertTriangle size={16} className="text-red-600" />
+                    <span className="text-xs font-semibold text-red-600">Permanent Action</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* My Study Sessions */}
           {studySessions.length > 0 && (
             <div className="mb-8">
@@ -376,6 +515,37 @@ export default function Index() {
         open={showCreateFolder}
         onOpenChange={setShowCreateFolder}
       />
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="text-red-500" size={24} />
+              Delete Study Session?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <span className="font-semibold">"{studySessions.find(s => s.id === sessionToDelete)?.title}"</span>?
+              <br /><br />
+              This action cannot be undone. All questions, progress, and data associated with this session will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteConfirm(false);
+              setSessionToDelete(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              <Trash2 size={16} className="mr-2" />
+              Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </>
   );
