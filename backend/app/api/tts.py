@@ -265,17 +265,19 @@ async def generate_mentor_content(
     try:
         logger.info(f"[Mentor Content] Request for topic: {content_request.topic_title}")
 
-        # Check if narrative already exists for this topic
+        # Check if narrative already exists for this topic (decrypt if needed)
         if content_request.topic_id:
             logger.info(f"[Mentor Content] Checking database for topic_id={content_request.topic_id}")
             topic = db.query(Topic).filter(Topic.id == content_request.topic_id).first()
             if topic:
-                if topic.mentor_narrative:
-                    logger.info(f"[Mentor Content] ✅ CACHE HIT - Returning cached narrative for topic {content_request.topic_id}")
-                    word_count = len(topic.mentor_narrative.split())
+                # Use decryption getter to retrieve narrative
+                cached_narrative = topic.get_mentor_narrative()
+                if cached_narrative:
+                    logger.info(f"[Mentor Content] ✅ CACHE HIT - Returning cached (decrypted) narrative for topic {content_request.topic_id}")
+                    word_count = len(cached_narrative.split())
                     estimated_seconds = int((word_count / 150) * 60)
                     return MentorContentResponse(
-                        narrative=topic.mentor_narrative,
+                        narrative=cached_narrative,
                         estimated_duration_seconds=estimated_seconds
                     )
                 else:
@@ -408,13 +410,14 @@ Write this as you would naturally explain it to a student, not following a stric
 
         logger.info(f"[Mentor Content] ✅ Generated {word_count} words (~{estimated_seconds}s)")
 
-        # Save narrative to topic if topic_id provided
+        # Save narrative to topic if topic_id provided (with encryption)
         if content_request.topic_id:
             topic = db.query(Topic).filter(Topic.id == content_request.topic_id).first()
             if topic:
-                topic.mentor_narrative = narrative
+                # Use encrypted setter (encrypts data at rest)
+                topic.set_mentor_narrative(narrative)
                 db.commit()
-                logger.info(f"[Mentor Content] 💾 Saved narrative to topic {content_request.topic_id}")
+                logger.info(f"[Mentor Content] 💾 Saved encrypted narrative to topic {content_request.topic_id}")
 
         return MentorContentResponse(
             narrative=narrative,

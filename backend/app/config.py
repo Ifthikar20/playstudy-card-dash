@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Encryption at Rest
+    FIELD_ENCRYPTION_KEY: Optional[str] = None
+
+    # Encryption in Transit
+    RSA_PRIVATE_KEY_PEM: Optional[str] = None
+    ENCRYPTION_REQUIRED: bool = False
+
     # CORS
     ALLOWED_ORIGINS: str
     ALLOWED_CREDENTIALS: bool = True

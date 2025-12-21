@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -54,6 +54,36 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [sessionTitle, setSessionTitle] = useState("");
   const [createdSession, setCreatedSession] = useState<any>(null);
   const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+  // Sarcastic/playful loading messages
+  const loadingMessages = [
+    "Reading your document...",
+    "Breaking it down...",
+    "Hmm, interesting...",
+    "Finding the best way to teach this...",
+    "I see how we can break this down...",
+    "Making sense of all this...",
+    "Organizing the chaos...",
+    "Brewing some knowledge potions...",
+    "Teaching mode: activated...",
+    "Almost got it...",
+    "Just a bit more patience...",
+    "Connecting the dots...",
+    "This is pretty neat, actually..."
+  ];
+
+  // Rotate loading messages while processing
+  useEffect(() => {
+    if (isProcessing) {
+      setLoadingMessageIndex(0); // Reset to first message
+      const interval = setInterval(() => {
+        setLoadingMessageIndex((prev) => (prev + 1) % 13); // 13 messages total
+      }, 2000); // Change message every 2 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [isProcessing]);
 
   const handleAnalyzeContent = async (content: string) => {
     if (!content || content.length < 50) return;
@@ -324,12 +354,16 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               onClick={handleProcessContent}
             >
               {isProcessing ? (
-                <>
-                  <div className="inline-block h-4 w-4 mr-2 rounded-full border-2 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin"></div>
-                  <span className="bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent font-semibold">
-                    Processing...
+                <div className="flex flex-col items-center gap-1 py-1">
+                  <div className="flex items-center gap-1">
+                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                  <span className="text-xs text-muted-foreground animate-pulse">
+                    {loadingMessages[loadingMessageIndex]}
                   </span>
-                </>
+                </div>
               ) : (
                 <>
                   Process Content

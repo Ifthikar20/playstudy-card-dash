@@ -35,11 +35,13 @@ export function parseKeyTerms(text: string): {
       parts.push(text.substring(lastIndex, match.index));
     }
 
-    // Add highlighted term
+    // Add highlighted term with ID for navigation
+    const termId = `keyterm-${match[1].toLowerCase().replace(/\s+/g, '-')}`;
     parts.push(
       <span
         key={`term-${match.index}`}
-        className="font-semibold text-primary bg-primary/10 px-1 rounded"
+        id={termId}
+        className="font-semibold text-primary bg-primary/10 px-1 rounded scroll-mt-24"
         title="Key term"
       >
         {match[1]}

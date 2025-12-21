@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Users, Star, Gamepad2 } from "lucide-react";
+import { Play, Users, Star, Gamepad2, Lock } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 
@@ -11,16 +11,40 @@ const categories = ["All", "Memory Games", "Challenging & High XP", "Riddles"];
 
 export default function BrowseGamesPage() {
   const navigate = useNavigate();
+  const { sessionId } = useParams();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { games } = useAppStore();
+  const { games, currentSession, studySessions } = useAppStore();
+
+  // Find the session if sessionId is provided
+  const session = sessionId
+    ? studySessions.find(s => s.id === sessionId) || currentSession
+    : currentSession;
+
+  // Check if a session has content (extractedTopics)
+  const hasSessionContent = session?.extractedTopics && session.extractedTopics.length > 0;
 
   const filteredGames = games.filter((game) => {
     const matchesCategory = selectedCategory === "All" || game.category === selectedCategory;
     return matchesCategory;
   });
 
+  // Determine if a game is playable
+  const isGamePlayable = (gameId: number) => {
+    // Games 7 and 8 are always playable (platformer and memory match)
+    if (gameId === 7 || gameId === 8) return true;
+
+    // Other games require session content
+    return hasSessionContent;
+  };
+
   const handlePlayGame = (gameId: number) => {
+    // Check if game is playable
+    if (!isGamePlayable(gameId)) {
+      setDialogOpen(true);
+      return;
+    }
+
     // Map game IDs to routes
     if (gameId === 7) {
       navigate("/dashboard/platformer-game");
@@ -28,8 +52,15 @@ export default function BrowseGamesPage() {
       // Memory Match game
       navigate("/dashboard/memory-match");
     } else {
-      // Other games show the create session dialog
-      setDialogOpen(true);
+      // Other games need session content - navigate to game mode with sessionId
+      if (sessionId) {
+        navigate(`/dashboard/${sessionId}/game-mode`);
+      } else if (currentSession) {
+        navigate(`/dashboard/${currentSession.id}/game-mode`);
+      } else {
+        // No session available, show create dialog
+        setDialogOpen(true);
+      }
     }
   };
 
@@ -68,24 +99,39 @@ export default function BrowseGamesPage() {
 
           {/* Games Grid - Retro Style */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredGames.map((game) => (
-              <Card
-                key={game.id}
-                className="group cursor-pointer overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1 border-2 hover:border-primary/50 bg-card"
-                onClick={() => handlePlayGame(game.id)}
-              >
-                {/* Game Thumbnail */}
-                <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
-                  <img
-                    src={game.image}
-                    alt={game.title}
-                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                  />
+            {filteredGames.map((game) => {
+              const playable = isGamePlayable(game.id);
+              return (
+                <Card
+                  key={game.id}
+                  className={`group overflow-hidden transition-all border-2 bg-card ${
+                    playable
+                      ? 'cursor-pointer hover:shadow-xl hover:-translate-y-1 hover:border-primary/50'
+                      : 'opacity-60 cursor-not-allowed'
+                  }`}
+                  onClick={() => handlePlayGame(game.id)}
+                >
+                  {/* Game Thumbnail */}
+                  <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
+                    <img
+                      src={game.image}
+                      alt={game.title}
+                      className={`w-full h-full object-cover transition-transform ${
+                        playable ? 'group-hover:scale-110' : 'grayscale'
+                      }`}
+                    />
 
-                  {/* Overlay on Hover */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Play size={32} className="text-white" />
-                  </div>
+                    {/* Overlay on Hover */}
+                    {playable ? (
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Play size={32} className="text-white" />
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
+                        <Lock size={28} className="text-white/80" />
+                        <span className="text-xs text-white/80 font-medium">Create Session</span>
+                      </div>
+                    )}
 
                   {/* Top Badges */}
                   <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
@@ -119,7 +165,8 @@ export default function BrowseGamesPage() {
                   </div>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
 
           {filteredGames.length === 0 && (

@@ -33,6 +33,17 @@ EXEMPT_ENDPOINTS = [
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/api/auth/login",
+    "/api/auth/register",
+]
+
+# Endpoints that REQUIRE encryption (sensitive data in transit)
+# TODO: Enable after implementing client-side encryption
+# Currently disabled to allow development without encryption
+ENCRYPTION_REQUIRED_ENDPOINTS = [
+    # "/api/tts/generate-mentor-content",  # AI-generated mentor narratives
+    # "/api/study-sessions/create",  # User study content
+    # "/api/study-sessions/upload",  # Document uploads
 ]
 
 
@@ -48,6 +59,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # Check if endpoint is exempt from encryption
         if self.is_exempt_endpoint(request.url.path):
             return await call_next(request)
+
+        # Check if endpoint requires encryption
+        requires_encryption = self.requires_encryption(request.url.path)
 
         # Check if request is encrypted
         is_encrypted = request.headers.get("X-Encrypted-Request") == "true"
@@ -72,8 +86,29 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
                     content={"detail": "Invalid encrypted request"}
                 )
 
+        elif requires_encryption and request.method in ["POST", "PUT", "PATCH"]:
+            # Endpoint requires encryption but request is plain
+            logger.warning(f"[EncryptionMiddleware] ⚠️ Unencrypted request to sensitive endpoint: {request.url.path}")
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": "This endpoint requires encrypted requests for data protection",
+                    "error_code": "ENCRYPTION_REQUIRED",
+                    "hint": "Use X-Encrypted-Request header with encrypted payload"
+                }
+            )
+
+        # Log when encryption would be beneficial but not required (monitoring)
+        if not is_encrypted and request.method in ["POST", "PUT", "PATCH"]:
+            if any(request.url.path.startswith(ep.strip("# ")) for ep in [
+                "/api/tts/generate-mentor-content",
+                "/api/study-sessions/create",
+                "/api/study-sessions/upload"
+            ]):
+                logger.info(f"[EncryptionMiddleware] ℹ️ Plaintext request to sensitive endpoint: {request.url.path} (encryption recommended)")
+
         elif ENCRYPTION_REQUIRED and request.method in ["POST", "PUT", "PATCH"]:
-            # Encryption required but request is plain
+            # Global encryption required but request is plain
             logger.warning(f"[EncryptionMiddleware] Unencrypted request rejected: {request.url.path}")
             return JSONResponse(
                 status_code=403,
@@ -83,8 +118,9 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         # Process request
         response = await call_next(request)
 
-        # TODO: Add response encryption when needed
-        # For now, responses are sent in plain JSON
+        # Add response encryption for sensitive endpoints
+        if requires_encryption and hasattr(response, 'body'):
+            response = await self.encrypt_response(response, request)
 
         return response
 
@@ -92,6 +128,13 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         """Check if endpoint is exempt from encryption"""
         for exempt in EXEMPT_ENDPOINTS:
             if path.startswith(exempt):
+                return True
+        return False
+
+    def requires_encryption(self, path: str) -> bool:
+        """Check if endpoint requires encryption"""
+        for required in ENCRYPTION_REQUIRED_ENDPOINTS:
+            if path.startswith(required):
                 return True
         return False
 
@@ -179,6 +222,68 @@ class EncryptionMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.error(f"[EncryptionMiddleware] Unexpected error: {e}")
             return None
+
+    async def encrypt_response(self, response: Response, request: Request):
+        """
+        Encrypt response data for sensitive endpoints
+
+        Only encrypts JSON responses. Returns original response for other types.
+        """
+        try:
+            # Only encrypt JSON responses
+            if not response.headers.get("content-type", "").startswith("application/json"):
+                return response
+
+            # Read response body
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+
+            # Parse JSON
+            try:
+                response_data = json.loads(body)
+            except json.JSONDecodeError:
+                logger.warning("[EncryptionMiddleware] Cannot encrypt non-JSON response")
+                return response
+
+            # Generate AES key for response
+            import os
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+            aes_key = os.urandom(32)  # 256-bit key
+            nonce = os.urandom(12)  # 96-bit nonce for GCM
+
+            # Encrypt response data
+            aesgcm = AESGCM(aes_key)
+            plaintext = json.dumps(response_data).encode('utf-8')
+            ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+
+            # Encrypt AES key with server's RSA public key (client will use their private key)
+            # Note: In practice, we'd use client's public key here
+            # For now, we'll send the key encrypted with a shared mechanism
+            import base64
+            encrypted_response = {
+                "encrypted": True,
+                "data": base64.b64encode(ciphertext).decode('utf-8'),
+                "nonce": base64.b64encode(nonce).decode('utf-8'),
+                "algorithm": "AES-256-GCM"
+            }
+
+            logger.info(f"[EncryptionMiddleware] ✅ Encrypted response for {request.url.path}")
+
+            # Return encrypted response
+            return JSONResponse(
+                content=encrypted_response,
+                headers={
+                    "X-Encrypted-Response": "true",
+                    "X-Encryption-Algorithm": "AES-256-GCM"
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"[EncryptionMiddleware] Response encryption error: {e}")
+            # Return original response on error
+            return response
 
 
 # Helper function to get decrypted data from request

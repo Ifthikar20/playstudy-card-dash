@@ -69,6 +69,7 @@ const AppContent = () => {
           <Route path=":sessionId/speedrun" element={<SpeedRunPage />} />
           <Route path=":sessionId/mentor" element={<MentorModePage />} />
           <Route path=":sessionId/browse-games" element={<BrowseGamesPage />} />
+          <Route path=":sessionId/game-mode" element={<GameModePage />} />
           <Route path=":sessionId/platformer-game" element={<PlatformerGamePage />} />
           <Route path=":sessionId/memory-match" element={<MemoryMatchGamePage />} />
 
