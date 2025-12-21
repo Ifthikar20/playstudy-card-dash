@@ -150,7 +150,7 @@ async def get_app_data(
     # Convert to response schemas using custom methods
     games_response = [GameResponse.from_db_model(game) for game in games]
     sessions_response = [
-        StudySessionResponse.from_db_model(session) for session in study_sessions
+        StudySessionResponse.from_db_model(session, db=db) for session in study_sessions
     ]
 
     # Build folder responses with session counts

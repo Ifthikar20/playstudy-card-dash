@@ -24,6 +24,81 @@ from app.core.rate_limit import limiter
 router = APIRouter()
 
 
+def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchema]:
+    """
+    Build hierarchical topic structure with questions for a study session.
+
+    Args:
+        session: StudySession database model
+        db: Database session
+
+    Returns:
+        List of TopicSchema objects with nested subtopics and questions
+    """
+    from app.models.question import Question
+
+    # Fetch all topics for this session
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == session.id
+    ).order_by(Topic.order_index).all()
+
+    # Build hierarchical structure
+    categories = [t for t in all_topics if t.is_category and t.parent_topic_id is None]
+
+    result_topics = []
+
+    for cat_idx, category in enumerate(categories):
+        # Get subtopics for this category
+        subtopics = [t for t in all_topics if t.parent_topic_id == category.id]
+
+        category_schema = TopicSchema(
+            id=f"category-{cat_idx+1}",
+            db_id=category.id,
+            title=category.title,
+            description=category.description or "",
+            isCategory=True,
+            parentTopicId=None,
+            questions=[],
+            subtopics=[]
+        )
+
+        for sub_idx, subtopic in enumerate(subtopics):
+            # Fetch questions for this subtopic
+            questions = db.query(Question).filter(
+                Question.topic_id == subtopic.id
+            ).order_by(Question.order_index).all()
+
+            questions_list = [
+                QuestionSchema(
+                    id=f"topic-{sub_idx+1}-q{q.order_index+1}",
+                    question=q.question,
+                    options=q.options,
+                    correctAnswer=q.correct_answer,
+                    explanation=q.explanation
+                )
+                for q in questions
+            ]
+
+            subtopic_schema = TopicSchema(
+                id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                db_id=subtopic.id,
+                title=subtopic.title,
+                description=subtopic.description or "",
+                questions=questions_list,
+                completed=subtopic.completed or False,
+                score=subtopic.score,
+                currentQuestionIndex=subtopic.current_question_index or 0,
+                isCategory=False,
+                parentTopicId=f"category-{cat_idx+1}",
+                subtopics=[]
+            )
+            category_schema.subtopics.append(subtopic_schema)
+
+        result_topics.append(category_schema)
+
+    return result_topics
+
+
 def analyze_content_complexity(text: str) -> dict:
     """
     Analyze content complexity and recommend topic/question counts.

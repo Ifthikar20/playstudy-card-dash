@@ -46,12 +46,13 @@ class StudySessionResponse(BaseModel):
     hasQuiz: bool
     folderId: Optional[int] = None  # Folder organization
     createdAt: Optional[int] = None  # Unix timestamp in milliseconds for NEW badge
+    extractedTopics: list = []  # Full topic hierarchy with questions
 
     class Config:
         from_attributes = True
 
     @classmethod
-    def from_db_model(cls, session: "StudySession"):
+    def from_db_model(cls, session: "StudySession", db=None):
         """Create response from database model with proper formatting."""
         from datetime import datetime, timezone
 
@@ -74,6 +75,12 @@ class StudySessionResponse(BaseModel):
         else:
             time_str = f"{diff.days} days ago"
 
+        # Build topic hierarchy if db session is provided
+        extracted_topics = []
+        if db:
+            from app.api.study_sessions import build_topic_hierarchy
+            extracted_topics = build_topic_hierarchy(session, db)
+
         return cls(
             id=str(session.id),
             title=session.title,
@@ -85,4 +92,5 @@ class StudySessionResponse(BaseModel):
             hasQuiz=session.has_quiz,
             folderId=session.folder_id,
             createdAt=int(session.created_at.timestamp() * 1000) if session.created_at else None,
+            extractedTopics=extracted_topics,
         )
