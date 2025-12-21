@@ -469,21 +469,16 @@ export default function Index() {
                       className={`cursor-move hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border ${isNew ? 'new-session-card' : ''} ${
                         draggedSession === session.id ? 'opacity-50' : ''
                       }`}
-                      onClick={(e) => {
-                        // Only handle click if we're not in the middle of a drag operation
-                        if (!draggedSession) {
-                          e.stopPropagation();
-                          handleSessionClick(session);
-                        }
-                      }}
-                      onMouseDown={(e) => {
-                        // Allow drag to start
-                        e.stopPropagation();
-                      }}
-                      title="Drag to folder or click to open"
+                      title="Drag to folder"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="font-semibold text-foreground">
+                        <div
+                          className="font-semibold text-foreground cursor-pointer hover:text-primary transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSessionClick(session);
+                          }}
+                        >
                           {session.title}
                         </div>
                         {isNew && (
