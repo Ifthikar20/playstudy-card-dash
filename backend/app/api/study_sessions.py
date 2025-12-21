@@ -365,7 +365,7 @@ async def create_study_session_with_ai(
         # For 11-15 topics: 4 categories
         # For 16-20 topics: 5 categories
         num_categories = max(2, min(5, (data.num_topics + 3) // 4))
-        subtopics_per_category = max(2, data.num_topics // num_categories)
+        subtopics_per_category = max(1, data.num_topics // num_categories)  # Allow single subtopic per category
 
         # Initialize DeepSeek client (OpenAI-compatible)
         client = OpenAI(
@@ -386,13 +386,14 @@ Content Analysis:
 
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
-2. Within each category, identify {subtopics_per_category}-{subtopics_per_category + 2} specific subtopics that can have quiz questions
+2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
 3. Each subtopic should be substantial enough for {data.questions_per_topic} questions
 4. Provide clear titles and brief descriptions for both categories and subtopics
 5. Organize logically (foundational concepts first, building to advanced topics)
-6. Aim for EXACTLY {data.num_topics} total subtopics across all categories
+6. Create AT LEAST {data.num_topics} total subtopics across all categories, but feel free to add more if the content warrants it
 7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
 8. Ensure subtopics are distinct and cover different aspects of the material
+9. Don't limit yourself - if there are more concepts to cover, create additional subtopics
 
 Return ONLY a valid JSON object in this EXACT format:
 {{

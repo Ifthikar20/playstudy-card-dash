@@ -27,6 +27,9 @@ class Topic(Base):
     # Encrypted mentor narrative (data at rest)
     encrypted_mentor_narrative = Column(Text, nullable=True)  # Encrypted AI-generated mentor content
 
+    # Encrypted TTS audio (base64-encoded audio data)
+    encrypted_tts_audio = Column(Text, nullable=True)  # Encrypted base64 audio
+
     # DEPRECATED: Plain text mentor narrative (kept for backward compatibility during migration)
     # Will be removed after migration is complete
     mentor_narrative = Column(Text, nullable=True)
@@ -73,6 +76,39 @@ class Topic(Base):
 
         # Fallback to plain text (backward compatibility)
         return self.mentor_narrative
+
+    def set_tts_audio(self, audio_base64: Optional[str]):
+        """
+        Set and encrypt TTS audio (base64-encoded)
+
+        Args:
+            audio_base64: Base64-encoded audio data to encrypt and store
+        """
+        from app.core.field_encryption import field_encryption
+
+        if audio_base64:
+            self.encrypted_tts_audio = field_encryption.encrypt(audio_base64)
+        else:
+            self.encrypted_tts_audio = None
+
+    def get_tts_audio(self) -> Optional[str]:
+        """
+        Get and decrypt TTS audio
+
+        Returns:
+            Decrypted base64 audio data or None
+        """
+        from app.core.field_encryption import field_encryption
+
+        if self.encrypted_tts_audio:
+            try:
+                return field_encryption.decrypt(self.encrypted_tts_audio)
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to decrypt TTS audio for topic {self.id}: {e}")
+                return None
+
+        return None
 
     def __repr__(self):
         return f"<Topic(id={self.id}, title={self.title}, session_id={self.study_session_id})>"

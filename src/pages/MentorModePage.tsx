@@ -262,6 +262,30 @@ export default function MentorModePage() {
   };
 
   const speakContent = async (topic: any) => {
+    // CRITICAL: Stop ALL existing audio before starting new playback
+    console.log('[Mentor Mode] Stopping all existing audio before starting new playback');
+
+    // Stop aiVoiceService audio
+    aiVoiceService.stop();
+
+    // Stop all tracked audio elements
+    activeAudioElementsRef.current.forEach(audio => {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = '';
+      } catch (e) {
+        console.error('[Mentor Mode] Error stopping audio:', e);
+      }
+    });
+    activeAudioElementsRef.current = [];
+
+    // Clear transcript interval
+    if (transcriptIntervalRef.current) {
+      clearInterval(transcriptIntervalRef.current);
+      transcriptIntervalRef.current = null;
+    }
+
     setIsReading(true);
     setIsLoading(true);
     setError(null);
