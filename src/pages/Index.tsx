@@ -53,6 +53,7 @@ export default function Index() {
   const handleDragEnd = (e: React.DragEvent) => {
     setDraggedSession(null);
     setDropTarget(null);
+    setIsDeleteZoneActive(false);
     // Reset visual feedback
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '1';
@@ -65,8 +66,13 @@ export default function Index() {
     setDropTarget(folderId);
   };
 
-  const handleDragLeave = () => {
-    setDropTarget(null);
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're actually leaving the folder (not just moving to a child element)
+    const target = e.currentTarget;
+    const relatedTarget = e.relatedTarget as Node;
+    if (!target.contains(relatedTarget)) {
+      setDropTarget(null);
+    }
   };
 
   const handleDrop = async (e: React.DragEvent, folderId: number) => {
@@ -111,8 +117,13 @@ export default function Index() {
     setDropTarget(null); // Clear folder drop target
   };
 
-  const handleDeleteZoneDragLeave = () => {
-    setIsDeleteZoneActive(false);
+  const handleDeleteZoneDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're actually leaving the delete zone
+    const target = e.currentTarget;
+    const relatedTarget = e.relatedTarget as Node;
+    if (!target.contains(relatedTarget)) {
+      setIsDeleteZoneActive(false);
+    }
   };
 
   const handleDeleteZoneDrop = (e: React.DragEvent) => {
@@ -331,7 +342,7 @@ export default function Index() {
                           : undefined,
                       }}
                       onDragOver={(e) => handleDragOver(e, folder.id)}
-                      onDragLeave={handleDragLeave}
+                      onDragLeave={(e) => handleDragLeave(e)}
                       onDrop={(e) => handleDrop(e, folder.id)}
                       onClick={(e) => {
                         if (!draggedSession) {
@@ -406,7 +417,7 @@ export default function Index() {
                     : 'border-red-400/40 bg-red-50/30 dark:bg-red-950/10 hover:border-red-500/60 hover:bg-red-50/50 dark:hover:bg-red-950/20'
                 }`}
                 onDragOver={handleDeleteZoneDragOver}
-                onDragLeave={handleDeleteZoneDragLeave}
+                onDragLeave={(e) => handleDeleteZoneDragLeave(e)}
                 onDrop={handleDeleteZoneDrop}
               >
                 {/* Delete icon with animation */}
