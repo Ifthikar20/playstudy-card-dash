@@ -9,6 +9,7 @@ from datetime import datetime
 from openai import OpenAI
 import json
 import io
+import uuid
 from docx import Document
 from PyPDF2 import PdfReader
 from pptx import Presentation
