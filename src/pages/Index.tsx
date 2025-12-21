@@ -10,7 +10,7 @@ import { useAppStore } from "@/store/appStore";
 import { moveSessionToFolder } from "@/services/folder-api";
 import { fetchAppData } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight } from "lucide-react";
+import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight, Upload } from "lucide-react";
 
 export default function Index() {
   const [showCreateSession, setShowCreateSession] = useState(false);
@@ -104,6 +104,48 @@ export default function Index() {
         .fire-badge {
           animation: fire-flicker 2s ease-in-out infinite;
         }
+
+        /* Drag and drop visual guides */
+        @keyframes pulse-border {
+          0%, 100% {
+            border-width: 3px;
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(var(--primary), 0);
+          }
+          50% {
+            border-width: 3px;
+            transform: scale(1.03);
+            box-shadow: 0 0 20px rgba(var(--primary), 0.3);
+          }
+        }
+
+        @keyframes dash-rotate {
+          0% { stroke-dashoffset: 0; }
+          100% { stroke-dashoffset: 100; }
+        }
+
+        .drop-zone-active {
+          animation: pulse-border 1.5s ease-in-out infinite !important;
+          position: relative;
+        }
+
+        .drop-zone-ready {
+          border: 2px dashed hsl(var(--primary)) !important;
+          opacity: 0.9;
+        }
+
+        .drop-zone-dimmed {
+          opacity: 0.4;
+        }
+
+        .drag-hint {
+          animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
       `}</style>
       <div className="min-h-screen bg-background flex w-full">
         <Sidebar />
@@ -167,49 +209,93 @@ export default function Index() {
                 )}
               </div>
               <div className="flex gap-4 overflow-x-auto pb-2">
-                {folders.slice(0, 5).map((folder) => (
-                  <div
-                    key={folder.id}
-                    className={`group flex-shrink-0 cursor-pointer transition-all duration-200 p-4 rounded-xl flex flex-col items-center gap-2 text-center min-w-[110px] ${
-                      dropTarget === folder.id
-                        ? 'bg-primary/5 scale-105 shadow-lg'
-                        : 'bg-card hover:bg-accent/30 hover:shadow-md'
-                    }`}
-                    style={{
-                      border: dropTarget === folder.id
-                        ? `2px solid ${folder.color}`
-                        : '1px solid hsl(var(--border))',
-                    }}
-                    onDragOver={(e) => handleDragOver(e, folder.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, folder.id)}
-                    onClick={(e) => {
-                      if (!draggedSession) {
-                        navigate(`/dashboard/folder/${folder.id}`);
-                      }
-                    }}
-                  >
+                {folders.slice(0, 5).map((folder) => {
+                  const isActiveDropTarget = dropTarget === folder.id;
+                  const isDragging = draggedSession !== null;
+                  const isDimmed = isDragging && !isActiveDropTarget;
+
+                  return (
                     <div
-                      className="text-3xl transition-transform group-hover:scale-110"
+                      key={folder.id}
+                      className={`group flex-shrink-0 cursor-pointer transition-all duration-200 p-4 rounded-xl flex flex-col items-center gap-2 text-center min-w-[110px] relative ${
+                        isActiveDropTarget
+                          ? 'drop-zone-active bg-primary/10 scale-105 shadow-2xl'
+                          : isDragging
+                          ? 'drop-zone-ready drop-zone-dimmed hover:opacity-100'
+                          : 'bg-card hover:bg-accent/30 hover:shadow-md'
+                      }`}
                       style={{
-                        filter: dropTarget === folder.id ? `drop-shadow(0 0 8px ${folder.color}80)` : 'none'
+                        border: isActiveDropTarget
+                          ? `3px solid ${folder.color}`
+                          : isDragging
+                          ? `2px dashed ${folder.color}60`
+                          : '1px solid hsl(var(--border))',
+                        backgroundColor: isActiveDropTarget
+                          ? `${folder.color}15`
+                          : undefined,
+                      }}
+                      onDragOver={(e) => handleDragOver(e, folder.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, folder.id)}
+                      onClick={(e) => {
+                        if (!draggedSession) {
+                          navigate(`/dashboard/folder/${folder.id}`);
+                        }
                       }}
                     >
-                      {folder.icon}
-                    </div>
-                    <div className="font-medium text-xs truncate w-full text-foreground">
-                      {folder.name}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {folder.session_count} {folder.session_count !== 1 ? 'sessions' : 'session'}
-                    </div>
-                    {dropTarget === folder.id && (
-                      <div className="text-[9px] font-semibold mt-0.5" style={{ color: folder.color }}>
-                        Drop here
+                      {/* Drop indicator overlay */}
+                      {isActiveDropTarget && (
+                        <div className="absolute inset-0 rounded-xl pointer-events-none flex items-center justify-center bg-gradient-to-b from-transparent via-primary/5 to-transparent">
+                          <div className="drag-hint">
+                            <Upload size={32} style={{ color: folder.color }} strokeWidth={2.5} />
+                          </div>
+                        </div>
+                      )}
+
+                      <div
+                        className={`text-3xl transition-all ${
+                          isActiveDropTarget
+                            ? 'scale-125 opacity-60'
+                            : 'group-hover:scale-110'
+                        }`}
+                        style={{
+                          filter: isActiveDropTarget
+                            ? `drop-shadow(0 0 12px ${folder.color})`
+                            : isDragging
+                            ? `drop-shadow(0 0 6px ${folder.color}40)`
+                            : 'none'
+                        }}
+                      >
+                        {folder.icon}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div className={`font-medium text-xs truncate w-full ${
+                        isActiveDropTarget ? 'text-primary font-bold' : 'text-foreground'
+                      }`}>
+                        {folder.name}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {folder.session_count} {folder.session_count !== 1 ? 'sessions' : 'session'}
+                      </div>
+                      {isActiveDropTarget && (
+                        <div
+                          className="text-xs font-bold mt-1 px-2 py-1 rounded-md animate-pulse"
+                          style={{
+                            color: folder.color,
+                            backgroundColor: `${folder.color}20`,
+                            border: `1px solid ${folder.color}40`
+                          }}
+                        >
+                          📥 Drop Here
+                        </div>
+                      )}
+                      {isDragging && !isActiveDropTarget && (
+                        <div className="text-[9px] text-muted-foreground mt-1">
+                          Drag here
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
