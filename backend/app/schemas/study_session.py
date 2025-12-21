@@ -45,6 +45,7 @@ class StudySessionResponse(BaseModel):
     hasSpeedRun: bool
     hasQuiz: bool
     folderId: Optional[int] = None  # Folder organization
+    createdAt: Optional[int] = None  # Unix timestamp in milliseconds for NEW badge
 
     class Config:
         from_attributes = True
@@ -83,4 +84,5 @@ class StudySessionResponse(BaseModel):
             hasSpeedRun=session.has_speed_run,
             hasQuiz=session.has_quiz,
             folderId=session.folder_id,
+            createdAt=int(session.created_at.timestamp() * 1000) if session.created_at else None,
         )

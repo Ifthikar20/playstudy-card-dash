@@ -269,6 +269,7 @@ class CreateStudySessionResponse(BaseModel):
     topics: int
     hasFullStudy: bool
     hasSpeedRun: bool
+    createdAt: Optional[int] = None  # Unix timestamp in milliseconds
 
 
 @router.post("/analyze-content", response_model=ContentAnalysisResponse)
@@ -609,7 +610,8 @@ Return in this EXACT format:
             progress=0,
             topics=len(all_topics),
             hasFullStudy=True,
-            hasSpeedRun=True
+            hasSpeedRun=True,
+            createdAt=int(study_session.created_at.timestamp() * 1000) if study_session.created_at else None
         )
 
     except Exception as api_error:
@@ -718,7 +720,8 @@ async def get_study_session(
         progress=progress,
         topics=total_subtopics,
         hasFullStudy=session.has_full_study or False,
-        hasSpeedRun=session.has_speed_run or False
+        hasSpeedRun=session.has_speed_run or False,
+        createdAt=int(session.created_at.timestamp() * 1000) if session.created_at else None
     )
 
 
