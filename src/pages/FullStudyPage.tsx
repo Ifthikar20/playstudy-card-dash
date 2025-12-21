@@ -116,16 +116,16 @@ const TopicTreeItem: React.FC<TopicTreeItemProps> = ({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 max-w-full">
       <Card
-        className={`transition-all ${completed ? "bg-green-50 dark:bg-green-950/20" : ""} ${
+        className={`transition-all overflow-hidden ${completed ? "bg-green-50 dark:bg-green-950/20" : ""} ${
           isLeafTopic ? "cursor-pointer hover:shadow-md" : ""
         }`}
         style={{ marginLeft: `${indent}px` }}
       >
         <CardContent className="p-3">
           <div
-            className="flex items-center justify-between"
+            className="flex items-center justify-between gap-3"
             onClick={() => {
               if (hasSubtopics) {
                 toggleExpanded();
@@ -134,31 +134,31 @@ const TopicTreeItem: React.FC<TopicTreeItemProps> = ({
               }
             }}
           >
-            <div className="flex items-center gap-3 flex-1">
+            <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
               {completed ? (
                 <CheckCircle2 className="text-green-600 dark:text-green-400 flex-shrink-0" size={level === 0 ? 20 : 18} />
               ) : (
-                <Circle className={level === 0 ? "text-amber-600" : "text-primary"} size={level === 0 ? 20 : 18} />
+                <Circle className={`${level === 0 ? "text-amber-600" : "text-primary"} flex-shrink-0`} size={level === 0 ? 20 : 18} />
               )}
-              <div className="flex-1 min-w-0">
-                <p className={`${level === 0 ? "font-semibold" : "font-medium"} text-foreground text-sm truncate`}>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <p className={`${level === 0 ? "font-semibold" : "font-medium"} text-foreground text-sm break-words`}>
                   {topic.title}
                 </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {hasSubtopics && `${topic.subtopics.length} subtopic${topic.subtopics.length !== 1 ? 's' : ''}`}
-                  {isLeafTopic && `${topic.questions.length} question${topic.questions.length !== 1 ? 's' : ''}`}
-                  {topic.description && ` • ${topic.description}`}
-                </p>
+                <div className="text-xs text-muted-foreground break-words line-clamp-2">
+                  {hasSubtopics && <span className="font-medium">{topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}</span>}
+                  {isLeafTopic && <span className="font-medium">{topic.questions.length} question{topic.questions.length !== 1 ? 's' : ''}</span>}
+                  {topic.description && <span className="text-muted-foreground/80"> • {topic.description}</span>}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {isLeafTopic && completed && topic.score !== null && (
-                <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                <span className="text-sm font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                   {Math.round((topic.score || 0) * (topic.questions?.length || 0) / 100)}/{topic.questions?.length || 0} pts
                 </span>
               )}
               {hasSubtopics && (
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground flex-shrink-0">
                   {isExpanded ? "▼" : "▶"}
                 </span>
               )}
