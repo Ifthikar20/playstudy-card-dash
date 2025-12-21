@@ -135,13 +135,13 @@ export function TopicQuizCard({
   }
 
   return (
-    <Card>
+    <Card className="w-full">
       <CardContent className="p-6 space-y-4">
         {/* Progress Bar */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{topicTitle}</span>
-            <span className="font-semibold text-foreground">
+            <span className="text-muted-foreground truncate flex-1 mr-2">{topicTitle}</span>
+            <span className="font-semibold text-foreground flex-shrink-0">
               {currentQuestionIndex + 1} / {questions.length}
             </span>
           </div>
@@ -151,7 +151,7 @@ export function TopicQuizCard({
           />
         </div>
 
-        <h3 className="text-lg font-semibold text-foreground">
+        <h3 className="text-lg font-semibold text-foreground break-words">
           {currentQuestion.question}
         </h3>
 
@@ -180,9 +180,9 @@ export function TopicQuizCard({
                   <span className="flex-shrink-0 w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium">
                     {String.fromCharCode(65 + index)}
                   </span>
-                  <span className="flex-1">{option}</span>
-                  {isCorrect && <CheckCircle2 className="text-green-600" size={20} />}
-                  {isWrong && <XCircle className="text-red-600" size={20} />}
+                  <span className="flex-1 break-words overflow-wrap-anywhere">{option}</span>
+                  {isCorrect && <CheckCircle2 className="text-green-600 flex-shrink-0" size={20} />}
+                  {isWrong && <XCircle className="text-red-600 flex-shrink-0" size={20} />}
                 </div>
               </button>
             );
@@ -192,7 +192,7 @@ export function TopicQuizCard({
         {showResult && result && (
           <div className="space-y-3">
             <div className={cn(
-              "p-4 rounded-lg text-sm animate-in fade-in slide-in-from-top-2 duration-300",
+              "p-4 rounded-lg text-sm animate-in fade-in slide-in-from-top-2 duration-300 break-words",
               result.correct
                 ? "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-200"
                 : "bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200"
@@ -200,7 +200,7 @@ export function TopicQuizCard({
               <p className="font-medium mb-1">
                 {result.correct ? "Correct! 🎉" : "Not quite right"}
               </p>
-              <p>{result.explanation}</p>
+              <p className="break-words">{result.explanation}</p>
             </div>
 
             <div className="text-center text-sm text-muted-foreground">

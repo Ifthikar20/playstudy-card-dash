@@ -616,8 +616,8 @@ export default function FullStudyPage() {
         <ResizablePanelGroup direction="horizontal" className="flex-1">
           {/* Left Side - Topic List & Quiz */}
           <ResizablePanel defaultSize={50} minSize={30} maxSize={70}>
-            <div className="h-full overflow-y-auto p-4 border-r border-border">
-              <div className="space-y-4">
+            <div className="h-full overflow-y-auto overflow-x-hidden p-4 border-r border-border">
+              <div className="space-y-4 max-w-full">
                 <div>
                   <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                     <BookOpen size={24} />
@@ -649,27 +649,29 @@ export default function FullStudyPage() {
 
                 {/* Quiz View */}
                 {selectedTopicId && selectedTopic && !showSummary && (
-                  <div className="space-y-4">
-                    <Button 
-                      variant="ghost" 
+                  <div className="space-y-4 max-w-full">
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => setSelectedTopicId(null)}
                     >
                       ← Back to Topics
                     </Button>
-                    
-                    <TopicQuizCard
-                      key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
-                      topicTitle={selectedTopic.title}
-                      questions={selectedTopic.questions || []}
-                      currentQuestionIndex={localQuestionIndex}
-                      onAnswer={handleAnswerForSelected}
-                      onMoveToNext={handleMoveToNextForSelected}
-                      onComplete={handleCompleteForSelected}
-                      onSkipToNext={handleSkipToNextTopic}
-                      score={selectedTopic.score}
-                      isCompleted={selectedTopic.completed || false}
-                    />
+
+                    <div className="max-w-full overflow-hidden">
+                      <TopicQuizCard
+                        key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
+                        topicTitle={selectedTopic.title}
+                        questions={selectedTopic.questions || []}
+                        currentQuestionIndex={localQuestionIndex}
+                        onAnswer={handleAnswerForSelected}
+                        onMoveToNext={handleMoveToNextForSelected}
+                        onComplete={handleCompleteForSelected}
+                        onSkipToNext={handleSkipToNextTopic}
+                        score={selectedTopic.score}
+                        isCompleted={selectedTopic.completed || false}
+                      />
+                    </div>
                   </div>
                 )}
 
