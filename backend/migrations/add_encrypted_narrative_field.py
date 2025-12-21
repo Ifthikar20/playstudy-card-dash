@@ -26,7 +26,7 @@ def run_migration():
     """Add encrypted_mentor_narrative column and migrate existing data"""
 
     # Create engine and session
-    engine = create_engine(settings.database_url)
+    engine = create_engine(settings.DATABASE_URL)
     SessionLocal = sessionmaker(bind=engine)
     db = SessionLocal()
 
