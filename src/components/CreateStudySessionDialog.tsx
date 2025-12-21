@@ -303,7 +303,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
                 <Input
                   type="file"
-                  accept=".pdf,.doc,.docx,.txt,.md"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
                   onChange={handleFileChange}
                   className="hidden"
                   id="file-upload"
@@ -315,7 +315,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                   ) : (
                     <>
                       <p className="text-foreground font-medium">Drop your file here or click to browse</p>
-                      <p className="text-sm text-muted-foreground mt-1">PDF, DOC, DOCX, TXT, MD supported</p>
+                      <p className="text-sm text-muted-foreground mt-1">PDF, DOC, DOCX, PPT, PPTX, TXT, MD supported</p>
                     </>
                   )}
                 </label>

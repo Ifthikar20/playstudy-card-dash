@@ -11,6 +11,7 @@ import json
 import io
 from docx import Document
 from PyPDF2 import PdfReader
+from pptx import Presentation
 
 from app.config import settings
 from app.dependencies import get_current_active_user, get_db
@@ -120,6 +121,7 @@ def extract_text_from_content(content: str) -> str:
     Handles:
     - Plain text
     - Word documents (.docx)
+    - PowerPoint presentations (.pptx, .ppt)
     - PDF files
     - Base64 encoded content
 
@@ -155,19 +157,33 @@ def extract_text_from_content(content: str) -> str:
 
     # Process based on file type if we have bytes
     if content_bytes:
-        # Word document (ZIP/docx)
+        # Office documents (ZIP/docx/pptx)
         if content_bytes.startswith(b'PK\x03\x04'):
+            # Try PowerPoint first
             try:
-                doc = Document(io.BytesIO(content_bytes))
-                text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                prs = Presentation(io.BytesIO(content_bytes))
+                text_parts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            text_parts.append(shape.text)
+                text = '\n'.join(text_parts)
                 if text.strip():
                     return text
-                raise ValueError("No text content found in Word document")
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to extract text from Word document: {str(e)}"
-                )
+                raise ValueError("No text content found in PowerPoint")
+            except Exception as pptx_error:
+                # If PowerPoint fails, try Word document
+                try:
+                    doc = Document(io.BytesIO(content_bytes))
+                    text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                    if text.strip():
+                        return text
+                    raise ValueError("No text content found in Word document")
+                except Exception as docx_error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to extract text from Office document. PowerPoint error: {str(pptx_error)}. Word error: {str(docx_error)}"
+                    )
 
         # PDF file
         elif content_bytes.startswith(b'%PDF'):
