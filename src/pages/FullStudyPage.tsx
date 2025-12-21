@@ -759,11 +759,11 @@ export default function FullStudyPage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 rounded bg-gradient-to-br from-primary to-purple-600 shadow-sm shadow-primary/30"></div>
-                    <span className="text-muted-foreground">Current</span>
+                    <span className="text-muted-foreground">Subtopics</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-muted border border-dashed border-border"></div>
-                    <span className="text-muted-foreground">Locked</span>
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-amber-600 to-orange-600 shadow-sm shadow-amber-500/30"></div>
+                    <span className="text-muted-foreground">Main Topics</span>
                   </div>
                 </div>
               </div>
