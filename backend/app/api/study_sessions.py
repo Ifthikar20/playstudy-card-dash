@@ -10,6 +10,7 @@ from openai import OpenAI
 import json
 import io
 import uuid
+import logging
 from docx import Document
 from PyPDF2 import PdfReader
 from pptx import Presentation
@@ -21,6 +22,8 @@ from app.models.study_session import StudySession
 from app.models.topic import Topic
 from app.models.question import Question
 from app.core.rate_limit import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
