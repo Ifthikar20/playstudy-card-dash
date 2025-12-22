@@ -574,23 +574,9 @@ export default function SpeedRunPage() {
 
                           {/* Explanation */}
                           {hasAnswered && (
-                            <div className="mt-6 space-y-3">
-                              <div className="p-4 bg-muted rounded-lg">
-                                <p className="text-sm font-semibold mb-2">Explanation:</p>
-                                <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
-                              </div>
-
-                              {/* Highlight indicator */}
-                              {currentQuestion.sourceText && (
-                                <div className="p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded-lg">
-                                  <div className="flex items-center gap-2">
-                                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                    <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                                      Source text highlighted in your document ←
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
+                            <div className="mt-6 p-4 bg-muted rounded-lg">
+                              <p className="text-sm font-semibold mb-2">Explanation:</p>
+                              <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
                             </div>
                           )}
                         </CardContent>
