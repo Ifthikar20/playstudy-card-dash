@@ -517,18 +517,23 @@ export default function SpeedRunPage() {
                               {/* Source Text from Document */}
                               {currentQuestion.sourceText && (
                                 <div className="p-4 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded-lg">
-                                  <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex items-center gap-2 mb-3">
                                     <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
                                     <p className="text-sm font-semibold text-green-800 dark:text-green-200">
-                                      Source from Document:
+                                      Referenced in your study material
                                     </p>
                                   </div>
-                                  <p className="text-sm text-green-700 dark:text-green-300 italic bg-green-100/50 dark:bg-green-900/20 p-3 rounded">
-                                    "{currentQuestion.sourceText}"
-                                  </p>
-                                  <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-                                    This text appears in the document on the left ←
-                                  </p>
+                                  <div className="bg-green-100/50 dark:bg-green-900/20 p-3 rounded border border-green-200/50 dark:border-green-800/50">
+                                    <p className="text-sm text-green-700 dark:text-green-300 leading-relaxed">
+                                      {currentQuestion.sourceText}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-3 text-xs text-green-600 dark:text-green-400">
+                                    <div className="flex items-center gap-1">
+                                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+                                      <span>You can find this text in your document on the left</span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>

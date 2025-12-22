@@ -685,9 +685,11 @@ Requirements:
 2. Each question must have exactly 4 options
 3. Questions should test understanding of the material
 4. Provide clear explanations
-5. For EACH question, include the exact text snippet from the study material that the question is based on
-6. Keep source text concise but identifiable (2-3 sentences maximum)
-7. Return ONLY valid JSON
+5. For EACH question, include the source text from the study material with FULL CONTEXT
+6. Source text should include the complete sentence(s) or paragraph that contains the answer
+7. Include enough surrounding context so students can easily locate it in their document
+8. Aim for 2-4 sentences of context (not just a fragment)
+9. Return ONLY valid JSON
 
 Return in this EXACT format:
 {{
@@ -697,7 +699,7 @@ Return in this EXACT format:
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": 0,
       "explanation": "Why this answer is correct",
-      "sourceText": "The exact sentence or paragraph from the study material where this information appears"
+      "sourceText": "The complete sentence or paragraph from the study material, including surrounding context that makes it easy to find and understand. For example: 'When analyzing customer data, the instructions specify to analyze customers by CustomerID based on frequency (count of InvoiceNo) and total spending. The data should then be segmented into tiers: high, mid, low based on these metrics.'"
     }}
   ]
 }}"""
