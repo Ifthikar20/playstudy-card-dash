@@ -36,6 +36,8 @@ export default function MentorModePage() {
   const navigate = useNavigate();
   const { currentSession, studySessions } = useAppStore();
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const activeAudioElementsRef = useRef<HTMLAudioElement[]>([]);
+  const transcriptIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -65,6 +67,37 @@ export default function MentorModePage() {
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
     : currentSession;
+
+  // Cleanup audio on component unmount or navigation
+  useEffect(() => {
+    return () => {
+      console.log('[Mentor Mode] Component unmounting - stopping all audio');
+
+      // Stop all tracked audio elements
+      activeAudioElementsRef.current.forEach(audio => {
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.src = '';
+        } catch (e) {
+          console.error('[Mentor Mode] Error stopping audio:', e);
+        }
+      });
+      activeAudioElementsRef.current = [];
+
+      // Clear transcript interval
+      if (transcriptIntervalRef.current) {
+        clearInterval(transcriptIntervalRef.current);
+        transcriptIntervalRef.current = null;
+      }
+
+      // Stop aiVoiceService audio
+      aiVoiceService.stop();
+
+      setIsPlaying(false);
+      setIsReading(false);
+    };
+  }, []);
 
   useEffect(() => {
     if (!session) {
@@ -229,11 +262,34 @@ export default function MentorModePage() {
   };
 
   const speakContent = async (topic: any) => {
+    // CRITICAL: Stop ALL existing audio before starting new playback
+    console.log('[Mentor Mode] Stopping all existing audio before starting new playback');
+
+    // Stop aiVoiceService audio
+    aiVoiceService.stop();
+
+    // Stop all tracked audio elements
+    activeAudioElementsRef.current.forEach(audio => {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = '';
+      } catch (e) {
+        console.error('[Mentor Mode] Error stopping audio:', e);
+      }
+    });
+    activeAudioElementsRef.current = [];
+
+    // Clear transcript interval
+    if (transcriptIntervalRef.current) {
+      clearInterval(transcriptIntervalRef.current);
+      transcriptIntervalRef.current = null;
+    }
+
     setIsReading(true);
     setIsLoading(true);
     setError(null);
 
-    let transcriptInterval: NodeJS.Timeout | null = null;
     let currentAudioElement: HTMLAudioElement | null = null;
 
     try {
@@ -306,19 +362,22 @@ export default function MentorModePage() {
         };
 
         // Update transcript every 100ms for smooth animation
-        transcriptInterval = setInterval(updateTranscript, 100);
+        transcriptIntervalRef.current = setInterval(updateTranscript, 100);
         audio.addEventListener('timeupdate', updateTranscript);
 
         return () => {
-          if (transcriptInterval) clearInterval(transcriptInterval);
+          if (transcriptIntervalRef.current) {
+            clearInterval(transcriptIntervalRef.current);
+            transcriptIntervalRef.current = null;
+          }
           audio.removeEventListener('timeupdate', updateTranscript);
         };
       };
 
       const handleEnd = async () => {
-        if (transcriptInterval) {
-          clearInterval(transcriptInterval);
-          transcriptInterval = null;
+        if (transcriptIntervalRef.current) {
+          clearInterval(transcriptIntervalRef.current);
+          transcriptIntervalRef.current = null;
         }
         setCurrentTranscript(narrative);
         setIsReading(false);
@@ -359,9 +418,9 @@ export default function MentorModePage() {
       };
 
       const handleError = (error: Error) => {
-        if (transcriptInterval) {
-          clearInterval(transcriptInterval);
-          transcriptInterval = null;
+        if (transcriptIntervalRef.current) {
+          clearInterval(transcriptIntervalRef.current);
+          transcriptIntervalRef.current = null;
         }
         console.error('[TTS Error]:', error);
         setError(`Unable to play audio: ${error.message}`);
@@ -432,6 +491,11 @@ export default function MentorModePage() {
                 }
               }
             ).then((audio) => {
+              // Track all audio elements for cleanup
+              if (audio) {
+                activeAudioElementsRef.current.push(audio);
+              }
+
               // Sync transcript with FIRST audio chunk
               if (audio && i === 0) {
                 console.log('[Mentor Mode] 🎯 Syncing transcript with audio playback');
@@ -467,9 +531,9 @@ export default function MentorModePage() {
         setError(`❌ ${errorMessage}`);
       }
 
-      if (transcriptInterval) {
-        clearInterval(transcriptInterval);
-        transcriptInterval = null;
+      if (transcriptIntervalRef.current) {
+        clearInterval(transcriptIntervalRef.current);
+        transcriptIntervalRef.current = null;
       }
       setIsReading(false);
       setIsPlaying(false);
@@ -726,13 +790,19 @@ export default function MentorModePage() {
                       else if (line.match(/^(Do I|Can I|Can AI|What if|Does the)/)) {
                         return <h3 key={index} className="text-xl font-semibold text-foreground mt-8 mb-3 leading-[1.4]">{highlightedText}</h3>;
                       }
-                      // Numbered lists - clean spacing
+                      // Numbered lists - with colorful highlighter effect
                       else if (line.match(/^\d+\.\s/)) {
                         const number = line.match(/^(\d+)\./)?.[1];
+                        const highlightColor = parseInt(number!) % 2 === 0 ? 'bg-cyan-100/70 dark:bg-cyan-900/20' : 'bg-green-100/70 dark:bg-green-900/20';
+                        const textContent = line.replace(/^\d+\.\s*/, '');
                         return (
-                          <div key={index} className="flex gap-3 mt-3">
-                            <span className="text-foreground/70 font-medium min-w-[1.5rem]">{number}.</span>
-                            <div className="leading-[1.8] text-foreground/90 flex-1">{highlightedText}</div>
+                          <div key={index} className="mt-3">
+                            <div className={`${highlightColor} px-4 py-3 rounded-lg border-l-4 ${parseInt(number!) % 2 === 0 ? 'border-cyan-400' : 'border-green-400'}`}>
+                              <div className="flex gap-3">
+                                <span className="font-bold text-foreground min-w-[1.5rem]">{number}.</span>
+                                <div className="leading-[1.8] text-foreground flex-1 font-medium">{textContent}</div>
+                              </div>
+                            </div>
                           </div>
                         );
                       }
@@ -745,13 +815,19 @@ export default function MentorModePage() {
                           </div>
                         );
                       }
-                      // Nested numbered lists
+                      // Nested numbered lists - with colorful highlighter effect
                       else if (line.match(/^\s{2,}\d+\.\s/)) {
                         const number = line.match(/(\d+)\./)?.[1];
+                        const highlightColor = parseInt(number!) % 2 === 0 ? 'bg-cyan-50/70 dark:bg-cyan-900/10' : 'bg-green-50/70 dark:bg-green-900/10';
+                        const textContent = line.trim().replace(/^\d+\.\s*/, '');
                         return (
-                          <div key={index} className="flex gap-3 mt-2 ml-8">
-                            <span className="text-foreground/70 font-medium min-w-[1.5rem]">{number}.</span>
-                            <div className="leading-[1.8] text-foreground/80 flex-1">{highlightedText}</div>
+                          <div key={index} className="mt-2 ml-8">
+                            <div className={`${highlightColor} px-3 py-2 rounded-md border-l-2 ${parseInt(number!) % 2 === 0 ? 'border-cyan-300' : 'border-green-300'}`}>
+                              <div className="flex gap-2">
+                                <span className="font-semibold text-foreground/90 min-w-[1.5rem] text-sm">{number}.</span>
+                                <div className="leading-[1.7] text-foreground/90 flex-1 text-sm">{textContent}</div>
+                              </div>
+                            </div>
                           </div>
                         );
                       }

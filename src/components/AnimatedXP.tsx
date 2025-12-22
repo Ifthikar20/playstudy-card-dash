@@ -82,18 +82,27 @@ export function AnimatedXP() {
         >
           <div className="flex items-center gap-1 text-[#97E35C] font-bold text-sm animate-pulse">
             <span>+{Math.floor(10 / particles.length)}</span>
-            <span className="text-xs">XP</span>
+            <img
+              src="/ps-logo.png"
+              alt="XP"
+              className="h-3 w-3 object-contain"
+            />
           </div>
         </div>
       ))}
 
       {/* XP Display */}
       <span
-        className={`inline-flex items-center px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm font-bold text-primary relative ${
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm font-bold text-primary relative ${
           isAnimating ? 'animate-bounce' : ''
         }`}
       >
-        {displayXP.toLocaleString()} XP
+        {displayXP.toLocaleString()}
+        <img
+          src="/ps-logo.png"
+          alt="XP"
+          className="h-4 w-4 object-contain"
+        />
 
         {/* Celebration sparkles when gaining XP */}
         {isAnimating && (

@@ -80,11 +80,11 @@ async def get_app_data(
     ).order_by(Folder.created_at.desc()).all()
     logger.debug(f"📊 Found {len(folders)} folders")
 
-    # Fetch user's study sessions - ordered by title (content-based) instead of date
+    # Fetch user's study sessions - ordered by most recent first
     study_sessions = (
         db.query(StudySession)
         .filter(StudySession.user_id == current_user.id)
-        .order_by(StudySession.title.asc())
+        .order_by(StudySession.created_at.desc())
         .all()
     )
     logger.debug(f"📊 Found {len(study_sessions)} study sessions for user {current_user.id}")
@@ -150,7 +150,7 @@ async def get_app_data(
     # Convert to response schemas using custom methods
     games_response = [GameResponse.from_db_model(game) for game in games]
     sessions_response = [
-        StudySessionResponse.from_db_model(session) for session in study_sessions
+        StudySessionResponse.from_db_model(session, db=db) for session in study_sessions
     ]
 
     # Build folder responses with session counts

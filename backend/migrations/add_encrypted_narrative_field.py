@@ -26,7 +26,7 @@ def run_migration():
     """Add encrypted_mentor_narrative column and migrate existing data"""
 
     # Create engine and session
-    engine = create_engine(settings.database_url)
+    engine = create_engine(settings.DATABASE_URL)
     SessionLocal = sessionmaker(bind=engine)
     db = SessionLocal()
 
@@ -36,7 +36,7 @@ def run_migration():
         logger.info("=" * 70)
 
         # Check if column exists
-        from sqlalchemy import inspect
+        from sqlalchemy import inspect, text
         inspector = inspect(engine)
         columns = [col['name'] for col in inspector.get_columns('topics')]
 
@@ -45,10 +45,10 @@ def run_migration():
         else:
             logger.info("📋 Adding column 'encrypted_mentor_narrative' to topics table...")
 
-            # Add the column (SQLite doesn't support ALTER TABLE easily, so we'll use SQLAlchemy)
-            # This will be handled by SQLAlchemy's create_all()
-            from app.database import Base
-            Base.metadata.create_all(bind=engine, checkfirst=True)
+            # Add the column using raw SQL (PostgreSQL)
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE topics ADD COLUMN encrypted_mentor_narrative TEXT;"))
+                conn.commit()
 
             logger.info("✅ Column added successfully")
 

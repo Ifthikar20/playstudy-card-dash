@@ -56,7 +56,9 @@ class StudySession(Base):
     folder_id = Column(Integer, ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)  # Folder organization
     title = Column(String, nullable=False)  # Study session title
     topic = Column(String, nullable=False)
-    study_content = Column(Text, nullable=True)  # Original uploaded content
+    study_content = Column(Text, nullable=True)  # Extracted text content
+    file_content = Column(Text, nullable=True)  # Original uploaded file (base64)
+    file_type = Column(String, nullable=True)  # File type: pdf, pptx, docx, txt
     duration = Column(Integer, nullable=False, default=0)  # in seconds
     progress = Column(Integer, default=0)  # percentage 0-100
     topics_count = Column(Integer, default=0)  # Number of topics in session

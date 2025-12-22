@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
 import logging
+import uuid
 
 from app.database import get_db
 from app.dependencies import get_current_active_user
@@ -212,6 +213,16 @@ async def move_session_to_folder(
     """
     logger.info(f"📁 Moving session {session_id} to folder {folder_id}")
 
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     # Verify folder exists and belongs to user
     folder = db.query(Folder).filter(
         Folder.id == folder_id,
@@ -226,7 +237,7 @@ async def move_session_to_folder(
 
     # Verify session exists and belongs to user
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -258,9 +269,19 @@ async def remove_session_from_folder(
     """
     logger.info(f"📁 Removing session {session_id} from folder {folder_id}")
 
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     # Verify session exists and belongs to user
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id,
         StudySession.folder_id == folder_id
     ).first()

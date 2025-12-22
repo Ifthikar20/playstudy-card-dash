@@ -116,16 +116,16 @@ const TopicTreeItem: React.FC<TopicTreeItemProps> = ({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 max-w-full">
       <Card
-        className={`transition-all ${completed ? "bg-green-50 dark:bg-green-950/20" : ""} ${
+        className={`transition-all overflow-hidden ${completed ? "bg-green-50 dark:bg-green-950/20" : ""} ${
           isLeafTopic ? "cursor-pointer hover:shadow-md" : ""
         }`}
         style={{ marginLeft: `${indent}px` }}
       >
         <CardContent className="p-3">
           <div
-            className="flex items-center justify-between"
+            className="flex items-center justify-between gap-3"
             onClick={() => {
               if (hasSubtopics) {
                 toggleExpanded();
@@ -134,31 +134,31 @@ const TopicTreeItem: React.FC<TopicTreeItemProps> = ({
               }
             }}
           >
-            <div className="flex items-center gap-3 flex-1">
+            <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
               {completed ? (
                 <CheckCircle2 className="text-green-600 dark:text-green-400 flex-shrink-0" size={level === 0 ? 20 : 18} />
               ) : (
-                <Circle className={level === 0 ? "text-amber-600" : "text-primary"} size={level === 0 ? 20 : 18} />
+                <Circle className={`${level === 0 ? "text-amber-600" : "text-primary"} flex-shrink-0`} size={level === 0 ? 20 : 18} />
               )}
-              <div className="flex-1 min-w-0">
-                <p className={`${level === 0 ? "font-semibold" : "font-medium"} text-foreground text-sm truncate`}>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <p className={`${level === 0 ? "font-semibold" : "font-medium"} text-foreground text-sm break-words`}>
                   {topic.title}
                 </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {hasSubtopics && `${topic.subtopics.length} subtopic${topic.subtopics.length !== 1 ? 's' : ''}`}
-                  {isLeafTopic && `${topic.questions.length} question${topic.questions.length !== 1 ? 's' : ''}`}
-                  {topic.description && ` • ${topic.description}`}
-                </p>
+                <div className="text-xs text-muted-foreground break-words line-clamp-2">
+                  {hasSubtopics && <span className="font-medium">{topic.subtopics.length} subtopic{topic.subtopics.length !== 1 ? 's' : ''}</span>}
+                  {isLeafTopic && <span className="font-medium">{topic.questions.length} question{topic.questions.length !== 1 ? 's' : ''}</span>}
+                  {topic.description && <span className="text-muted-foreground/80"> • {topic.description}</span>}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {isLeafTopic && completed && topic.score !== null && (
-                <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                <span className="text-sm font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
                   {Math.round((topic.score || 0) * (topic.questions?.length || 0) / 100)}/{topic.questions?.length || 0} pts
                 </span>
               )}
               {hasSubtopics && (
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground flex-shrink-0">
                   {isExpanded ? "▼" : "▶"}
                 </span>
               )}
@@ -255,6 +255,36 @@ export default function FullStudyPage() {
     setLocalQuestionIndex(0);
     setShowSummary(false);
   }, [selectedTopicId]);
+
+  // Sync pending progress when component unmounts or user navigates away
+  const syncPendingProgress = useAppStore(state => state.syncPendingProgress);
+  useEffect(() => {
+    // Sync on component unmount
+    return () => {
+      console.log('[Progress] Component unmounting - syncing pending progress');
+      syncPendingProgress();
+    };
+  }, [syncPendingProgress]);
+
+  // Sync pending progress when user tries to leave the page
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const pendingUpdates = useAppStore.getState().pendingProgressUpdates;
+      const pendingXP = useAppStore.getState().pendingXPUpdates;
+
+      if (pendingUpdates.size > 0 || pendingXP > 0) {
+        console.log('[Progress] Page unload - syncing pending progress');
+        syncPendingProgress();
+
+        // Show warning if there are unsaved changes
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [syncPendingProgress]);
 
   // Flatten topics for easier access (includes both categories and subtopics)
   const flattenedTopics = useMemo(() => {
@@ -585,9 +615,9 @@ export default function FullStudyPage() {
       <main className="flex-1 flex flex-col lg:flex-row min-h-0">
         <ResizablePanelGroup direction="horizontal" className="flex-1">
           {/* Left Side - Topic List & Quiz */}
-          <ResizablePanel defaultSize={50} minSize={30} maxSize={70}>
-            <div className="h-full overflow-y-auto p-4 border-r border-border">
-              <div className="space-y-4">
+          <ResizablePanel defaultSize={40} minSize={30} maxSize={70}>
+            <div className="h-full overflow-y-auto overflow-x-hidden p-4 border-r border-border">
+              <div className="space-y-4 w-full">
                 <div>
                   <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                     <BookOpen size={24} />
@@ -619,27 +649,29 @@ export default function FullStudyPage() {
 
                 {/* Quiz View */}
                 {selectedTopicId && selectedTopic && !showSummary && (
-                  <div className="space-y-4">
-                    <Button 
-                      variant="ghost" 
+                  <div className="space-y-4 w-full">
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={() => setSelectedTopicId(null)}
                     >
                       ← Back to Topics
                     </Button>
-                    
-                    <TopicQuizCard
-                      key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
-                      topicTitle={selectedTopic.title}
-                      questions={selectedTopic.questions || []}
-                      currentQuestionIndex={localQuestionIndex}
-                      onAnswer={handleAnswerForSelected}
-                      onMoveToNext={handleMoveToNextForSelected}
-                      onComplete={handleCompleteForSelected}
-                      onSkipToNext={handleSkipToNextTopic}
-                      score={selectedTopic.score}
-                      isCompleted={selectedTopic.completed || false}
-                    />
+
+                    <div className="w-full">
+                      <TopicQuizCard
+                        key={`quiz-${selectedTopicId}-q${localQuestionIndex}`}
+                        topicTitle={selectedTopic.title}
+                        questions={selectedTopic.questions || []}
+                        currentQuestionIndex={localQuestionIndex}
+                        onAnswer={handleAnswerForSelected}
+                        onMoveToNext={handleMoveToNextForSelected}
+                        onComplete={handleCompleteForSelected}
+                        onSkipToNext={handleSkipToNextTopic}
+                        score={selectedTopic.score}
+                        isCompleted={selectedTopic.completed || false}
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -663,7 +695,7 @@ export default function FullStudyPage() {
           <ResizableHandle withHandle />
 
           {/* Right Side - Topic Tree View */}
-          <ResizablePanel defaultSize={50} minSize={30}>
+          <ResizablePanel defaultSize={60} minSize={30}>
             <div className="h-full flex flex-col">
               <div className="px-4 py-2 border-b border-border">
                 <h2 className="text-sm font-semibold text-foreground">Learning Progress Tree</h2>
@@ -692,7 +724,7 @@ export default function FullStudyPage() {
                   minZoom={0.5}
                   maxZoom={1.5}
                   defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
-                  attributionPosition="bottom-left"
+                  proOptions={{ hideAttribution: true }}
                   className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105 [&_.react-flow__node]:cursor-pointer"
                 >
                   <Controls 
@@ -727,11 +759,11 @@ export default function FullStudyPage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 rounded bg-gradient-to-br from-primary to-purple-600 shadow-sm shadow-primary/30"></div>
-                    <span className="text-muted-foreground">Current</span>
+                    <span className="text-muted-foreground">Subtopics</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-muted border border-dashed border-border"></div>
-                    <span className="text-muted-foreground">Locked</span>
+                    <div className="w-3 h-3 rounded bg-gradient-to-br from-amber-600 to-orange-600 shadow-sm shadow-amber-500/30"></div>
+                    <span className="text-muted-foreground">Main Topics</span>
                   </div>
                 </div>
               </div>

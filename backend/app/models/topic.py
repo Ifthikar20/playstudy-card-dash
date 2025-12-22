@@ -19,6 +19,7 @@ class Topic(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     order_index = Column(Integer, nullable=False, default=0)  # Order in the session
+    page_number = Column(Integer, nullable=True)  # Page/slide number in original document (1-indexed)
     is_category = Column(Boolean, default=False)  # True if this is a category/section, False if it's a leaf topic with questions
     completed = Column(Boolean, default=False)
     score = Column(Integer, nullable=True)  # Score as percentage 0-100
@@ -26,6 +27,9 @@ class Topic(Base):
 
     # Encrypted mentor narrative (data at rest)
     encrypted_mentor_narrative = Column(Text, nullable=True)  # Encrypted AI-generated mentor content
+
+    # TODO: Encrypted TTS audio - pending database migration
+    # encrypted_tts_audio = Column(Text, nullable=True)  # Encrypted base64 audio
 
     # DEPRECATED: Plain text mentor narrative (kept for backward compatibility during migration)
     # Will be removed after migration is complete
@@ -73,6 +77,40 @@ class Topic(Base):
 
         # Fallback to plain text (backward compatibility)
         return self.mentor_narrative
+
+    # TODO: Uncomment when encrypted_tts_audio column is added to database
+    # def set_tts_audio(self, audio_base64: Optional[str]):
+    #     """
+    #     Set and encrypt TTS audio (base64-encoded)
+    #
+    #     Args:
+    #         audio_base64: Base64-encoded audio data to encrypt and store
+    #     """
+    #     from app.core.field_encryption import field_encryption
+    #
+    #     if audio_base64:
+    #         self.encrypted_tts_audio = field_encryption.encrypt(audio_base64)
+    #     else:
+    #         self.encrypted_tts_audio = None
+    #
+    # def get_tts_audio(self) -> Optional[str]:
+    #     """
+    #     Get and decrypt TTS audio
+    #
+    #     Returns:
+    #         Decrypted base64 audio data or None
+    #     """
+    #     from app.core.field_encryption import field_encryption
+    #
+    #     if self.encrypted_tts_audio:
+    #         try:
+    #             return field_encryption.decrypt(self.encrypted_tts_audio)
+    #         except Exception as e:
+    #             import logging
+    #             logging.error(f"Failed to decrypt TTS audio for topic {self.id}: {e}")
+    #             return None
+    #
+    #     return None
 
     def __repr__(self):
         return f"<Topic(id={self.id}, title={self.title}, session_id={self.study_session_id})>"

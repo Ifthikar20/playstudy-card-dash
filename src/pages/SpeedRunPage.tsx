@@ -1,468 +1,511 @@
 import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { Upload, FileText, Send, ChevronLeft, ChevronRight, ArrowLeft, ArrowRight, CheckCircle2, XCircle, Timer, Layers, AlertCircle, PlusCircle, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Timer, FileText, RotateCw } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+// Set up PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface Question {
+  id: string;
   question: string;
   options: string[];
   correctAnswer: number;
+  explanation: string;
 }
-
-interface FlashCard {
-  front: string;
-  back: string;
-}
-
-const sampleQuestions: Question[] = [
-  {
-    question: "What is the capital of France?",
-    options: ["London", "Berlin", "Paris", "Madrid"],
-    correctAnswer: 2
-  },
-  {
-    question: "What is 2 + 2?",
-    options: ["3", "4", "5", "6"],
-    correctAnswer: 1
-  },
-  {
-    question: "Who wrote Romeo and Juliet?",
-    options: ["Charles Dickens", "William Shakespeare", "Jane Austen", "Mark Twain"],
-    correctAnswer: 1
-  }
-];
-
-const sampleCards: FlashCard[] = [
-  { front: "What is the capital of France?", back: "Paris" },
-  { front: "What is 2 + 2?", back: "4" },
-  { front: "Who wrote Romeo and Juliet?", back: "William Shakespeare" }
-];
 
 export default function SpeedRunPage() {
-  const { currentSession, speedRunMode, setSpeedRunMode, addXp, createSpeedRun } = useAppStore();
-  const [studyMaterial, setStudyMaterial] = useState("");
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const { sessionId } = useParams<{ sessionId?: string }>();
+  const { currentSession, speedRunMode, setSpeedRunMode, addXp, answerQuestion } = useAppStore();
+
+  // Document viewing state
+  const [currentPageNumber, setCurrentPageNumber] = useState(1);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pdfScale, setPdfScale] = useState(1.0);
+
+  // Question state
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
-  const [speedRunStarted, setSpeedRunStarted] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [isFlipped, setIsFlipped] = useState(false);
   const [timeLeft, setTimeLeft] = useState(15);
 
-  // Generate questions and cards from session topics
-  const sessionQuestions = currentSession?.extractedTopics?.flatMap(topic => topic.questions) || sampleQuestions;
-  const sessionCards: FlashCard[] = currentSession?.extractedTopics?.flatMap(topic =>
-    topic.questions.map(q => ({
-      front: q.question,
-      back: q.options[q.correctAnswer]
-    }))
-  ) || sampleCards;
+  // Flip card state
+  const [isFlipped, setIsFlipped] = useState(false);
 
-  // Auto-start speed run if we have content from the session
-  useEffect(() => {
-    if (currentSession?.extractedTopics && currentSession.extractedTopics.length > 0 && !speedRunStarted) {
-      setSpeedRunStarted(true);
-      setStudyMaterial(currentSession.studyContent || '');
+  // Get file info
+  const fileContent = currentSession?.fileContent;
+  const fileType = currentSession?.fileType;
+
+  // Get all subtopics and their questions
+  const subtopics = currentSession?.extractedTopics?.flatMap(category =>
+    category.subtopics || []
+  ) || [];
+
+  // For now, show all questions (we'll implement page-specific filtering later)
+  const allQuestions = subtopics.flatMap(topic => topic.questions || []);
+  const currentQuestion = allQuestions[currentQuestionIndex];
+
+  // Get questions for current page (temporary - using all questions for now)
+  const currentPageQuestions = allQuestions;
+
+  // Convert base64 to blob URL for PDF viewing
+  const getPdfDataUrl = () => {
+    if (fileType === 'pdf' && fileContent) {
+      return `data:application/pdf;base64,${fileContent}`;
     }
-  }, [currentSession, speedRunStarted]);
+    return null;
+  };
+
+  // Handle PDF document load success
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+  };
 
   // Timer for MCQ mode
   useEffect(() => {
-    if (speedRunStarted && speedRunMode === 'mcq' && !hasAnswered && timeLeft > 0) {
+    if (speedRunMode === 'mcq' && timeLeft > 0 && !hasAnswered) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
+    } else if (timeLeft === 0 && !hasAnswered) {
+      // Auto-submit when time runs out
+      handleAnswerSelect(selectedAnswer ?? -1);
     }
-    if (timeLeft === 0 && !hasAnswered) {
-      setHasAnswered(true);
-    }
-  }, [timeLeft, speedRunStarted, speedRunMode, hasAnswered]);
+  }, [speedRunMode, timeLeft, hasAnswered]);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setStudyMaterial(e.target?.result as string);
-      };
-      reader.readAsText(file);
-    }
+  // Reset question state when changing questions
+  const resetQuestionState = () => {
+    setSelectedAnswer(null);
+    setHasAnswered(false);
+    setTimeLeft(15);
+    setIsFlipped(false);
   };
 
-  const handleAnswerSelect = (index: number) => {
-    if (hasAnswered) return;
-    setSelectedAnswer(index);
+  // Handle answer selection
+  const handleAnswerSelect = (answerIndex: number) => {
+    if (hasAnswered || !currentQuestion) return;
+
+    setSelectedAnswer(answerIndex);
     setHasAnswered(true);
-    if (index === sessionQuestions[currentIndex].correctAnswer) {
+
+    const isCorrect = answerIndex === currentQuestion.correctAnswer;
+    if (isCorrect) {
       setCorrectCount(correctCount + 1);
-      addXp(10);
+      addXp(10); // Award XP for correct answer
+    }
+
+    if (currentSession) {
+      answerQuestion(currentSession.id, currentQuestion.id, isCorrect);
     }
   };
 
-  const nextItem = () => {
-    const maxIndex = speedRunMode === 'mcq' ? sessionQuestions.length - 1 : sessionCards.length - 1;
-    if (currentIndex < maxIndex) {
-      setCurrentIndex(currentIndex + 1);
-      setSelectedAnswer(null);
-      setHasAnswered(false);
-      setIsFlipped(false);
-      setTimeLeft(15);
+  // Navigate to next question
+  const nextQuestion = () => {
+    if (currentQuestionIndex < allQuestions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      resetQuestionState();
     }
   };
 
-  const prevItem = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setSelectedAnswer(null);
-      setHasAnswered(false);
-      setIsFlipped(false);
-      setTimeLeft(15);
+  // Navigate to previous question
+  const previousQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
+      resetQuestionState();
     }
   };
 
-  const getOptionStyle = (index: number) => {
-    if (!hasAnswered) {
-      return selectedAnswer === index
-        ? "border-primary bg-primary/10"
-        : "border-border hover:border-primary/50 hover:bg-accent/50";
+  // Navigate to next page
+  const nextPage = () => {
+    if (currentPageNumber < numPages) {
+      setCurrentPageNumber(currentPageNumber + 1);
     }
-
-    const isCorrect = index === sessionQuestions[currentIndex].correctAnswer;
-    const isSelected = index === selectedAnswer;
-
-    if (isCorrect) return "border-green-500 bg-green-100 dark:bg-green-900/30";
-    if (isSelected && !isCorrect) return "border-red-500 bg-red-100 dark:bg-red-900/30";
-    return "border-border opacity-50";
   };
 
-  const totalItems = speedRunMode === 'mcq' ? sessionQuestions.length : sessionCards.length;
+  // Navigate to previous page
+  const previousPage = () => {
+    if (currentPageNumber > 1) {
+      setCurrentPageNumber(currentPageNumber - 1);
+    }
+  };
 
-  // No session selected - show create new option
   if (!currentSession) {
     return (
-      <div className="min-h-screen bg-background flex w-full">
+      <div className="flex h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center pt-24">
-          <div className="text-center p-8 max-w-md">
-            <Zap size={64} className="mx-auto text-primary mb-4" />
-            <h2 className="text-2xl font-bold text-foreground mb-2">Start Speed Run</h2>
-            <p className="text-muted-foreground mb-6">
-              Create a new study session or select an existing one from the sidebar to begin Speed Run mode.
-            </p>
-            <Button 
-              size="lg" 
-              onClick={() => {
-                const name = prompt("Enter a name for your new study session:");
-                if (name) {
-                  alert(`Session "${name}" would be created. Select it from the sidebar to continue.`);
-                }
-              }}
-              className="gap-2"
-            >
-              <PlusCircle size={20} />
-              Create New Study Session
-            </Button>
-          </div>
-        </main>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">Session not found</p>
+        </div>
       </div>
     );
   }
 
-  // Session selected but no topics extracted yet
-  if (!currentSession.extractedTopics || currentSession.extractedTopics.length === 0) {
+  if (!fileContent) {
     return (
-      <div className="min-h-screen bg-background flex w-full">
+      <div className="flex h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center p-8 max-w-md">
-            <Zap size={64} className="mx-auto text-primary mb-4" />
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              No Content for "{currentSession.title}"
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              This session needs study content. Please upload content through the Create Study Session dialog first.
-            </p>
-            <Button
-              size="lg"
-              onClick={() => window.location.href = '/'}
-              className="gap-2"
-            >
-              <PlusCircle size={20} />
-              Go to Dashboard
-            </Button>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+            <p className="text-muted-foreground">No document uploaded for this session</p>
           </div>
-        </main>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex w-full">
+    <div className="flex h-screen bg-background">
       <Sidebar />
-      
-      <div className="flex-1 flex flex-col lg:flex-row overflow-auto">
-        {/* Left Panel - Study Material Upload */}
-        <div className={`${isMinimized ? 'w-0 lg:w-12' : 'w-full lg:w-1/3'} bg-card border-b lg:border-r lg:border-b-0 border-border transition-all duration-300 overflow-hidden`}>
-          {isMinimized ? (
-            <div className="hidden lg:block p-3">
-              <button
-                onClick={() => setIsMinimized(false)}
-                className="w-full p-2 rounded-lg hover:bg-accent transition-colors"
-              >
-                <ChevronRight size={20} className="mx-auto text-muted-foreground" />
-              </button>
-            </div>
-          ) : (
-            <div className="p-4 lg:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg lg:text-xl font-semibold text-foreground">
-                  {currentSession.title}
-                </h2>
-                <button
-                  onClick={() => setIsMinimized(true)}
-                  className="hidden lg:block p-2 rounded-lg hover:bg-accent transition-colors"
-                >
-                  <ChevronLeft size={20} className="text-muted-foreground" />
-                </button>
-              </div>
-
-              {/* Mode Selection */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-foreground mb-2">Study Mode</label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSpeedRunMode('cards')}
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                      speedRunMode === 'cards' 
-                        ? 'border-primary bg-primary/10 text-primary' 
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <Layers size={18} />
-                    <span className="text-sm font-medium">Flip Cards</span>
-                  </button>
-                  <button
-                    onClick={() => setSpeedRunMode('mcq')}
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                      speedRunMode === 'mcq' 
-                        ? 'border-primary bg-primary/10 text-primary' 
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <Timer size={18} />
-                    <span className="text-sm font-medium">Timed MCQ</span>
-                  </button>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-border rounded-lg p-4 lg:p-6 text-center hover:border-primary transition-colors">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    className="hidden"
-                    accept=".txt,.pdf,.doc,.docx"
-                    onChange={handleFileUpload}
-                  />
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <Upload size={24} className="mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">Click to upload study material</p>
-                    <p className="text-xs text-muted-foreground/60">PDF, DOC, TXT files</p>
-                  </label>
-                </div>
-
+      <main className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Left Panel - Document Viewer */}
+          <ResizablePanel defaultSize={50} minSize={30} maxSize={70}>
+            <div className="h-full overflow-y-auto p-6 bg-muted/20">
+              <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Or paste your content here:
-                  </label>
-                  <textarea
-                    value={studyMaterial}
-                    onChange={(e) => setStudyMaterial(e.target.value)}
-                    placeholder="Paste your study material here..."
-                    className="w-full h-32 lg:h-48 px-3 py-2 border border-border bg-background text-foreground rounded-lg resize-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  />
+                  <h2 className="text-2xl font-bold">{currentSession.title}</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {fileType?.toUpperCase()} Document
+                  </p>
                 </div>
 
-                <button
-                  onClick={() => { setSpeedRunStarted(true); setTimeLeft(15); }}
-                  disabled={!studyMaterial.trim()}
-                  className="w-full flex items-center justify-center px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground transition-colors"
-                >
-                  <Send size={16} className="mr-2" />
-                  Start {speedRunMode === 'mcq' ? 'Timed MCQ' : 'Flip Cards'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Center Panel */}
-        <div className="flex-1 p-4 lg:p-6 flex flex-col relative">
-          {!speedRunStarted ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <FileText size={48} className="mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-2">
-                  Upload Study Material to Start
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Choose between flip cards or timed MCQ mode
-                </p>
-              </div>
-            </div>
-          ) : speedRunMode === 'mcq' ? (
-            /* MCQ Mode */
-            <div className="max-w-2xl mx-auto w-full h-full flex flex-col justify-center">
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-muted-foreground">
-                    Question {currentIndex + 1} of {totalItems}
-                  </span>
-                  <div className="flex items-center gap-4">
-                    <span className={`text-sm font-bold flex items-center gap-1 ${timeLeft <= 5 ? 'text-red-500' : 'text-primary'}`}>
-                      <Timer size={16} />
-                      {timeLeft}s
-                    </span>
-                    <span className="text-sm font-medium text-primary">
-                      Score: {correctCount}/{currentIndex + (hasAnswered ? 1 : 0)}
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${((currentIndex + 1) / totalItems) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-card rounded-xl border border-border p-6 lg:p-8 mb-6 shadow-sm">
-                <h3 className="text-lg lg:text-xl font-semibold text-foreground mb-6">
-                  {sessionQuestions[currentIndex]?.question}
-                </h3>
-
-                <div className="space-y-3">
-                  {sessionQuestions[currentIndex]?.options.map((option, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleAnswerSelect(index)}
-                      disabled={hasAnswered}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition-all flex items-center justify-between ${getOptionStyle(index)}`}
+                {fileType === 'pdf' && numPages > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={previousPage}
+                      disabled={currentPageNumber <= 1}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                          {String.fromCharCode(65 + index)}
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm font-medium min-w-[80px] text-center">
+                      Page {currentPageNumber} / {numPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={nextPage}
+                      disabled={currentPageNumber >= numPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Document Display */}
+              <Card>
+                <CardContent className="p-6">
+                  {fileType === 'pdf' ? (
+                    <div className="flex flex-col items-center">
+                      <Document
+                        file={getPdfDataUrl()}
+                        onLoadSuccess={onDocumentLoadSuccess}
+                        loading={
+                          <div className="flex items-center justify-center p-8">
+                            <RotateCw className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        }
+                        error={
+                          <div className="text-center p-8 text-destructive">
+                            Failed to load PDF document
+                          </div>
+                        }
+                      >
+                        <Page
+                          pageNumber={currentPageNumber}
+                          scale={pdfScale}
+                          renderTextLayer={true}
+                          renderAnnotationLayer={true}
+                        />
+                      </Document>
+
+                      {/* Zoom controls */}
+                      <div className="mt-4 flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPdfScale(Math.max(0.5, pdfScale - 0.1))}
+                        >
+                          -
+                        </Button>
+                        <span className="text-sm px-3 py-1 bg-muted rounded flex items-center">
+                          {Math.round(pdfScale * 100)}%
                         </span>
-                        <span className="text-foreground">{option}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPdfScale(Math.min(2.0, pdfScale + 0.1))}
+                        >
+                          +
+                        </Button>
                       </div>
-                      {hasAnswered && index === sessionQuestions[currentIndex].correctAnswer && (
-                        <CheckCircle2 className="text-green-600 dark:text-green-400" size={20} />
-                      )}
-                      {hasAnswered && index === selectedAnswer && index !== sessionQuestions[currentIndex].correctAnswer && (
-                        <XCircle className="text-red-600 dark:text-red-400" size={20} />
-                      )}
-                    </button>
-                  ))}
+                    </div>
+                  ) : (
+                    // For non-PDF files, show extracted text content
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <div className="whitespace-pre-wrap">
+                        {currentSession.studyContent || "No content available"}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Page progress bar */}
+              {fileType === 'pdf' && numPages > 0 && (
+                <div className="mt-4">
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-purple-600 transition-all"
+                      style={{ width: `${(currentPageNumber / numPages) * 100}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={prevItem}
-                  disabled={currentIndex === 0}
-                  className="flex items-center px-4 lg:px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ArrowLeft size={20} className="mr-2" />
-                  Previous
-                </button>
-
-                <button
-                  onClick={nextItem}
-                  disabled={currentIndex === totalItems - 1 || !hasAnswered}
-                  className="flex items-center px-4 lg:px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                  <ArrowRight size={20} className="ml-2" />
-                </button>
-              </div>
+              )}
             </div>
-          ) : (
-            /* Flip Cards Mode */
-            <div className="max-w-2xl mx-auto w-full h-full flex flex-col justify-center">
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-muted-foreground">
-                    Card {currentIndex + 1} of {totalItems}
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${((currentIndex + 1) / totalItems) * 100}%` }}
-                  />
-                </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Right Panel - Questions */}
+          <ResizablePanel defaultSize={50} minSize={30}>
+            <div className="h-full overflow-y-auto p-6">
+              {/* Mode Toggle */}
+              <div className="flex gap-2 p-1 bg-muted rounded-lg mb-6">
+                <button
+                  onClick={() => setSpeedRunMode('cards')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    speedRunMode === 'cards'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Flip Cards
+                </button>
+                <button
+                  onClick={() => setSpeedRunMode('mcq')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    speedRunMode === 'mcq'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Timed MCQ
+                </button>
               </div>
 
-              <div 
-                className="relative h-64 lg:h-80 mb-6 cursor-pointer perspective-1000"
-                onClick={() => setIsFlipped(!isFlipped)}
-              >
-                <div 
-                  className="absolute inset-0 w-full h-full transition-transform duration-500"
-                  style={{
-                    transformStyle: 'preserve-3d',
-                    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
-                  }}
-                >
-                  <div className="absolute inset-0 w-full h-full bg-card rounded-xl border border-border p-8 flex items-center justify-center shadow-lg"
-                       style={{ backfaceVisibility: 'hidden' }}>
-                    <div className="text-center">
-                      <h3 className="text-xl font-semibold text-foreground mb-4">
-                        {sessionCards[currentIndex]?.front}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">Click to reveal answer</p>
+              {currentQuestion ? (
+                <>
+                  {/* Question Header */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-muted-foreground">
+                        Question {currentQuestionIndex + 1} / {allQuestions.length}
+                      </span>
+                      <span className="text-sm font-medium text-primary">
+                        Correct: {correctCount} / {currentQuestionIndex + (hasAnswered ? 1 : 0)}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="absolute inset-0 w-full h-full bg-primary/10 rounded-xl border border-primary/20 p-8 flex items-center justify-center shadow-lg"
-                       style={{
-                         backfaceVisibility: 'hidden',
-                         transform: 'rotateY(180deg)'
-                       }}>
-                    <div className="text-center">
-                      <h3 className="text-xl font-medium text-foreground mb-4">
-                        {sessionCards[currentIndex]?.back}
-                      </h3>
-                      <p className="text-sm text-primary">Click to go back</p>
+                  {speedRunMode === 'mcq' ? (
+                    /* MCQ Mode */
+                    <div className="space-y-6">
+                      {/* Timer */}
+                      <div className="flex justify-center">
+                        <div className={`relative w-20 h-20 ${timeLeft <= 5 ? 'animate-pulse' : ''}`}>
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle
+                              cx="40"
+                              cy="40"
+                              r="36"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                              fill="none"
+                              className="text-muted"
+                            />
+                            <circle
+                              cx="40"
+                              cy="40"
+                              r="36"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                              fill="none"
+                              strokeDasharray={`${2 * Math.PI * 36}`}
+                              strokeDashoffset={`${2 * Math.PI * 36 * (1 - timeLeft / 15)}`}
+                              className={`transition-all ${
+                                timeLeft <= 5 ? 'text-destructive' : 'text-primary'
+                              }`}
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className={`text-2xl font-bold ${
+                              timeLeft <= 5 ? 'text-destructive' : 'text-foreground'
+                            }`}>
+                              {timeLeft}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Question */}
+                      <Card>
+                        <CardContent className="p-6">
+                          <h3 className="text-lg font-semibold mb-4">{currentQuestion.question}</h3>
+
+                          {/* Options */}
+                          <div className="space-y-3">
+                            {currentQuestion.options.map((option, index) => {
+                              const isSelected = selectedAnswer === index;
+                              const isCorrect = index === currentQuestion.correctAnswer;
+                              const showResult = hasAnswered;
+
+                              return (
+                                <button
+                                  key={index}
+                                  onClick={() => handleAnswerSelect(index)}
+                                  disabled={hasAnswered}
+                                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                                    showResult && isCorrect
+                                      ? 'border-green-500 bg-green-500/10'
+                                      : showResult && isSelected && !isCorrect
+                                      ? 'border-destructive bg-destructive/10'
+                                      : isSelected
+                                      ? 'border-primary bg-primary/10'
+                                      : 'border-border hover:border-primary/50'
+                                  } ${hasAnswered ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold">
+                                      {String.fromCharCode(65 + index)}
+                                    </span>
+                                    <span className="flex-1">{option}</span>
+                                    {showResult && isCorrect && (
+                                      <CheckCircle2 className="flex-shrink-0 text-green-600" size={20} />
+                                    )}
+                                    {showResult && isSelected && !isCorrect && (
+                                      <XCircle className="flex-shrink-0 text-destructive" size={20} />
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Explanation */}
+                          {hasAnswered && (
+                            <div className="mt-6 p-4 bg-muted rounded-lg">
+                              <p className="text-sm font-semibold mb-2">Explanation:</p>
+                              <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
                     </div>
+                  ) : (
+                    /* Flip Cards Mode */
+                    <div className="flex items-center justify-center min-h-[400px]">
+                      <div
+                        onClick={() => setIsFlipped(!isFlipped)}
+                        className="relative w-full max-w-md h-80 cursor-pointer"
+                        style={{ perspective: '1000px' }}
+                      >
+                        <div
+                          className="relative w-full h-full transition-transform duration-500"
+                          style={{
+                            transformStyle: 'preserve-3d',
+                            transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                          }}
+                        >
+                          {/* Front - Question */}
+                          <Card
+                            className="absolute w-full h-full"
+                            style={{
+                              backfaceVisibility: 'hidden',
+                            }}
+                          >
+                            <CardContent className="p-8 h-full flex flex-col items-center justify-center">
+                              <h3 className="text-xl font-semibold text-center mb-4">
+                                {currentQuestion.question}
+                              </h3>
+                              <p className="text-sm text-muted-foreground text-center mt-auto">
+                                Click to reveal answer
+                              </p>
+                            </CardContent>
+                          </Card>
+
+                          {/* Back - Answer */}
+                          <Card
+                            className="absolute w-full h-full bg-gradient-to-br from-primary to-purple-600"
+                            style={{
+                              backfaceVisibility: 'hidden',
+                              transform: 'rotateY(180deg)',
+                            }}
+                          >
+                            <CardContent className="p-8 h-full flex flex-col items-center justify-center text-white">
+                              <h3 className="text-xl font-semibold text-center mb-6">
+                                {currentQuestion.options[currentQuestion.correctAnswer]}
+                              </h3>
+                              <p className="text-sm opacity-90 text-center">
+                                {currentQuestion.explanation}
+                              </p>
+                              <p className="text-xs opacity-75 text-center mt-auto">
+                                Click to see question
+                              </p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Navigation */}
+                  <div className="mt-6 flex gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={previousQuestion}
+                      disabled={currentQuestionIndex === 0}
+                      className="flex-1"
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-2" />
+                      Previous
+                    </Button>
+                    <Button
+                      onClick={nextQuestion}
+                      disabled={currentQuestionIndex >= allQuestions.length - 1}
+                      className="flex-1"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center space-y-4">
+                    <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <p className="text-muted-foreground">No questions available for this page</p>
                   </div>
                 </div>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={prevItem}
-                  disabled={currentIndex === 0}
-                  className="flex items-center px-4 lg:px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ArrowLeft size={20} className="mr-2" />
-                  Previous
-                </button>
-
-                <button
-                  onClick={nextItem}
-                  disabled={currentIndex === totalItems - 1}
-                  className="flex items-center px-4 lg:px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                  <ArrowRight size={20} className="ml-2" />
-                </button>
-              </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </main>
     </div>
   );
 }

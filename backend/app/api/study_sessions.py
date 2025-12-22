@@ -9,8 +9,11 @@ from datetime import datetime
 from openai import OpenAI
 import json
 import io
+import uuid
+import logging
 from docx import Document
 from PyPDF2 import PdfReader
+from pptx import Presentation
 
 from app.config import settings
 from app.dependencies import get_current_active_user, get_db
@@ -20,7 +23,84 @@ from app.models.topic import Topic
 from app.models.question import Question
 from app.core.rate_limit import limiter
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchema]:
+    """
+    Build hierarchical topic structure with questions for a study session.
+
+    Args:
+        session: StudySession database model
+        db: Database session
+
+    Returns:
+        List of TopicSchema objects with nested subtopics and questions
+    """
+    from app.models.question import Question
+
+    # Fetch all topics for this session
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == session.id
+    ).order_by(Topic.order_index).all()
+
+    # Build hierarchical structure
+    categories = [t for t in all_topics if t.is_category and t.parent_topic_id is None]
+
+    result_topics = []
+
+    for cat_idx, category in enumerate(categories):
+        # Get subtopics for this category
+        subtopics = [t for t in all_topics if t.parent_topic_id == category.id]
+
+        category_schema = TopicSchema(
+            id=f"category-{cat_idx+1}",
+            db_id=category.id,
+            title=category.title,
+            description=category.description or "",
+            isCategory=True,
+            parentTopicId=None,
+            questions=[],
+            subtopics=[]
+        )
+
+        for sub_idx, subtopic in enumerate(subtopics):
+            # Fetch questions for this subtopic
+            questions = db.query(Question).filter(
+                Question.topic_id == subtopic.id
+            ).order_by(Question.order_index).all()
+
+            questions_list = [
+                QuestionSchema(
+                    id=f"topic-{sub_idx+1}-q{q.order_index+1}",
+                    question=q.question,
+                    options=q.options,
+                    correctAnswer=q.correct_answer,
+                    explanation=q.explanation
+                )
+                for q in questions
+            ]
+
+            subtopic_schema = TopicSchema(
+                id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                db_id=subtopic.id,
+                title=subtopic.title,
+                description=subtopic.description or "",
+                questions=questions_list,
+                completed=subtopic.completed or False,
+                score=subtopic.score,
+                currentQuestionIndex=subtopic.current_question_index or 0,
+                isCategory=False,
+                parentTopicId=f"category-{cat_idx+1}",
+                subtopics=[]
+            )
+            category_schema.subtopics.append(subtopic_schema)
+
+        result_topics.append(category_schema)
+
+    return result_topics
 
 
 def analyze_content_complexity(text: str) -> dict:
@@ -114,12 +194,92 @@ def analyze_content_complexity(text: str) -> dict:
     }
 
 
+def detect_file_type_and_extract(content: str) -> tuple[str, str, str]:
+    """
+    Detect file type and extract text from uploaded content.
+
+    Returns:
+        tuple: (extracted_text, file_type, original_base64_content)
+            - extracted_text: The text content extracted from the file
+            - file_type: One of: 'pdf', 'pptx', 'docx', 'txt'
+            - original_base64_content: The original base64 encoded file
+    """
+    import base64
+
+    content_bytes = None
+    file_type = 'txt'
+    original_base64 = content
+
+    # First, aggressively try base64 decode (most likely for file uploads)
+    try:
+        # Try base64 decode - this is the most common format for file uploads via JSON
+        decoded = base64.b64decode(content, validate=False)
+        # Check if it looks like a valid file (ZIP/docx or PDF)
+        if decoded.startswith(b'PK\x03\x04') or decoded.startswith(b'%PDF'):
+            content_bytes = decoded
+    except Exception:
+        pass
+
+    # Process based on file type if we have bytes
+    if content_bytes:
+        # Office documents (ZIP/docx/pptx)
+        if content_bytes.startswith(b'PK\x03\x04'):
+            # Try PowerPoint first
+            try:
+                prs = Presentation(io.BytesIO(content_bytes))
+                text_parts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            text_parts.append(shape.text)
+                text = '\n'.join(text_parts)
+                if text.strip():
+                    return (text, 'pptx', original_base64)
+                raise ValueError("No text content found in PowerPoint")
+            except Exception as pptx_error:
+                # If PowerPoint fails, try Word document
+                try:
+                    doc = Document(io.BytesIO(content_bytes))
+                    text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                    if text.strip():
+                        return (text, 'docx', original_base64)
+                    raise ValueError("No text content found in Word document")
+                except Exception as docx_error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to extract text from Office document. PowerPoint error: {str(pptx_error)}. Word error: {str(docx_error)}"
+                    )
+
+        # PDF file
+        elif content_bytes.startswith(b'%PDF'):
+            try:
+                pdf_reader = PdfReader(io.BytesIO(content_bytes))
+                text = '\n'.join([page.extract_text() for page in pdf_reader.pages])
+                if text.strip():
+                    return (text, 'pdf', original_base64)
+                raise ValueError("No text content found in PDF")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to extract text from PDF: {str(e)}"
+                )
+
+    # If we got here, treat as plain text
+    cleaned_text = content.replace('\ufffd', '').strip()
+    if cleaned_text and len(cleaned_text) > 10:
+        return (cleaned_text, 'txt', original_base64)
+
+    # Last resort - return original
+    return (content, 'txt', original_base64)
+
+
 def extract_text_from_content(content: str) -> str:
     """
     Extract readable text from uploaded content.
     Handles:
     - Plain text
     - Word documents (.docx)
+    - PowerPoint presentations (.pptx, .ppt)
     - PDF files
     - Base64 encoded content
 
@@ -155,19 +315,33 @@ def extract_text_from_content(content: str) -> str:
 
     # Process based on file type if we have bytes
     if content_bytes:
-        # Word document (ZIP/docx)
+        # Office documents (ZIP/docx/pptx)
         if content_bytes.startswith(b'PK\x03\x04'):
+            # Try PowerPoint first
             try:
-                doc = Document(io.BytesIO(content_bytes))
-                text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                prs = Presentation(io.BytesIO(content_bytes))
+                text_parts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            text_parts.append(shape.text)
+                text = '\n'.join(text_parts)
                 if text.strip():
                     return text
-                raise ValueError("No text content found in Word document")
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to extract text from Word document: {str(e)}"
-                )
+                raise ValueError("No text content found in PowerPoint")
+            except Exception as pptx_error:
+                # If PowerPoint fails, try Word document
+                try:
+                    doc = Document(io.BytesIO(content_bytes))
+                    text = '\n'.join([paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip()])
+                    if text.strip():
+                        return text
+                    raise ValueError("No text content found in Word document")
+                except Exception as docx_error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to extract text from Office document. PowerPoint error: {str(pptx_error)}. Word error: {str(docx_error)}"
+                    )
 
         # PDF file
         elif content_bytes.startswith(b'%PDF'):
@@ -248,11 +422,14 @@ class CreateStudySessionResponse(BaseModel):
     id: str  # UUID as string
     title: str
     studyContent: str
+    fileContent: Optional[str] = None  # Original file (base64)
+    fileType: Optional[str] = None  # File type: pdf, pptx, docx, txt
     extractedTopics: List[TopicSchema]
     progress: int
     topics: int
     hasFullStudy: bool
     hasSpeedRun: bool
+    createdAt: Optional[int] = None  # Unix timestamp in milliseconds
 
 
 @router.post("/analyze-content", response_model=ContentAnalysisResponse)
@@ -331,8 +508,8 @@ async def create_study_session_with_ai(
         - 5 requests per minute per user
     """
     try:
-        # Extract text from content (handles Word docs, PDFs, plain text)
-        extracted_text = extract_text_from_content(data.content)
+        # Extract text and detect file type
+        extracted_text, file_type, file_content = detect_file_type_and_extract(data.content)
 
         if not extracted_text or len(extracted_text.strip()) < 50:
             raise HTTPException(
@@ -349,7 +526,7 @@ async def create_study_session_with_ai(
         # For 11-15 topics: 4 categories
         # For 16-20 topics: 5 categories
         num_categories = max(2, min(5, (data.num_topics + 3) // 4))
-        subtopics_per_category = max(2, data.num_topics // num_categories)
+        subtopics_per_category = max(1, data.num_topics // num_categories)  # Allow single subtopic per category
 
         # Initialize DeepSeek client (OpenAI-compatible)
         client = OpenAI(
@@ -370,13 +547,14 @@ Content Analysis:
 
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
-2. Within each category, identify {subtopics_per_category}-{subtopics_per_category + 2} specific subtopics that can have quiz questions
+2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
 3. Each subtopic should be substantial enough for {data.questions_per_topic} questions
 4. Provide clear titles and brief descriptions for both categories and subtopics
 5. Organize logically (foundational concepts first, building to advanced topics)
-6. Aim for EXACTLY {data.num_topics} total subtopics across all categories
+6. Create AT LEAST {data.num_topics} total subtopics across all categories, but feel free to add more if the content warrants it
 7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
 8. Ensure subtopics are distinct and cover different aspects of the material
+9. Don't limit yourself - if there are more concepts to cover, create additional subtopics
 
 Return ONLY a valid JSON object in this EXACT format:
 {{
@@ -433,7 +611,9 @@ Return ONLY a valid JSON object in this EXACT format:
             user_id=current_user.id,
             title=session_title,
             topic=categories_data[0]["title"] if categories_data else "General Study",
-            study_content=extracted_text,  # Store the extracted text, not binary
+            study_content=extracted_text,  # Store the extracted text
+            file_content=file_content,  # Store original file (base64)
+            file_type=file_type,  # Store file type (pdf, pptx, docx, txt)
             topics_count=total_subtopics,
             has_full_study=True,
             has_speed_run=True,
@@ -588,11 +768,14 @@ Return in this EXACT format:
             id=str(study_session.id),  # Convert UUID to string
             title=study_session.title,
             studyContent=study_session.study_content,
+            fileContent=study_session.file_content,
+            fileType=study_session.file_type,
             extractedTopics=all_topics,
             progress=0,
             topics=len(all_topics),
             hasFullStudy=True,
-            hasSpeedRun=True
+            hasSpeedRun=True,
+            createdAt=int(study_session.created_at.timestamp() * 1000) if study_session.created_at else None
         )
 
     except Exception as api_error:
@@ -617,9 +800,19 @@ async def get_study_session(
     Returns the complete session data including the hierarchical topic structure
     with all questions, allowing users to resume their study progress.
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'. This may be an old session that is no longer compatible."
+        )
+
     # Fetch session with eager loading of topics and questions
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -628,7 +821,7 @@ async def get_study_session(
 
     # Fetch all topics for this session
     all_topics = db.query(Topic).filter(
-        Topic.study_session_id == session_id
+        Topic.study_session_id == uuid_obj
     ).order_by(Topic.order_index).all()
 
     # Build hierarchical structure
@@ -697,11 +890,14 @@ async def get_study_session(
         id=str(session.id),  # Convert UUID to string
         title=session.title,
         studyContent=session.study_content or "",
+        fileContent=session.file_content,
+        fileType=session.file_type,
         extractedTopics=result_topics,
         progress=progress,
         topics=total_subtopics,
         hasFullStudy=session.has_full_study or False,
-        hasSpeedRun=session.has_speed_run or False
+        hasSpeedRun=session.has_speed_run or False,
+        createdAt=int(session.created_at.timestamp() * 1000) if session.created_at else None
     )
 
 
@@ -716,8 +912,18 @@ async def delete_study_session(
 
     This will cascade delete all topics and questions associated with the session.
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -741,8 +947,18 @@ async def archive_study_session(
 
     Changes the session status to 'archived'.
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -786,9 +1002,19 @@ async def update_topic_progress(
     Rate Limits:
         - 60 requests per minute per user
     """
+    # Validate UUID format
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        logger.error(f"❌ Invalid session ID format: {session_id} (expected UUID)")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid session ID format. Expected UUID, got: '{session_id}'."
+        )
+
     # Verify session belongs to user
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
+        StudySession.id == uuid_obj,
         StudySession.user_id == current_user.id
     ).first()
 
@@ -798,7 +1024,7 @@ async def update_topic_progress(
     # Find the topic
     topic = db.query(Topic).filter(
         Topic.id == topic_id,
-        Topic.study_session_id == session_id
+        Topic.study_session_id == uuid_obj
     ).first()
 
     if not topic:
@@ -811,7 +1037,7 @@ async def update_topic_progress(
 
     # Update session progress (percentage of completed subtopics)
     all_topics = db.query(Topic).filter(
-        Topic.study_session_id == session_id,
+        Topic.study_session_id == uuid_obj,
         Topic.is_category == False  # Only count leaf topics
     ).all()
 
