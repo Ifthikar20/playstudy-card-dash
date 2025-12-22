@@ -17,7 +17,26 @@ mermaid.initialize({
   theme: 'default',
   securityLevel: 'loose',
   fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+  suppressErrors: true, // Suppress internal errors, we'll handle them
 });
+
+/**
+ * Clean and validate Mermaid code
+ * Fixes common syntax issues
+ */
+function cleanMermaidCode(code: string): string {
+  // Remove extra whitespace and normalize line endings
+  let cleaned = code.trim().replace(/\r\n/g, '\n');
+
+  // Fix common syntax issues in mindmaps
+  // Remove invalid ::: syntax that's not properly formatted
+  cleaned = cleaned.replace(/:::\s*(\w+)\s*:/g, ':::$1');
+
+  // Ensure proper spacing around operators
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
+
+  return cleaned;
+}
 
 export function MermaidDiagram({ code, className = '' }: MermaidDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -32,11 +51,14 @@ export function MermaidDiagram({ code, className = '' }: MermaidDiagramProps) {
         setIsRendering(true);
         setError(null);
 
+        // Clean the code before rendering
+        const cleanedCode = cleanMermaidCode(code);
+
         // Generate unique ID for this diagram
         const id = `mermaid-${Math.random().toString(36).substring(7)}`;
 
         // Render the diagram
-        const { svg } = await mermaid.render(id, code);
+        const { svg } = await mermaid.render(id, cleanedCode);
 
         // Insert SVG into container
         if (containerRef.current) {
@@ -44,7 +66,21 @@ export function MermaidDiagram({ code, className = '' }: MermaidDiagramProps) {
         }
       } catch (err) {
         console.error('Mermaid rendering error:', err);
-        setError('Failed to render diagram');
+
+        // Extract meaningful error message
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+
+        // Check for common syntax errors
+        if (errorMessage.includes('Parse error')) {
+          setError('Diagram syntax error - AI generated invalid diagram code');
+        } else if (errorMessage.includes('SPACELIST')) {
+          setError('Diagram formatting issue - improper spacing detected');
+        } else {
+          setError('Failed to render diagram');
+        }
+
+        // Log the problematic code for debugging
+        console.error('Problematic Mermaid code:', code);
       } finally {
         setIsRendering(false);
       }
@@ -55,8 +91,18 @@ export function MermaidDiagram({ code, className = '' }: MermaidDiagramProps) {
 
   if (error) {
     return (
-      <div className={`p-4 border border-destructive/50 bg-destructive/10 rounded-lg ${className}`}>
-        <p className="text-sm text-destructive">⚠️ {error}</p>
+      <div className={`p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg ${className}`}>
+        <div className="flex items-start gap-2">
+          <span className="text-lg">⚠️</span>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+              {error}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              The AI-generated diagram contains syntax errors. The content is still available in text form.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
