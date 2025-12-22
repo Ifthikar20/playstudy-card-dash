@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Timer, FileText, RotateCw, Settings } from "lucide-react";
@@ -16,6 +16,8 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { getStudySession } from "@/services/api";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import mammoth from "mammoth";
+import { renderAsync } from "docx-preview";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -61,6 +63,11 @@ export default function SpeedRunPage() {
 
   // Highlighting state
   const [highlightedText, setHighlightedText] = useState<string | null>(null);
+
+  // Document rendering
+  const docxContainerRef = useRef<HTMLDivElement>(null);
+  const [renderedDocHTML, setRenderedDocHTML] = useState<string>("");
+  const [isRenderingDoc, setIsRenderingDoc] = useState(false);
 
   // Get file info
   const fileContent = currentSession?.fileContent;
@@ -141,6 +148,36 @@ export default function SpeedRunPage() {
       setHighlightedText(null);
     }
   }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText]);
+
+  // Render Word documents when loaded
+  useEffect(() => {
+    const renderWordDocument = async () => {
+      if (!fileContent || !fileType) return;
+
+      if (['docx', 'doc'].includes(fileType.toLowerCase())) {
+        setIsRenderingDoc(true);
+        try {
+          // Convert base64 to array buffer
+          const binaryString = atob(fileContent);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          // Use mammoth to convert to HTML
+          const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
+          setRenderedDocHTML(result.value);
+        } catch (error) {
+          console.error('Error rendering Word document:', error);
+          setRenderedDocHTML("");
+        } finally {
+          setIsRenderingDoc(false);
+        }
+      }
+    };
+
+    renderWordDocument();
+  }, [fileContent, fileType]);
 
   // Timer for MCQ mode
   useEffect(() => {
@@ -238,6 +275,16 @@ export default function SpeedRunPage() {
       }
       return <span key={index}>{part}</span>;
     });
+  };
+
+  // Function to highlight text in HTML content
+  const getHighlightedHTML = (html: string) => {
+    if (!highlightedText) return html;
+
+    const searchText = highlightedText.trim();
+    const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+
+    return html.replace(regex, '<mark style="background-color: #86efac; color: #166534; padding: 2px 4px; border-radius: 2px; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
   };
 
   // Show loading state while fetching session
@@ -408,15 +455,43 @@ export default function SpeedRunPage() {
                         </div>
                       )}
                     </div>
-                  ) : (
-                    // For Word/PowerPoint/Text files, show extracted content with highlighting
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                      {fileType && ['docx', 'doc', 'pptx', 'ppt'].includes(fileType.toLowerCase()) && (
-                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/20 border-l-4 border-blue-500 rounded text-sm text-blue-800 dark:text-blue-200">
-                          <p className="font-medium mb-1">📄 {fileType.toUpperCase()} Document</p>
-                          <p className="text-xs opacity-80">Showing extracted text content with preserved formatting</p>
+                  ) : fileType && ['docx', 'doc'].includes(fileType.toLowerCase()) ? (
+                    // For Word documents, show rendered HTML with full formatting
+                    <div className="w-full">
+                      {isRenderingDoc ? (
+                        <div className="flex items-center justify-center p-8">
+                          <RotateCw className="h-8 w-8 animate-spin text-primary" />
+                          <span className="ml-2 text-muted-foreground">Rendering document...</span>
+                        </div>
+                      ) : renderedDocHTML ? (
+                        <div className="max-h-[70vh] overflow-y-auto">
+                          <div
+                            className="prose prose-sm max-w-none dark:prose-invert p-4"
+                            dangerouslySetInnerHTML={{ __html: getHighlightedHTML(renderedDocHTML) }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                          <div className="whitespace-pre-wrap">
+                            {getHighlightedContent()}
+                          </div>
                         </div>
                       )}
+                    </div>
+                  ) : fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) ? (
+                    // For PowerPoint, show extracted content (TODO: Add slide-by-slide rendering)
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 rounded text-sm text-orange-800 dark:text-orange-200">
+                        <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
+                        <p className="text-xs opacity-80">Showing extracted content. Slide-by-slide view coming soon!</p>
+                      </div>
+                      <div className="whitespace-pre-wrap">
+                        {getHighlightedContent()}
+                      </div>
+                    </div>
+                  ) : (
+                    // For other text files, show extracted content with highlighting
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
                       <div className="whitespace-pre-wrap">
                         {getHighlightedContent()}
                       </div>
