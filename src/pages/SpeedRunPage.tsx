@@ -16,8 +16,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { getStudySession } from "@/services/api";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import mammoth from "mammoth";
-import { renderAsync } from "docx-preview";
+import * as mammoth from "mammoth";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
