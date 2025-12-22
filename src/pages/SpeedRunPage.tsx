@@ -389,9 +389,34 @@ export default function SpeedRunPage() {
                         </Button>
                       </div>
                     </div>
+                  ) : fileType && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(fileType.toLowerCase()) ? (
+                    // For image files, display the image
+                    <div className="flex flex-col items-center gap-4">
+                      <img
+                        src={`data:image/${fileType};base64,${fileContent}`}
+                        alt="Study material"
+                        className="max-w-full h-auto rounded-lg shadow-lg"
+                        style={{ maxHeight: '70vh' }}
+                      />
+                      {highlightedText && (
+                        <div className="w-full p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded">
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            <mark className="bg-green-200 dark:bg-green-900/40 px-2 py-1 rounded">
+                              {highlightedText}
+                            </mark>
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    // For non-PDF files, show extracted text content with highlighting
+                    // For Word/PowerPoint/Text files, show extracted content with highlighting
                     <div className="prose prose-sm max-w-none dark:prose-invert">
+                      {fileType && ['docx', 'doc', 'pptx', 'ppt'].includes(fileType.toLowerCase()) && (
+                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/20 border-l-4 border-blue-500 rounded text-sm text-blue-800 dark:text-blue-200">
+                          <p className="font-medium mb-1">📄 {fileType.toUpperCase()} Document</p>
+                          <p className="text-xs opacity-80">Showing extracted text content with preserved formatting</p>
+                        </div>
+                      )}
                       <div className="whitespace-pre-wrap">
                         {getHighlightedContent()}
                       </div>
