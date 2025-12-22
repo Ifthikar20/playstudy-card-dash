@@ -59,6 +59,9 @@ export default function SpeedRunPage() {
   // Flip card state
   const [isFlipped, setIsFlipped] = useState(false);
 
+  // Highlighting state
+  const [highlightedText, setHighlightedText] = useState<string | null>(null);
+
   // Get file info
   const fileContent = currentSession?.fileContent;
   const fileType = currentSession?.fileType;
@@ -130,6 +133,15 @@ export default function SpeedRunPage() {
     setNumPages(numPages);
   };
 
+  // Update highlighted text when question changes or is answered
+  useEffect(() => {
+    if (hasAnswered && currentQuestion?.sourceText) {
+      setHighlightedText(currentQuestion.sourceText);
+    } else {
+      setHighlightedText(null);
+    }
+  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText]);
+
   // Timer for MCQ mode
   useEffect(() => {
     if (speedRunMode === 'mcq' && timeLeft > 0 && !hasAnswered) {
@@ -195,6 +207,37 @@ export default function SpeedRunPage() {
     if (currentPageNumber > 1) {
       setCurrentPageNumber(currentPageNumber - 1);
     }
+  };
+
+  // Function to highlight text in study content
+  const getHighlightedContent = () => {
+    if (!currentSession?.studyContent || !highlightedText) {
+      return currentSession?.studyContent || "No content available";
+    }
+
+    const content = currentSession.studyContent;
+    const searchText = highlightedText.trim();
+
+    // Find the text (case-insensitive)
+    const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+
+    // Split by the search text and wrap matches in highlight spans
+    const parts = content.split(regex);
+
+    return parts.map((part, index) => {
+      if (regex.test(part)) {
+        return (
+          <mark
+            key={index}
+            className="bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-100 px-1 rounded animate-pulse"
+            style={{ animationDuration: '2s', animationIterationCount: '3' }}
+          >
+            {part}
+          </mark>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
   };
 
   // Show loading state while fetching session
@@ -279,7 +322,23 @@ export default function SpeedRunPage() {
               <Card>
                 <CardContent className="p-6">
                   {fileType === 'pdf' ? (
-                    <div className="flex flex-col items-center">
+                    <div className="flex flex-col items-center relative">
+                      {/* Add custom CSS for PDF text highlighting */}
+                      {highlightedText && (
+                        <style>{`
+                          .react-pdf__Page__textContent mark {
+                            background-color: #86efac !important;
+                            color: #166534 !important;
+                            padding: 2px 4px;
+                            border-radius: 2px;
+                            animation: highlight-pulse 2s ease-in-out 3;
+                          }
+                          @keyframes highlight-pulse {
+                            0%, 100% { background-color: #86efac; }
+                            50% { background-color: #4ade80; }
+                          }
+                        `}</style>
+                      )}
                       <Document
                         file={getPdfDataUrl()}
                         onLoadSuccess={onDocumentLoadSuccess}
@@ -299,6 +358,13 @@ export default function SpeedRunPage() {
                           scale={pdfScale}
                           renderTextLayer={true}
                           renderAnnotationLayer={true}
+                          customTextRenderer={(textItem) => {
+                            // Highlight matching text in PDF
+                            if (highlightedText && textItem.str.includes(highlightedText)) {
+                              return `<mark>${textItem.str}</mark>`;
+                            }
+                            return textItem.str;
+                          }}
                         />
                       </Document>
 
@@ -324,10 +390,10 @@ export default function SpeedRunPage() {
                       </div>
                     </div>
                   ) : (
-                    // For non-PDF files, show extracted text content
+                    // For non-PDF files, show extracted text content with highlighting
                     <div className="prose prose-sm max-w-none dark:prose-invert">
                       <div className="whitespace-pre-wrap">
-                        {currentSession.studyContent || "No content available"}
+                        {getHighlightedContent()}
                       </div>
                     </div>
                   )}
@@ -514,25 +580,14 @@ export default function SpeedRunPage() {
                                 <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
                               </div>
 
-                              {/* Source Text from Document */}
+                              {/* Highlight indicator */}
                               {currentQuestion.sourceText && (
-                                <div className="p-4 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded-lg">
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                    <p className="text-sm font-semibold text-green-800 dark:text-green-200">
-                                      Referenced in your study material
+                                <div className="p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded-lg">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                    <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                                      Source text highlighted in your document ←
                                     </p>
-                                  </div>
-                                  <div className="bg-green-100/50 dark:bg-green-900/20 p-3 rounded border border-green-200/50 dark:border-green-800/50">
-                                    <p className="text-sm text-green-700 dark:text-green-300 leading-relaxed">
-                                      {currentQuestion.sourceText}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-3 text-xs text-green-600 dark:text-green-400">
-                                    <div className="flex items-center gap-1">
-                                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
-                                      <span>You can find this text in your document on the left</span>
-                                    </div>
                                   </div>
                                 </div>
                               )}
