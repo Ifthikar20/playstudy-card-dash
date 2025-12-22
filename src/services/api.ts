@@ -504,6 +504,8 @@ export const createStudySessionWithAI = async (
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
       studyContent: data.studyContent,
+      fileContent: data.fileContent,
+      fileType: data.fileType,
       extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
   } catch (error) {
