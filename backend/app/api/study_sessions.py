@@ -732,10 +732,18 @@ Return in this EXACT format:
                 # Save questions to database
                 questions_list = []
                 for q_idx, q_data in enumerate(questions_data):
+                    # Ensure options is a list (handle double-encoded JSON)
+                    options = q_data["options"]
+                    if isinstance(options, str):
+                        try:
+                            options = json.loads(options)
+                        except json.JSONDecodeError:
+                            options = ["Option A", "Option B", "Option C", "Option D"]
+
                     question = Question(
                         topic_id=subtopic.id,
                         question=q_data["question"],
-                        options=q_data["options"],
+                        options=options,
                         correct_answer=q_data["correctAnswer"],
                         explanation=q_data["explanation"],
                         source_text=q_data.get("sourceText"),  # Include source text from AI
@@ -745,7 +753,7 @@ Return in this EXACT format:
                     questions_list.append(QuestionSchema(
                         id=f"topic-{overall_idx+1}-q{q_idx+1}",
                         question=q_data["question"],
-                        options=q_data["options"],
+                        options=options,
                         correctAnswer=q_data["correctAnswer"],
                         explanation=q_data["explanation"],
                         sourceText=q_data.get("sourceText")  # Include in response
