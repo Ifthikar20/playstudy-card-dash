@@ -13,6 +13,8 @@ import {
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { getStudySession } from "@/services/api";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -27,7 +29,16 @@ interface Question {
 
 export default function SpeedRunPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
-  const { currentSession, speedRunMode, setSpeedRunMode, addXp, answerQuestion } = useAppStore();
+  const currentSession = useAppStore(state => state.currentSession);
+  const setCurrentSession = useAppStore(state => state.setCurrentSession);
+  const studySessions = useAppStore(state => state.studySessions);
+  const speedRunMode = useAppStore(state => state.speedRunMode);
+  const setSpeedRunMode = useAppStore(state => state.setSpeedRunMode);
+  const addXp = useAppStore(state => state.addXp);
+  const answerQuestion = useAppStore(state => state.answerQuestion);
+
+  // Session loading state
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
 
   // Document viewing state
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
@@ -59,6 +70,48 @@ export default function SpeedRunPage() {
 
   // Get questions for current page (temporary - using all questions for now)
   const currentPageQuestions = allQuestions;
+
+  // Load session data based on URL parameter
+  useEffect(() => {
+    const loadSession = async () => {
+      // If sessionId is in URL, load that session
+      if (sessionId) {
+        console.log('📥 [SpeedRun] URL sessionId detected:', sessionId);
+
+        // Check if we already have this session in the store
+        const existingSession = studySessions.find(s => s.id === sessionId);
+
+        // If currentSession doesn't match URL, update it
+        if (!currentSession || currentSession.id !== sessionId) {
+          if (existingSession) {
+            console.log('📂 [SpeedRun] Setting session from store:', sessionId);
+            setCurrentSession(existingSession);
+          }
+        }
+
+        // Load full session data if not already loaded or if extractedTopics is missing
+        if (!currentSession?.extractedTopics || currentSession.extractedTopics.length === 0 || currentSession.id !== sessionId) {
+          console.log('📥 [SpeedRun] Loading session data from backend:', sessionId);
+          setIsLoadingSession(true);
+
+          try {
+            const fullSession = await getStudySession(sessionId);
+            console.log('✅ [SpeedRun] Session data loaded:', fullSession);
+
+            // Update the current session with the full data
+            setCurrentSession(fullSession);
+          } catch (error: any) {
+            console.error('❌ [SpeedRun] Failed to load session:', error);
+            // If loading fails, show error (handled by the UI below)
+          } finally {
+            setIsLoadingSession(false);
+          }
+        }
+      }
+    };
+
+    loadSession();
+  }, [sessionId, currentSession?.id, studySessions, setCurrentSession]);
 
   // Convert base64 to blob URL for PDF viewing
   const getPdfDataUrl = () => {
@@ -139,6 +192,18 @@ export default function SpeedRunPage() {
       setCurrentPageNumber(currentPageNumber - 1);
     }
   };
+
+  // Show loading state while fetching session
+  if (isLoadingSession) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <LoadingSpinner message="Loading speedrun session..." size="lg" />
+        </div>
+      </div>
+    );
+  }
 
   if (!currentSession) {
     return (
