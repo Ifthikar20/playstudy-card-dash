@@ -7,6 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 from openai import OpenAI
+from anthropic import Anthropic
 import json
 import io
 import uuid
@@ -532,11 +533,18 @@ async def create_study_session_with_ai(
         num_categories = max(2, min(5, (data.num_topics + 3) // 4))
         subtopics_per_category = max(1, data.num_topics // num_categories)  # Allow single subtopic per category
 
-        # Initialize DeepSeek client (OpenAI-compatible)
-        client = OpenAI(
-            api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com"
-        )
+        # Initialize AI client (prefer Claude Haiku for speed, fallback to DeepSeek)
+        use_claude = bool(settings.ANTHROPIC_API_KEY)
+
+        if use_claude:
+            anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+            logger.info("🚀 Using Claude Haiku for fast generation")
+        else:
+            deepseek_client = OpenAI(
+                api_key=settings.DEEPSEEK_API_KEY,
+                base_url="https://api.deepseek.com"
+            )
+            logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
         topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories and subtopics.
@@ -577,14 +585,22 @@ Return ONLY a valid JSON object in this EXACT format:
 }}"""
 
         # Call AI to extract topics
-        topics_response = client.chat.completions.create(
-            model="deepseek-chat",
-            max_tokens=2048,
-            temperature=0.7,
-            messages=[{"role": "user", "content": topics_prompt}]
-        )
-
-        topics_text = topics_response.choices[0].message.content
+        if use_claude:
+            topics_response = anthropic_client.messages.create(
+                model="claude-haiku-4-20250514",
+                max_tokens=2048,
+                temperature=0.7,
+                messages=[{"role": "user", "content": topics_prompt}]
+            )
+            topics_text = topics_response.content[0].text
+        else:
+            topics_response = deepseek_client.chat.completions.create(
+                model="deepseek-chat",
+                max_tokens=2048,
+                temperature=0.7,
+                messages=[{"role": "user", "content": topics_prompt}]
+            )
+            topics_text = topics_response.choices[0].message.content
 
         # Parse hierarchical topics
         try:
@@ -626,10 +642,12 @@ Return ONLY a valid JSON object in this EXACT format:
         db.add(study_session)
         db.flush()  # Get the session ID
 
-        # Step 3: Create categories and subtopics with questions
+        # Step 3: Create categories and subtopics first, then batch generate ALL questions
         all_topics = []
+        subtopic_map = {}  # Map to track subtopics for batch question assignment
         overall_idx = 0
 
+        # First pass: Create all categories and subtopics in database
         for cat_idx, category_data in enumerate(categories_data):
             # Create category topic in database
             category_topic = Topic(
@@ -637,16 +655,16 @@ Return ONLY a valid JSON object in this EXACT format:
                 title=category_data["title"],
                 description=category_data.get("description", ""),
                 order_index=cat_idx,
-                is_category=True,  # This is a category, not a leaf topic
+                is_category=True,
                 parent_topic_id=None
             )
             db.add(category_topic)
-            db.flush()  # Get the category ID
+            db.flush()
 
-            # Create category schema for response
+            # Create category schema
             category_schema = TopicSchema(
                 id=f"category-{cat_idx+1}",
-                db_id=category_topic.id,  # Include database ID
+                db_id=category_topic.id,
                 title=category_data["title"],
                 description=category_data.get("description", ""),
                 isCategory=True,
@@ -655,10 +673,9 @@ Return ONLY a valid JSON object in this EXACT format:
                 subtopics=[]
             )
 
-            # Process subtopics within this category
+            # Create all subtopics for this category
             subtopics_data = category_data.get("subtopics", [])
             for sub_idx, subtopic_data in enumerate(subtopics_data):
-                # Create subtopic in database
                 subtopic = Topic(
                     study_session_id=study_session.id,
                     parent_topic_id=category_topic.id,
@@ -668,20 +685,55 @@ Return ONLY a valid JSON object in this EXACT format:
                     is_category=False
                 )
                 db.add(subtopic)
-                db.flush()  # Get the subtopic ID
+                db.flush()
 
-                # Generate questions for this subtopic
-                questions_prompt = f"""Generate {data.questions_per_topic} multiple-choice questions about this subtopic from the study material.
+                # Track subtopic for later question assignment
+                subtopic_key = f"{cat_idx}-{sub_idx}"
+                subtopic_map[subtopic_key] = {
+                    "topic": subtopic,
+                    "category_data": category_data,
+                    "subtopic_data": subtopic_data,
+                    "schema": TopicSchema(
+                        id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                        db_id=subtopic.id,
+                        title=subtopic_data["title"],
+                        description=subtopic_data.get("description", ""),
+                        questions=[],
+                        completed=False,
+                        score=None,
+                        currentQuestionIndex=0,
+                        isCategory=False,
+                        parentTopicId=f"category-{cat_idx+1}",
+                        subtopics=[]
+                    ),
+                    "category_schema": category_schema
+                }
+                overall_idx += 1
 
-Category: {category_data['title']}
-Subtopic: {subtopic_data['title']}
-Description: {subtopic_data.get('description', '')}
+            all_topics.append(category_schema)
+
+        # Step 4: Generate ALL questions in ONE batch request
+        # Build comprehensive batch prompt listing all subtopics
+        batch_prompt = f"""Generate {data.questions_per_topic} multiple-choice questions for EACH of the following subtopics from the study material.
 
 Study Material:
 {extracted_text}
 
+SUBTOPICS TO COVER:
+"""
+
+        # Add all subtopics to the prompt
+        for cat_idx, category_data in enumerate(categories_data):
+            subtopics_data = category_data.get("subtopics", [])
+            for sub_idx, subtopic_data in enumerate(subtopics_data):
+                batch_prompt += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
+                batch_prompt += f"Category: {category_data['title']}\n"
+                batch_prompt += f"Subtopic: {subtopic_data['title']}\n"
+                batch_prompt += f"Description: {subtopic_data.get('description', '')}\n"
+
+        batch_prompt += f"""
 Requirements:
-1. Generate exactly {data.questions_per_topic} questions
+1. Generate exactly {data.questions_per_topic} questions for EACH subtopic listed above
 2. Each question must have exactly 4 options
 3. Questions should test understanding of the material
 4. Provide clear explanations
@@ -691,93 +743,111 @@ Requirements:
 8. Aim for 2-4 sentences of context (not just a fragment)
 9. Return ONLY valid JSON
 
-Return in this EXACT format:
+Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 {{
-  "questions": [
-    {{
-      "question": "Question text?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": 0,
-      "explanation": "Why this answer is correct",
-      "sourceText": "The complete sentence or paragraph from the study material, including surrounding context that makes it easy to find and understand. For example: 'When analyzing customer data, the instructions specify to analyze customers by CustomerID based on frequency (count of InvoiceNo) and total spending. The data should then be segmented into tiers: high, mid, low based on these metrics.'"
+  "subtopics": {{
+    "0-0": {{
+      "questions": [
+        {{
+          "question": "Question text?",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correctAnswer": 0,
+          "explanation": "Why this answer is correct",
+          "sourceText": "The complete sentence or paragraph from the study material with context."
+        }}
+      ]
+    }},
+    "0-1": {{
+      "questions": [...]
     }}
-  ]
+  }}
 }}"""
 
-                # Call AI to generate questions
-                questions_response = client.chat.completions.create(
-                    model="deepseek-chat",
-                    max_tokens=4096,
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": questions_prompt}]
+        # Make ONE API call for all questions
+        logger.info(f"📡 Generating {len(subtopic_map)} × {data.questions_per_topic} = {len(subtopic_map) * data.questions_per_topic} questions in batch...")
+
+        if use_claude:
+            batch_response = anthropic_client.messages.create(
+                model="claude-haiku-4-20250514",
+                max_tokens=16000,  # Large enough for all questions
+                temperature=0.7,
+                messages=[{"role": "user", "content": batch_prompt}]
+            )
+            batch_text = batch_response.content[0].text
+        else:
+            batch_response = deepseek_client.chat.completions.create(
+                model="deepseek-chat",
+                max_tokens=16000,
+                temperature=0.7,
+                messages=[{"role": "user", "content": batch_prompt}]
+            )
+            batch_text = batch_response.choices[0].message.content
+
+        # Parse batch response
+        try:
+            start_idx = batch_text.find('{')
+            end_idx = batch_text.rfind('}') + 1
+            batch_json = json.loads(batch_text[start_idx:end_idx])
+            subtopics_questions = batch_json.get("subtopics", {})
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.error(f"Failed to parse batch questions: {e}")
+            subtopics_questions = {}
+
+        # Step 5: Assign questions to subtopics
+        question_counter = 0
+        for subtopic_key, subtopic_info in subtopic_map.items():
+            subtopic = subtopic_info["topic"]
+            subtopic_schema = subtopic_info["schema"]
+            category_schema = subtopic_info["category_schema"]
+
+            # Get questions for this subtopic from batch response
+            questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
+
+            # Fallback if no questions generated
+            if not questions_data:
+                logger.warning(f"No questions found for subtopic {subtopic_key}, creating placeholders")
+                questions_data = [{
+                    "question": f"Question {i+1} about {subtopic.title}",
+                    "options": ["Option A", "Option B", "Option C", "Option D"],
+                    "correctAnswer": 0,
+                    "explanation": "This is a placeholder question."
+                } for i in range(data.questions_per_topic)]
+
+            # Save questions to database
+            questions_list = []
+            for q_idx, q_data in enumerate(questions_data[:data.questions_per_topic]):
+                # Ensure options is a list
+                options = q_data.get("options", ["A", "B", "C", "D"])
+                if isinstance(options, str):
+                    try:
+                        options = json.loads(options)
+                    except json.JSONDecodeError:
+                        options = ["Option A", "Option B", "Option C", "Option D"]
+
+                question = Question(
+                    topic_id=subtopic.id,
+                    question=q_data.get("question", f"Question {q_idx+1}"),
+                    options=options,
+                    correct_answer=q_data.get("correctAnswer", 0),
+                    explanation=q_data.get("explanation", ""),
+                    source_text=q_data.get("sourceText"),
+                    order_index=q_idx
                 )
+                db.add(question)
 
-                questions_text = questions_response.choices[0].message.content
+                questions_list.append(QuestionSchema(
+                    id=f"q-{question_counter}",
+                    question=q_data.get("question", f"Question {q_idx+1}"),
+                    options=options,
+                    correctAnswer=q_data.get("correctAnswer", 0),
+                    explanation=q_data.get("explanation", ""),
+                    sourceText=q_data.get("sourceText")
+                ))
+                question_counter += 1
 
-                # Parse questions
-                try:
-                    q_start = questions_text.find('{')
-                    q_end = questions_text.rfind('}') + 1
-                    questions_json = json.loads(questions_text[q_start:q_end])
-                    questions_data = questions_json["questions"][:data.questions_per_topic]
-                except (json.JSONDecodeError, KeyError, ValueError):
-                    # If parsing fails, create default questions
-                    questions_data = [{
-                        "question": f"Question {i+1} about {subtopic_data['title']}",
-                        "options": ["Option A", "Option B", "Option C", "Option D"],
-                        "correctAnswer": 0,
-                        "explanation": "This is a placeholder question."
-                    } for i in range(data.questions_per_topic)]
-
-                # Save questions to database
-                questions_list = []
-                for q_idx, q_data in enumerate(questions_data):
-                    # Ensure options is a list (handle double-encoded JSON)
-                    options = q_data["options"]
-                    if isinstance(options, str):
-                        try:
-                            options = json.loads(options)
-                        except json.JSONDecodeError:
-                            options = ["Option A", "Option B", "Option C", "Option D"]
-
-                    question = Question(
-                        topic_id=subtopic.id,
-                        question=q_data["question"],
-                        options=options,
-                        correct_answer=q_data["correctAnswer"],
-                        explanation=q_data["explanation"],
-                        source_text=q_data.get("sourceText"),  # Include source text from AI
-                        order_index=q_idx
-                    )
-                    db.add(question)
-                    questions_list.append(QuestionSchema(
-                        id=f"topic-{overall_idx+1}-q{q_idx+1}",
-                        question=q_data["question"],
-                        options=options,
-                        correctAnswer=q_data["correctAnswer"],
-                        explanation=q_data["explanation"],
-                        sourceText=q_data.get("sourceText")  # Include in response
-                    ))
-
-                # Build subtopic response
-                subtopic_schema = TopicSchema(
-                    id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
-                    db_id=subtopic.id,  # Include database ID for progress sync
-                    title=subtopic_data["title"],
-                    description=subtopic_data.get("description", ""),
-                    questions=questions_list,
-                    completed=False,
-                    score=None,
-                    currentQuestionIndex=0,
-                    isCategory=False,
-                    parentTopicId=f"category-{cat_idx+1}",
-                    subtopics=[]
-                )
-                category_schema.subtopics.append(subtopic_schema)
-                overall_idx += 1
-
-            # Add category to all_topics
-            all_topics.append(category_schema)
+            # Update subtopic schema with questions
+            subtopic_schema.questions = questions_list
+            category_schema.subtopics.append(subtopic_schema)
 
         # Commit all changes
         db.commit()

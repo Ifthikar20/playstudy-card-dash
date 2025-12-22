@@ -46,8 +46,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
-    # DeepSeek AI
-    DEEPSEEK_API_KEY: str
+    # AI Providers
+    DEEPSEEK_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
 
     # TTS Providers (Optional)
     OPENAI_API_KEY: Optional[str] = None
