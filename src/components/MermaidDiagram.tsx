@@ -90,21 +90,8 @@ export function MermaidDiagram({ code, className = '' }: MermaidDiagramProps) {
   }, [code]);
 
   if (error) {
-    return (
-      <div className={`p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg ${className}`}>
-        <div className="flex items-start gap-2">
-          <span className="text-lg">⚠️</span>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-              {error}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The AI-generated diagram contains syntax errors. The content is still available in text form.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    // Don't show anything when diagram fails - just hide it completely
+    return null;
   }
 
   return (
