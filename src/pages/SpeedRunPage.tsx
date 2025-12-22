@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Timer, FileText, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Timer, FileText, RotateCw, Settings } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { Slider } from "@/components/ui/slider";
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -25,6 +26,8 @@ interface Question {
   options: string[];
   correctAnswer: number;
   explanation: string;
+  sourceText?: string;  // Source text snippet from document
+  sourcePage?: number;  // Page number in source document
 }
 
 export default function SpeedRunPage() {
@@ -50,6 +53,7 @@ export default function SpeedRunPage() {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
+  const [timerDuration, setTimerDuration] = useState(15); // Configurable timer duration
   const [timeLeft, setTimeLeft] = useState(15);
 
   // Flip card state
@@ -141,7 +145,7 @@ export default function SpeedRunPage() {
   const resetQuestionState = () => {
     setSelectedAnswer(null);
     setHasAnswered(false);
-    setTimeLeft(15);
+    setTimeLeft(timerDuration);
     setIsFlipped(false);
   };
 
@@ -350,7 +354,7 @@ export default function SpeedRunPage() {
           <ResizablePanel defaultSize={50} minSize={30}>
             <div className="h-full overflow-y-auto p-6">
               {/* Mode Toggle */}
-              <div className="flex gap-2 p-1 bg-muted rounded-lg mb-6">
+              <div className="flex gap-2 p-1 bg-muted rounded-lg mb-4">
                 <button
                   onClick={() => setSpeedRunMode('cards')}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -372,6 +376,37 @@ export default function SpeedRunPage() {
                   Timed MCQ
                 </button>
               </div>
+
+              {/* Timer Duration Control - Only show in MCQ mode */}
+              {speedRunMode === 'mcq' && (
+                <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Timer Duration</span>
+                    </div>
+                    <span className="text-sm font-bold text-primary">{timerDuration}s</span>
+                  </div>
+                  <Slider
+                    value={[timerDuration]}
+                    onValueChange={(value) => {
+                      setTimerDuration(value[0]);
+                      if (!hasAnswered) {
+                        setTimeLeft(value[0]);
+                      }
+                    }}
+                    min={5}
+                    max={60}
+                    step={5}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>5s</span>
+                    <span>30s</span>
+                    <span>60s</span>
+                  </div>
+                </div>
+              )}
 
               {currentQuestion ? (
                 <>
@@ -411,7 +446,7 @@ export default function SpeedRunPage() {
                               strokeWidth="4"
                               fill="none"
                               strokeDasharray={`${2 * Math.PI * 36}`}
-                              strokeDashoffset={`${2 * Math.PI * 36 * (1 - timeLeft / 15)}`}
+                              strokeDashoffset={`${2 * Math.PI * 36 * (1 - timeLeft / timerDuration)}`}
                               className={`transition-all ${
                                 timeLeft <= 5 ? 'text-destructive' : 'text-primary'
                               }`}
@@ -473,9 +508,29 @@ export default function SpeedRunPage() {
 
                           {/* Explanation */}
                           {hasAnswered && (
-                            <div className="mt-6 p-4 bg-muted rounded-lg">
-                              <p className="text-sm font-semibold mb-2">Explanation:</p>
-                              <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                            <div className="mt-6 space-y-3">
+                              <div className="p-4 bg-muted rounded-lg">
+                                <p className="text-sm font-semibold mb-2">Explanation:</p>
+                                <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                              </div>
+
+                              {/* Source Text from Document */}
+                              {currentQuestion.sourceText && (
+                                <div className="p-4 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded-lg">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    <p className="text-sm font-semibold text-green-800 dark:text-green-200">
+                                      Source from Document:
+                                    </p>
+                                  </div>
+                                  <p className="text-sm text-green-700 dark:text-green-300 italic bg-green-100/50 dark:bg-green-900/20 p-3 rounded">
+                                    "{currentQuestion.sourceText}"
+                                  </p>
+                                  <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                                    This text appears in the document on the left ←
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           )}
                         </CardContent>

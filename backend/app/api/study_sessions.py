@@ -78,7 +78,9 @@ def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchem
                     question=q.question,
                     options=q.options,
                     correctAnswer=q.correct_answer,
-                    explanation=q.explanation
+                    explanation=q.explanation,
+                    sourceText=q.source_text,
+                    sourcePage=q.source_page
                 )
                 for q in questions
             ]
@@ -374,6 +376,8 @@ class QuestionSchema(BaseModel):
     options: List[str]
     correctAnswer: int
     explanation: str
+    sourceText: Optional[str] = None  # Source text snippet from document
+    sourcePage: Optional[int] = None  # Page number in source document
 
 
 class TopicSchema(BaseModel):
@@ -681,7 +685,9 @@ Requirements:
 2. Each question must have exactly 4 options
 3. Questions should test understanding of the material
 4. Provide clear explanations
-5. Return ONLY valid JSON
+5. For EACH question, include the exact text snippet from the study material that the question is based on
+6. Keep source text concise but identifiable (2-3 sentences maximum)
+7. Return ONLY valid JSON
 
 Return in this EXACT format:
 {{
@@ -690,7 +696,8 @@ Return in this EXACT format:
       "question": "Question text?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": 0,
-      "explanation": "Why this answer is correct"
+      "explanation": "Why this answer is correct",
+      "sourceText": "The exact sentence or paragraph from the study material where this information appears"
     }}
   ]
 }}"""
@@ -729,6 +736,7 @@ Return in this EXACT format:
                         options=q_data["options"],
                         correct_answer=q_data["correctAnswer"],
                         explanation=q_data["explanation"],
+                        source_text=q_data.get("sourceText"),  # Include source text from AI
                         order_index=q_idx
                     )
                     db.add(question)
@@ -737,7 +745,8 @@ Return in this EXACT format:
                         question=q_data["question"],
                         options=q_data["options"],
                         correctAnswer=q_data["correctAnswer"],
-                        explanation=q_data["explanation"]
+                        explanation=q_data["explanation"],
+                        sourceText=q_data.get("sourceText")  # Include in response
                     ))
 
                 # Build subtopic response
@@ -856,7 +865,9 @@ async def get_study_session(
                     question=q.question,
                     options=q.options,
                     correctAnswer=q.correct_answer,
-                    explanation=q.explanation
+                    explanation=q.explanation,
+                    sourceText=q.source_text,
+                    sourcePage=q.source_page
                 )
                 for q in questions
             ]
