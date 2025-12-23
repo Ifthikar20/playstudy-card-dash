@@ -404,7 +404,7 @@ class CreateStudySessionRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit for base64 encoded files (large PDFs)
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
-    questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
+    questions_per_topic: int = Field(default=50, ge=10, le=200)  # Increased to 200 to allow maximum question generation
     progressive_load: bool = Field(default=False)  # DISABLED: Generate ALL questions upfront for better UX
 
 
@@ -828,14 +828,16 @@ Return ONLY a valid JSON object in this EXACT format:
                 # Build prompt for this chunk and subtopic batch
                 batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
-IMPORTANT: Generate MAXIMUM questions per subtopic based on content depth:
-- Simple subtopic with limited content: 5-10 questions minimum
-- Moderate subtopic with decent coverage: 10-15 questions
-- Complex subtopic with extensive material: 15-30 questions
-- Generate questions for ALL listed subtopics below
-- GOAL: Create the MAXIMUM number of quality, non-duplicate questions the content supports
-- Extract every testable concept from the material
+CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
+- Extract EVERY testable concept, fact, principle, and detail from the material
+- Simple subtopic: Minimum 10-20 questions (extract every detail)
+- Moderate subtopic: 20-40 questions (comprehensive coverage)
+- Complex subtopic: 40-100+ questions (exhaustive extraction)
+- DO NOT stop at arbitrary limits - keep generating until you've covered ALL content
+- Break down complex concepts into multiple questions from different angles
+- Test the same concept in different ways (definition, application, comparison, analysis)
 - Cover different aspects and difficulty levels
+- Generate questions for ALL listed subtopics below
 
 DIFFICULTY LEVEL: CHALLENGING
 - Make questions that require DEEP analysis and critical thinking
@@ -853,18 +855,21 @@ SUBTOPICS TO COVER ({len(batch_keys)} subtopics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate MAXIMUM questions for EACH subtopic (5-30 questions based on content depth)
-2. NO DUPLICATES - each question must test a unique concept
-3. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
-4. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
-5. Distractors should be subtle and based on common misconceptions
-6. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
-7. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
-8. Source text should include the complete sentence(s) or paragraph that contains the answer
-9. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
-10. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
-11. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
-12. Return ONLY valid JSON
+1. Generate MAXIMUM questions for EACH subtopic (10-100+ questions based on content depth)
+2. Extract EVERY piece of testable information from the study material
+3. NO DUPLICATES - each question must test a unique concept or angle
+4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+5. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+6. Distractors should be subtle and based on common misconceptions
+7. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+8. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+9. Source text should include the complete sentence(s) or paragraph that contains the answer
+10. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+11. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+12. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
+13. Return ONLY valid JSON
+
+GOAL: Create 50-200+ questions per subtopic if the content supports it. More questions = better learning coverage!
 
 Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 {{
@@ -904,7 +909,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     if use_claude:
                         batch_response = anthropic_client.messages.create(
                             model="claude-3-5-haiku-20241022",
-                            max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
+                            max_tokens=16384,  # Maximum output tokens for more questions (increased from 8192)
                             temperature=0.7,
                             messages=[{"role": "user", "content": batch_prompt}]
                         )
@@ -912,7 +917,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     else:
                         batch_response = deepseek_client.chat.completions.create(
                             model="deepseek-chat",
-                            max_tokens=32000,  # Increased from 16000 to allow MORE questions
+                            max_tokens=64000,  # Increased from 32000 to allow MORE questions
                             temperature=0.7,
                             messages=[{"role": "user", "content": batch_prompt}]
                         )
@@ -1331,12 +1336,15 @@ async def generate_more_questions(
     # Build prompt
     batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
-IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
-- Simple subtopic with limited content: 3-5 questions
-- Moderate subtopic with decent coverage: 6-10 questions
-- Complex subtopic with extensive material: 10-20 questions
+CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
+- Extract EVERY testable concept, fact, principle, and detail from the material
+- Simple subtopic: Minimum 10-20 questions (extract every detail)
+- Moderate subtopic: 20-40 questions (comprehensive coverage)
+- Complex subtopic: 40-100+ questions (exhaustive extraction)
+- DO NOT stop at arbitrary limits - keep generating until you've covered ALL content
+- Break down complex concepts into multiple questions from different angles
+- Test the same concept in different ways (definition, application, comparison, analysis)
 - Generate questions for ALL listed subtopics below
-- The goal is to create AS MANY quality questions as the content supports
 
 DIFFICULTY LEVEL: CHALLENGING
 - Make questions that require DEEP analysis and critical thinking
@@ -1354,18 +1362,21 @@ SUBTOPICS TO COVER:
 {subtopics_list}
 
 Requirements:
-1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
-2. Prioritize quality over quantity - each question should test real understanding
-3. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
-4. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
-5. Distractors should be subtle and based on common misconceptions
-6. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
-7. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
-8. Source text should include the complete sentence(s) or paragraph that contains the answer
-9. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
-10. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
-11. For PDF documents, estimate which section/page the content appears in
-12. Return ONLY valid JSON
+1. Generate MAXIMUM questions for EACH subtopic (10-100+ questions based on content depth)
+2. Extract EVERY piece of testable information from the study material
+3. Prioritize comprehensive coverage - each question should test real understanding
+4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+5. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+6. Distractors should be subtle and based on common misconceptions
+7. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+8. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+9. Source text should include the complete sentence(s) or paragraph that contains the answer
+10. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+11. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+12. For PDF documents, estimate which section/page the content appears in
+13. Return ONLY valid JSON
+
+GOAL: Create 50-200+ questions per subtopic if the content supports it. More questions = better learning coverage!
 
 Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
 {{
@@ -1395,7 +1406,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         if use_claude:
             batch_response = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=8192,
+                max_tokens=16384,  # Increased for more questions
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
@@ -1403,7 +1414,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         else:
             batch_response = deepseek_client.chat.completions.create(
                 model="deepseek-chat",
-                max_tokens=16000,
+                max_tokens=64000,  # Increased for more questions
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
