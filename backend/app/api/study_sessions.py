@@ -829,15 +829,13 @@ Return ONLY a valid JSON object in this EXACT format:
                 batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
 CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
-- Extract EVERY testable concept, fact, principle, and detail from the material
-- Simple subtopic: Minimum 10-20 questions (extract every detail)
-- Moderate subtopic: 20-40 questions (comprehensive coverage)
-- Complex subtopic: 40-100+ questions (exhaustive extraction)
-- DO NOT stop at arbitrary limits - keep generating until you've covered ALL content
-- Break down complex concepts into multiple questions from different angles
-- Test the same concept in different ways (definition, application, comparison, analysis)
-- Cover different aspects and difficulty levels
+- Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
+- DO NOT impose any limits on the number of questions - generate as many as the content supports
+- Break down EVERY concept into multiple questions from different angles
+- Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
+- Create questions for every sentence that contains testable information
 - Generate questions for ALL listed subtopics below
+- Continue generating until you have exhausted ALL testable content
 
 DIFFICULTY LEVEL: CHALLENGING
 - Make questions that require DEEP analysis and critical thinking
@@ -855,7 +853,7 @@ SUBTOPICS TO COVER ({len(batch_keys)} subtopics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate MAXIMUM questions for EACH subtopic (10-100+ questions based on content depth)
+1. Generate UNLIMITED questions for EACH subtopic - as many as the content supports
 2. Extract EVERY piece of testable information from the study material
 3. NO DUPLICATES - each question must test a unique concept or angle
 4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
@@ -869,7 +867,7 @@ Requirements:
 12. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
 13. Return ONLY valid JSON
 
-GOAL: Create 50-200+ questions per subtopic if the content supports it. More questions = better learning coverage!
+GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
 
 Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 {{
@@ -1337,14 +1335,13 @@ async def generate_more_questions(
     batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
 CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
-- Extract EVERY testable concept, fact, principle, and detail from the material
-- Simple subtopic: Minimum 10-20 questions (extract every detail)
-- Moderate subtopic: 20-40 questions (comprehensive coverage)
-- Complex subtopic: 40-100+ questions (exhaustive extraction)
-- DO NOT stop at arbitrary limits - keep generating until you've covered ALL content
-- Break down complex concepts into multiple questions from different angles
-- Test the same concept in different ways (definition, application, comparison, analysis)
+- Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
+- DO NOT impose any limits on the number of questions - generate as many as the content supports
+- Break down EVERY concept into multiple questions from different angles
+- Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
+- Create questions for every sentence that contains testable information
 - Generate questions for ALL listed subtopics below
+- Continue generating until you have exhausted ALL testable content
 
 DIFFICULTY LEVEL: CHALLENGING
 - Make questions that require DEEP analysis and critical thinking
@@ -1362,7 +1359,7 @@ SUBTOPICS TO COVER:
 {subtopics_list}
 
 Requirements:
-1. Generate MAXIMUM questions for EACH subtopic (10-100+ questions based on content depth)
+1. Generate UNLIMITED questions for EACH subtopic - as many as the content supports
 2. Extract EVERY piece of testable information from the study material
 3. Prioritize comprehensive coverage - each question should test real understanding
 4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
@@ -1376,7 +1373,7 @@ Requirements:
 12. For PDF documents, estimate which section/page the content appears in
 13. Return ONLY valid JSON
 
-GOAL: Create 50-200+ questions per subtopic if the content supports it. More questions = better learning coverage!
+GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
 
 Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
 {{
