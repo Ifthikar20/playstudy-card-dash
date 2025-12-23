@@ -960,7 +960,15 @@ Requirements:
 11. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
 12. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
 13. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
-14. Return ONLY valid JSON
+14. Return ONLY valid JSON - NO MARKDOWN, NO CODE BLOCKS, NO EXTRA TEXT
+
+JSON FORMATTING RULES (CRITICAL):
+- Use double quotes (") for all strings, not single quotes
+- Escape special characters: \" for quotes, \\ for backslashes, \n for newlines
+- Do NOT use trailing commas after the last item in arrays or objects
+- Ensure all brackets and braces are properly closed
+- Numbers for correctAnswer should be integers (0, 1, 2, 3), not strings
+- Do NOT include comments in the JSON
 
 GOAL: Create 15-20 comprehensive questions per topic. Focus on QUALITY and coverage of core concepts. Include example-based questions for key concepts.
 
@@ -1518,7 +1526,15 @@ Requirements:
 11. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
 12. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
 13. For PDF documents, estimate which section/page the content appears in
-14. Return ONLY valid JSON
+14. Return ONLY valid JSON - NO MARKDOWN, NO CODE BLOCKS, NO EXTRA TEXT
+
+JSON FORMATTING RULES (CRITICAL):
+- Use double quotes (") for all strings, not single quotes
+- Escape special characters: \" for quotes, \\ for backslashes, \n for newlines
+- Do NOT use trailing commas after the last item in arrays or objects
+- Ensure all brackets and braces are properly closed
+- Numbers for correctAnswer should be integers (0, 1, 2, 3), not strings
+- Do NOT include comments in the JSON
 
 GOAL: Create 15-20 comprehensive questions per topic. Focus on QUALITY and coverage of core concepts. Include example-based questions for key concepts.
 
@@ -1595,6 +1611,11 @@ REMINDER: The response MUST include questions for ALL {len(next_batch)} topics l
             raise HTTPException(status_code=500, detail=f"AI returned non-JSON response. First 500 chars: {batch_text[:500]}")
 
         json_str = batch_text[start_idx:end_idx]
+
+        # Log the JSON string for debugging
+        logger.debug(f"📝 Attempting to parse JSON (length: {len(json_str)} chars)")
+        logger.debug(f"📝 First 500 chars of JSON: {json_str[:500]}")
+
         batch_json = json.loads(json_str)
         subtopics_questions = batch_json.get("subtopics", {})
 
@@ -1611,7 +1632,19 @@ REMINDER: The response MUST include questions for ALL {len(next_batch)} topics l
         else:
             logger.info(f"✅ ALL {len(subtopic_map)} topics have questions")
 
-    except (json.JSONDecodeError, KeyError, ValueError) as e:
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parsing failed: {e}")
+        logger.error(f"❌ Error at line {e.lineno}, column {e.colno}")
+        logger.error(f"❌ Full JSON response (first 3000 chars):")
+        logger.error(f"{json_str[:3000]}")
+        # Show context around the error
+        if e.pos and e.pos < len(json_str):
+            start = max(0, e.pos - 200)
+            end = min(len(json_str), e.pos + 200)
+            logger.error(f"❌ Context around error position {e.pos}:")
+            logger.error(f"{json_str[start:end]}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI JSON: {str(e)}")
+    except (KeyError, ValueError) as e:
         logger.error(f"❌ Failed to parse questions: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
 
