@@ -404,7 +404,7 @@ class CreateStudySessionRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit for base64 encoded files (large PDFs)
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
-    questions_per_topic: int = Field(default=50, ge=10, le=200)  # Increased to 200 to allow maximum question generation
+    questions_per_topic: int = Field(default=50, ge=5, le=200)  # Lowered minimum to 5 to support flexible question generation
     progressive_load: bool = Field(default=False)  # DISABLED: Generate ALL questions upfront for better UX
 
 
