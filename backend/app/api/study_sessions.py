@@ -523,6 +523,22 @@ async def create_study_session_with_ai(
                 detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
             )
 
+        # Check document size and truncate if necessary to fit within AI context limits
+        estimated_tokens = len(extracted_text) // 4  # Rough estimate: 1 token ≈ 4 characters
+        logger.info(f"📊 Document size: {len(extracted_text):,} chars, ~{estimated_tokens:,} estimated tokens")
+
+        # Claude 3.5 Haiku has 200k token context window
+        # Leave room for prompt structure, topics, and response
+        MAX_TOKENS = 150000  # Conservative limit to ensure prompt + response fits
+        max_chars = MAX_TOKENS * 4
+
+        if estimated_tokens > MAX_TOKENS:
+            logger.warning(f"⚠️ Document too large ({estimated_tokens:,} tokens). Truncating to fit {MAX_TOKENS:,} token limit.")
+            original_length = len(extracted_text)
+            extracted_text = extracted_text[:max_chars] + "\n\n[Document truncated due to size limits. Original size: {} chars]".format(original_length)
+            logger.info(f"✂️ Truncated from {original_length:,} to {len(extracted_text):,} characters")
+            estimated_tokens = len(extracted_text) // 4
+
         # Analyze content to get smart recommendations
         analysis = analyze_content_complexity(extracted_text)
 
@@ -782,23 +798,39 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
         # Make ONE API call for all questions
         logger.info(f"📡 Generating variable questions for {len(subtopic_map)} subtopics (3-20 per topic based on content depth)...")
+        logger.info(f"📊 Final prompt length: {len(batch_prompt):,} characters")
 
-        if use_claude:
-            batch_response = anthropic_client.messages.create(
-                model="claude-3-5-haiku-20241022",
-                max_tokens=8192,  # Maximum for Claude 3.5 Haiku
-                temperature=0.7,
-                messages=[{"role": "user", "content": batch_prompt}]
-            )
-            batch_text = batch_response.content[0].text
-        else:
-            batch_response = deepseek_client.chat.completions.create(
-                model="deepseek-chat",
-                max_tokens=16000,
-                temperature=0.7,
-                messages=[{"role": "user", "content": batch_prompt}]
-            )
-            batch_text = batch_response.choices[0].message.content
+        try:
+            if use_claude:
+                batch_response = anthropic_client.messages.create(
+                    model="claude-3-5-haiku-20241022",
+                    max_tokens=8192,  # Maximum for Claude 3.5 Haiku
+                    temperature=0.7,
+                    messages=[{"role": "user", "content": batch_prompt}]
+                )
+                batch_text = batch_response.content[0].text
+            else:
+                batch_response = deepseek_client.chat.completions.create(
+                    model="deepseek-chat",
+                    max_tokens=16000,
+                    temperature=0.7,
+                    messages=[{"role": "user", "content": batch_prompt}]
+                )
+                batch_text = batch_response.choices[0].message.content
+        except Exception as api_error:
+            logger.error(f"❌ AI API call failed: {type(api_error).__name__}: {str(api_error)}")
+            # Check if it's a context length error
+            error_msg = str(api_error).lower()
+            if any(keyword in error_msg for keyword in ['context', 'token', 'too long', 'maximum', 'limit']):
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Document is too large for AI processing. Try using a smaller document or enabling progressive loading."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"AI API error: {str(api_error)}"
+                )
 
         # Log AI response details
         logger.info(f"📨 Received AI response, length: {len(batch_text)} characters")
