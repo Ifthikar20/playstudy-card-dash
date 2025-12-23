@@ -147,31 +147,32 @@ def analyze_content_complexity(text: str) -> dict:
     # Reading time (average reading speed: 200-250 words/minute)
     estimated_reading_time = max(1, round(word_count / 225))
 
-    # Recommend topics based on word count and complexity - TRULY DYNAMIC scaling
+    # Recommend topics based on word count and complexity
+    # Focus on quality over quantity - only create topics that will have sufficient questions
     # Very short (< 100 words): 1 topic
-    # Short (100-500 words): 2-4 topics
-    # Medium (500-2000 words): 4-8 topics
-    # Long (2000-5000 words): 8-15 topics
-    # Very long (5000-10000 words): 15-30 topics
-    # Extremely long (10000-20000 words): 30-60 topics
-    # Massive (20000+ words): 60-100 topics
+    # Short (100-500 words): 2-3 topics
+    # Medium (500-2000 words): 3-6 topics
+    # Long (2000-5000 words): 6-10 topics
+    # Very long (5000-10000 words): 10-15 topics
+    # Extremely long (10000-20000 words): 15-25 topics
+    # Massive (20000+ words): 25-35 topics (maximum to ensure quality)
     if word_count < 100:
         base_topics = 1
     elif word_count < 500:
-        base_topics = 3
+        base_topics = 2
     elif word_count < 2000:
-        base_topics = 6
+        base_topics = 4
     elif word_count < 5000:
-        base_topics = 12
+        base_topics = 8
     elif word_count < 10000:
-        base_topics = 20
+        base_topics = 12
     elif word_count < 20000:
-        base_topics = 45
+        base_topics = 20
     else:
-        base_topics = 70
+        base_topics = 30
 
-    # Adjust based on complexity
-    recommended_topics = max(1, min(100, round(base_topics * (0.7 + complexity_score * 0.6))))
+    # Adjust based on complexity (more conservative multiplier)
+    recommended_topics = max(1, min(35, round(base_topics * (0.8 + complexity_score * 0.4))))
 
     # Recommend questions per topic based on content depth
     # More complex content = more questions to test understanding
@@ -616,7 +617,7 @@ async def create_study_session_with_ai(
                 logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
-        topics_prompt = f"""Analyze this study material and organize it into a DEEPLY NESTED hierarchical structure with UNLIMITED depth.
+        topics_prompt = f"""Analyze this study material and organize it into a clear, focused hierarchical structure.
 
 Study Material:
 {extracted_text}
@@ -628,23 +629,23 @@ Content Analysis:
 
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
-2. Within each category, break down into subtopics
-3. RECURSIVELY break down complex subtopics into deeper levels (4, 5, 6, 7, 8+ levels if needed!)
-4. Only stop nesting when you reach atomic concepts that can be tested with questions (leaf nodes)
-5. Each leaf node should be a single, focused concept that supports 3-20 questions
-6. Provide clear titles and brief descriptions at ALL levels
-7. Organize logically (foundational concepts first, building to advanced topics)
-8. Create AT LEAST {initial_topics} total LEAF topics across all categories
-9. For complex content, create DEEP hierarchies; for simpler content, use shallow hierarchies
-10. Focus on core concepts and foundational topics first
+2. Within each category, break down into focused subtopics (2-3 levels maximum)
+3. Prioritize QUALITY over excessive nesting - only create subtopics when there's sufficient content to generate meaningful questions
+4. Each leaf node should be a focused concept that can support 5-15 quality questions
+5. Provide clear titles and brief descriptions at ALL levels
+6. Organize logically (foundational concepts first, building to advanced topics)
+7. Create approximately {initial_topics} total LEAF topics across all categories that will actually have questions
+8. Avoid creating unnecessary intermediate categories - go directly to testable concepts when possible
+9. Focus on core concepts and foundational topics first
+10. Remember: The goal is quality questions, not deep nesting
 
-IMPORTANT: The "subtopics" array at EVERY level can contain more nested subtopics. Keep nesting until you reach atomic, testable concepts.
+IMPORTANT: Keep the structure simple and focused. Only nest 2-3 levels deep. Empty subtopics with no questions provide no value.
 
-Return ONLY a valid JSON object in this EXACT format (subtopics can be nested infinitely):
+Return ONLY a valid JSON object in this EXACT format (keep to 2-3 levels maximum):
 {{
   "categories": [
     {{
-      "title": "Category Title",
+      "title": "Category Title (Level 1)",
       "description": "Brief description of this category",
       "subtopics": [
         {{
@@ -652,24 +653,23 @@ Return ONLY a valid JSON object in this EXACT format (subtopics can be nested in
           "description": "Brief description",
           "subtopics": [
             {{
-              "title": "Sub-subtopic Title (Level 3)",
-              "description": "Brief description",
-              "subtopics": [
-                {{
-                  "title": "Level 4 Topic (continue nesting as needed!)",
-                  "description": "Brief description",
-                  "subtopics": []
-                }}
-              ]
+              "title": "Focused Topic (Level 3 - Leaf)",
+              "description": "Brief description of testable concept",
+              "subtopics": []
             }}
           ]
+        }},
+        {{
+          "title": "Another Subtopic (Level 2 - Leaf)",
+          "description": "Can also be a leaf node if content is focused enough",
+          "subtopics": []
         }}
       ]
     }}
   ]
 }}
 
-Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have questions generated for it."""
+Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have questions generated for it. Keep nesting to 2-3 levels maximum."""
 
         # Call AI to extract topics (with automatic fallback to DeepSeek if Claude fails)
         topics_text = None
@@ -758,14 +758,24 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
             topic_data: dict,
             parent_topic_id: Optional[int],
             parent_schema: Optional[TopicSchema],
-            path: str,  # e.g., "0-1-2-3" for tracking hierarchy
-            order_index: int
+            path: str,  # e.g., "0-1-2" for tracking hierarchy
+            order_index: int,
+            current_depth: int = 0
         ) -> Optional[TopicSchema]:
             """
-            Recursively create topics at unlimited depth.
+            Recursively create topics up to MAX_DEPTH levels.
             Returns the schema for this topic (or None if it's a pure container).
             """
+            MAX_DEPTH = 3  # Limit to 3 levels: Category -> Subtopic -> Leaf (or Category -> Leaf)
+
             subtopics_data = topic_data.get("subtopics", [])
+
+            # Force leaf node if we've reached max depth, regardless of subtopics in data
+            if current_depth >= MAX_DEPTH:
+                subtopics_data = []
+                if topic_data.get("subtopics"):
+                    logger.warning(f"⚠️ Max depth {MAX_DEPTH} reached for topic '{topic_data['title']}' - forcing as leaf node")
+
             has_children = len(subtopics_data) > 0
             is_leaf = not has_children
 
@@ -814,7 +824,8 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
                         topic.id,
                         topic_schema,
                         child_path,
-                        child_idx
+                        child_idx,
+                        current_depth + 1  # Increment depth for children
                     )
                     if child_schema:
                         topic_schema.subtopics.append(child_schema)
