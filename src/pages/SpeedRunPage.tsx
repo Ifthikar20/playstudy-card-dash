@@ -347,7 +347,7 @@ export default function SpeedRunPage() {
         return (
           <mark
             key={index}
-            className="bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-100 px-1 rounded animate-pulse"
+            className="bg-yellow-300 dark:bg-yellow-600/60 text-yellow-900 dark:text-yellow-100 px-2 py-1 rounded font-semibold animate-pulse"
             style={{ animationDuration: '2s', animationIterationCount: '3' }}
           >
             {part}
@@ -365,7 +365,7 @@ export default function SpeedRunPage() {
     const searchText = highlightedText.trim();
     const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
 
-    return html.replace(regex, '<mark style="background-color: #86efac; color: #166534; padding: 2px 4px; border-radius: 2px; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
+    return html.replace(regex, '<mark style="background-color: #fde047; color: #713f12; padding: 4px 8px; border-radius: 4px; font-weight: 600; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
   };
 
   // Show loading state while fetching session
@@ -455,15 +455,16 @@ export default function SpeedRunPage() {
                       {highlightedText && (
                         <style>{`
                           .react-pdf__Page__textContent mark {
-                            background-color: #86efac !important;
-                            color: #166534 !important;
-                            padding: 2px 4px;
-                            border-radius: 2px;
+                            background-color: #fde047 !important;
+                            color: #713f12 !important;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-weight: 600;
                             animation: highlight-pulse 2s ease-in-out 3;
                           }
                           @keyframes highlight-pulse {
-                            0%, 100% { background-color: #86efac; }
-                            50% { background-color: #4ade80; }
+                            0%, 100% { background-color: #fde047; }
+                            50% { background-color: #fbbf24; }
                           }
                         `}</style>
                       )}
@@ -555,9 +556,9 @@ export default function SpeedRunPage() {
                         style={{ maxHeight: '70vh' }}
                       />
                       {highlightedText && (
-                        <div className="w-full p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded">
-                          <p className="text-sm text-green-700 dark:text-green-300">
-                            <mark className="bg-green-200 dark:bg-green-900/40 px-2 py-1 rounded">
+                        <div className="w-full p-3 bg-yellow-50 dark:bg-yellow-950/20 border-l-4 border-yellow-500 rounded">
+                          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                            <mark className="bg-yellow-300 dark:bg-yellow-600/60 px-2 py-1 rounded font-semibold">
                               {highlightedText}
                             </mark>
                           </p>
@@ -835,9 +836,6 @@ export default function SpeedRunPage() {
                                   <div className="pl-6">
                                     <p className="text-sm text-blue-800 dark:text-blue-200 italic leading-relaxed">
                                       "{currentQuestion.sourceText}"
-                                    </p>
-                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                                      💡 This text from your document contains the answer. Check the highlighted section in the document viewer on the left.
                                     </p>
                                   </div>
                                 </div>
