@@ -793,7 +793,13 @@ export default function SpeedRunPage() {
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center space-y-4">
                     <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">No questions available for this page</p>
+                    <div className="space-y-2">
+                      <p className="text-lg font-semibold text-muted-foreground">No questions available</p>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Questions are still being generated for this session. Please wait a moment and refresh,
+                        or if this persists, the AI may have failed to generate questions. Try creating a new session.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

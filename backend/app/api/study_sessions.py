@@ -843,18 +843,14 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             # Get questions for this subtopic from batch response
             questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
 
-            # Fallback if no questions generated (create 5 as default)
+            # Skip if no questions generated (don't create placeholders)
             if not questions_data:
-                logger.warning(f"⚠️ No questions found for subtopic '{subtopic_key}' ('{subtopic.title}'), creating 5 placeholder questions")
+                logger.error(f"❌ No questions generated for subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING")
                 logger.debug(f"🔍 Checking if '{subtopic_key}' exists in AI response: {subtopic_key in subtopics_questions}")
                 if subtopic_key in subtopics_questions:
                     logger.debug(f"🔍 Data for '{subtopic_key}': {subtopics_questions[subtopic_key]}")
-                questions_data = [{
-                    "question": f"Question {i+1} about {subtopic.title}",
-                    "options": ["Option A", "Option B", "Option C", "Option D"],
-                    "correctAnswer": 0,
-                    "explanation": "This is a placeholder question."
-                } for i in range(5)]
+                # Skip this subtopic - don't create placeholder questions
+                continue
             else:
                 logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
 
@@ -893,6 +889,17 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             # Update subtopic schema with questions
             subtopic_schema.questions = questions_list
             category_schema.subtopics.append(subtopic_schema)
+
+        # Validate that at least some questions were generated
+        if question_counter == 0:
+            logger.error("❌ FATAL: No questions were generated for any subtopic! AI generation completely failed.")
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate questions. The AI did not return any valid questions. Please try again or use a different document."
+            )
+
+        logger.info(f"✅ Successfully generated {question_counter} total questions across all subtopics")
 
         # Commit all changes
         db.commit()
