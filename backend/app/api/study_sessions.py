@@ -826,7 +826,7 @@ Return ONLY a valid JSON object in this EXACT format:
                     subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
 
                 # Build prompt for this chunk and subtopic batch
-                batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+                batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
 IMPORTANT: Generate MAXIMUM questions per subtopic based on content depth:
 - Simple subtopic with limited content: 5-10 questions minimum
@@ -837,6 +837,15 @@ IMPORTANT: Generate MAXIMUM questions per subtopic based on content depth:
 - Extract every testable concept from the material
 - Cover different aspects and difficulty levels
 
+DIFFICULTY LEVEL: CHALLENGING
+- Make questions that require DEEP analysis and critical thinking
+- Use tricky distractors that would fool someone who only skimmed the material
+- Test subtle distinctions and nuanced understanding
+- Require application of concepts, not just memorization
+- Include "all of the above" or "none of the above" when appropriate
+- Use comparative questions (e.g., "Which is the PRIMARY..." "What is the MAIN difference...")
+- Create questions that test WHY and HOW, not just WHAT
+
 Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
 {chunk_text}
 
@@ -846,14 +855,15 @@ SUBTOPICS TO COVER ({len(batch_keys)} subtopics in this batch):
 Requirements:
 1. Generate MAXIMUM questions for EACH subtopic (5-30 questions based on content depth)
 2. NO DUPLICATES - each question must test a unique concept
-3. Each question must have exactly 4 plausible options
-4. Questions should test deep understanding, not just recall
-5. Provide detailed explanations
-6. For EACH question, include the source text from the study material with FULL CONTEXT
-7. Source text should include the complete sentence(s) or paragraph that contains the answer
-8. Include enough surrounding context so students can easily locate it in their document
-9. Aim for 2-4 sentences of context (not just a fragment)
-10. Return ONLY valid JSON
+3. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+4. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+5. Distractors should be subtle and based on common misconceptions
+6. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+7. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+8. Source text should include the complete sentence(s) or paragraph that contains the answer
+9. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+10. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+11. Return ONLY valid JSON
 
 Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 {{
@@ -1315,7 +1325,7 @@ async def generate_more_questions(
         subtopics_list += f"Description: {topic.description or ''}\n"
 
     # Build prompt
-    batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+    batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
 IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
 - Simple subtopic with limited content: 3-5 questions
@@ -1323,6 +1333,15 @@ IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content
 - Complex subtopic with extensive material: 10-20 questions
 - Generate questions for ALL listed subtopics below
 - The goal is to create AS MANY quality questions as the content supports
+
+DIFFICULTY LEVEL: CHALLENGING
+- Make questions that require DEEP analysis and critical thinking
+- Use tricky distractors that would fool someone who only skimmed the material
+- Test subtle distinctions and nuanced understanding
+- Require application of concepts, not just memorization
+- Include "all of the above" or "none of the above" when appropriate
+- Use comparative questions (e.g., "Which is the PRIMARY..." "What is the MAIN difference...")
+- Create questions that test WHY and HOW, not just WHAT
 
 Study Material:
 {extracted_text[:400000]}
@@ -1333,14 +1352,15 @@ SUBTOPICS TO COVER:
 Requirements:
 1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
 2. Prioritize quality over quantity - each question should test real understanding
-3. Each question must have exactly 4 options
-4. Questions should test understanding of the material
-5. Provide clear explanations
-6. For EACH question, include the source text from the study material with FULL CONTEXT
-7. Source text should include the complete sentence(s) or paragraph that contains the answer
-8. Include enough surrounding context so students can easily locate it in their document
-9. Aim for 2-4 sentences of context (not just a fragment)
-10. Return ONLY valid JSON
+3. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+4. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+5. Distractors should be subtle and based on common misconceptions
+6. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+7. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+8. Source text should include the complete sentence(s) or paragraph that contains the answer
+9. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+10. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+11. Return ONLY valid JSON
 
 Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
 {{

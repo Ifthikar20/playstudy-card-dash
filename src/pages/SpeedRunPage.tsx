@@ -815,11 +815,33 @@ export default function SpeedRunPage() {
                             })}
                           </div>
 
-                          {/* Explanation */}
+                          {/* Explanation and Source Text */}
                           {hasAnswered && (
-                            <div className="mt-6 p-4 bg-muted rounded-lg">
-                              <p className="text-sm font-semibold mb-2">Explanation:</p>
-                              <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                            <div className="mt-6 space-y-3">
+                              <div className="p-4 bg-muted rounded-lg">
+                                <p className="text-sm font-semibold mb-2">Explanation:</p>
+                                <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                              </div>
+
+                              {/* Show source text from document */}
+                              {currentQuestion.sourceText && (
+                                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-l-4 border-blue-500 rounded-lg">
+                                  <div className="flex items-start gap-2 mb-2">
+                                    <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                                    <p className="text-xs font-semibold text-blue-900 dark:text-blue-100 uppercase tracking-wide">
+                                      Source from Document
+                                    </p>
+                                  </div>
+                                  <div className="pl-6">
+                                    <p className="text-sm text-blue-800 dark:text-blue-200 italic leading-relaxed">
+                                      "{currentQuestion.sourceText}"
+                                    </p>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                                      💡 This text from your document contains the answer. Check the highlighted section in the document viewer on the left.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </CardContent>
@@ -865,13 +887,29 @@ export default function SpeedRunPage() {
                               transform: 'rotateY(180deg)',
                             }}
                           >
-                            <CardContent className="p-8 h-full flex flex-col items-center justify-center text-white">
-                              <h3 className="text-xl font-semibold text-center mb-6">
+                            <CardContent className="p-8 h-full flex flex-col items-center justify-center text-white overflow-y-auto">
+                              <h3 className="text-xl font-semibold text-center mb-4">
                                 {currentQuestion.options[currentQuestion.correctAnswer]}
                               </h3>
-                              <p className="text-sm opacity-90 text-center">
+                              <p className="text-sm opacity-90 text-center mb-4">
                                 {currentQuestion.explanation}
                               </p>
+
+                              {/* Source text in flip card */}
+                              {currentQuestion.sourceText && (
+                                <div className="w-full mt-4 p-3 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <FileText className="h-3 w-3" />
+                                    <p className="text-xs font-semibold uppercase tracking-wide">
+                                      From Your Document
+                                    </p>
+                                  </div>
+                                  <p className="text-xs italic opacity-90 leading-relaxed">
+                                    "{currentQuestion.sourceText}"
+                                  </p>
+                                </div>
+                              )}
+
                               <p className="text-xs opacity-75 text-center mt-auto">
                                 Click to see question
                               </p>
