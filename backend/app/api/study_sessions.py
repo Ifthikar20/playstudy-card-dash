@@ -970,6 +970,13 @@ JSON FORMATTING RULES (CRITICAL):
 - Numbers for correctAnswer should be integers (0, 1, 2, 3), not strings
 - Do NOT include comments in the JSON
 
+IMPORTANT INSTRUCTIONS:
+- Do NOT ask clarifying questions
+- Do NOT say "I understand" or provide explanations
+- Do NOT add any text before or after the JSON
+- START your response IMMEDIATELY with the opening brace: {{
+- Generate the complete JSON response now
+
 GOAL: Create 15-20 comprehensive questions per topic. Focus on QUALITY and coverage of core concepts. Include example-based questions for key concepts.
 
 CRITICAL REQUIREMENTS:
@@ -1535,6 +1542,13 @@ JSON FORMATTING RULES (CRITICAL):
 - Ensure all brackets and braces are properly closed
 - Numbers for correctAnswer should be integers (0, 1, 2, 3), not strings
 - Do NOT include comments in the JSON
+
+IMPORTANT INSTRUCTIONS:
+- Do NOT ask clarifying questions
+- Do NOT say "I understand" or provide explanations
+- Do NOT add any text before or after the JSON
+- START your response IMMEDIATELY with the opening brace: {{
+- Generate the complete JSON response now
 
 GOAL: Create 15-20 comprehensive questions per topic. Focus on QUALITY and coverage of core concepts. Include example-based questions for key concepts.
 
