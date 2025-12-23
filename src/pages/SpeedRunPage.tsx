@@ -48,6 +48,8 @@ export default function SpeedRunPage() {
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
   const [numPages, setNumPages] = useState<number>(0);
   const [pdfScale, setPdfScale] = useState(1.0);
+  const [visiblePagesStart, setVisiblePagesStart] = useState(1);
+  const PAGES_PER_BATCH = 10; // Load 10 pages at a time
 
   // Question state
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -368,7 +370,7 @@ export default function SpeedRunPage() {
               <Card>
                 <CardContent className="p-6">
                   {fileType === 'pdf' ? (
-                    <div className="flex flex-col items-center relative">
+                    <div className="flex flex-col items-center relative w-full">
                       {/* Add custom CSS for PDF text highlighting */}
                       {highlightedText && (
                         <style>{`
@@ -385,37 +387,9 @@ export default function SpeedRunPage() {
                           }
                         `}</style>
                       )}
-                      <Document
-                        file={getPdfDataUrl()}
-                        onLoadSuccess={onDocumentLoadSuccess}
-                        loading={
-                          <div className="flex items-center justify-center p-8">
-                            <RotateCw className="h-8 w-8 animate-spin text-primary" />
-                          </div>
-                        }
-                        error={
-                          <div className="text-center p-8 text-destructive">
-                            Failed to load PDF document
-                          </div>
-                        }
-                      >
-                        <Page
-                          pageNumber={currentPageNumber}
-                          scale={pdfScale}
-                          renderTextLayer={true}
-                          renderAnnotationLayer={true}
-                          customTextRenderer={(textItem) => {
-                            // Highlight matching text in PDF
-                            if (highlightedText && textItem.str.includes(highlightedText)) {
-                              return `<mark>${textItem.str}</mark>`;
-                            }
-                            return textItem.str;
-                          }}
-                        />
-                      </Document>
 
-                      {/* Zoom controls */}
-                      <div className="mt-4 flex gap-2">
+                      {/* Zoom controls at top */}
+                      <div className="mb-4 flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -433,6 +407,62 @@ export default function SpeedRunPage() {
                         >
                           +
                         </Button>
+                      </div>
+
+                      {/* Scrollable container for multiple pages */}
+                      <div className="w-full max-h-[70vh] overflow-y-auto space-y-4">
+                        <Document
+                          file={getPdfDataUrl()}
+                          onLoadSuccess={onDocumentLoadSuccess}
+                          loading={
+                            <div className="flex items-center justify-center p-8">
+                              <RotateCw className="h-8 w-8 animate-spin text-primary" />
+                            </div>
+                          }
+                          error={
+                            <div className="text-center p-8 text-destructive">
+                              Failed to load PDF document
+                            </div>
+                          }
+                        >
+                          {/* Render pages in batches */}
+                          {Array.from({ length: Math.min(numPages, visiblePagesStart + PAGES_PER_BATCH - 1) - visiblePagesStart + 1 }, (_, index) => {
+                            const pageNum = visiblePagesStart + index;
+                            if (pageNum > numPages) return null;
+                            return (
+                              <div key={pageNum} className="flex flex-col items-center border-b pb-4 last:border-b-0">
+                                <div className="text-sm text-muted-foreground mb-2 font-medium">
+                                  Page {pageNum} of {numPages}
+                                </div>
+                                <Page
+                                  pageNumber={pageNum}
+                                  scale={pdfScale}
+                                  renderTextLayer={true}
+                                  renderAnnotationLayer={true}
+                                  customTextRenderer={(textItem) => {
+                                    // Highlight matching text in PDF
+                                    if (highlightedText && textItem.str.includes(highlightedText)) {
+                                      return `<mark>${textItem.str}</mark>`;
+                                    }
+                                    return textItem.str;
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </Document>
+
+                        {/* Load More Button */}
+                        {numPages > visiblePagesStart + PAGES_PER_BATCH - 1 && (
+                          <div className="text-center py-4">
+                            <Button
+                              onClick={() => setVisiblePagesStart(prev => prev + PAGES_PER_BATCH)}
+                              variant="outline"
+                            >
+                              Load Next {Math.min(PAGES_PER_BATCH, numPages - (visiblePagesStart + PAGES_PER_BATCH - 1))} Pages
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : fileType && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(fileType.toLowerCase()) ? (
@@ -471,7 +501,7 @@ export default function SpeedRunPage() {
                         </div>
                       ) : (
                         <div className="prose prose-sm max-w-none dark:prose-invert">
-                          <div className="whitespace-pre-wrap">
+                          <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
                             {getHighlightedContent()}
                           </div>
                         </div>
@@ -484,14 +514,14 @@ export default function SpeedRunPage() {
                         <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
                         <p className="text-xs opacity-80">Showing extracted content. Slide-by-slide view coming soon!</p>
                       </div>
-                      <div className="whitespace-pre-wrap">
+                      <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
                         {getHighlightedContent()}
                       </div>
                     </div>
                   ) : (
                     // For other text files, show extracted content with highlighting
                     <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <div className="whitespace-pre-wrap">
+                      <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
                         {getHighlightedContent()}
                       </div>
                     </div>
