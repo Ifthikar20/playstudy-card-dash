@@ -76,9 +76,25 @@ export default function SpeedRunPage() {
   const fileContent = currentSession?.fileContent;
   const fileType = currentSession?.fileType;
 
-  // Get all subtopics and their questions
+  // Helper function to recursively get all topics with questions (including sub-subtopics)
+  const getAllTopicsWithQuestions = (topics: any[]): any[] => {
+    const result: any[] = [];
+    for (const topic of topics) {
+      // If this topic has questions, include it
+      if (topic.questions && topic.questions.length > 0) {
+        result.push(topic);
+      }
+      // If this topic has subtopics, recursively get their questions
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        result.push(...getAllTopicsWithQuestions(topic.subtopics));
+      }
+    }
+    return result;
+  };
+
+  // Get all subtopics and their questions (including nested sub-subtopics)
   const subtopics = currentSession?.extractedTopics?.flatMap(category =>
-    category.subtopics || []
+    getAllTopicsWithQuestions(category.subtopics || [])
   ) || [];
 
   // For now, show all questions (we'll implement page-specific filtering later)
@@ -141,10 +157,10 @@ export default function SpeedRunPage() {
 
         // Count current questions
         const currentCount = allQuestions.length;
-        const updatedSubtopics = updatedSession.extractedTopics?.flatMap(category =>
-          category.subtopics || []
+        const updatedTopics = updatedSession.extractedTopics?.flatMap(category =>
+          getAllTopicsWithQuestions(category.subtopics || [])
         ) || [];
-        const updatedCount = updatedSubtopics.flatMap(topic => topic.questions || []).length;
+        const updatedCount = updatedTopics.flatMap(topic => topic.questions || []).length;
 
         console.log(`📊 Poll result: ${currentCount} -> ${updatedCount} questions`);
 
@@ -155,7 +171,7 @@ export default function SpeedRunPage() {
           setPreviousQuestionCount(currentCount);
 
           // Check if there are still subtopics without questions
-          const hasSubtopicsWithoutQuestions = updatedSubtopics.some(t => !t.questions || t.questions.length === 0);
+          const hasSubtopicsWithoutQuestions = updatedTopics.some(t => !t.questions || t.questions.length === 0);
           console.log(`🔄 Still loading more? ${hasSubtopicsWithoutQuestions}`);
           setIsLoadingMoreQuestions(hasSubtopicsWithoutQuestions);
         }
@@ -194,8 +210,10 @@ export default function SpeedRunPage() {
   useEffect(() => {
     if (!currentSession?.extractedTopics) return;
 
-    const subtopics = currentSession.extractedTopics.flatMap(category => category.subtopics || []);
-    const hasSubtopicsWithoutQuestions = subtopics.some(topic => !topic.questions || topic.questions.length === 0);
+    const allTopics = currentSession.extractedTopics.flatMap(category =>
+      getAllTopicsWithQuestions(category.subtopics || [])
+    );
+    const hasSubtopicsWithoutQuestions = allTopics.some(topic => !topic.questions || topic.questions.length === 0);
 
     console.log(`🎯 Loading state check:`, {
       totalSubtopics: subtopics.length,
