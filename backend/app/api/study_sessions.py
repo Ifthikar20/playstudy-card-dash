@@ -947,8 +947,8 @@ TOPICS TO COVER ({len(batch_keys)} topics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate UNLIMITED questions for EACH topic - aim for 15-30+ questions per topic minimum
-2. Extract EVERY piece of testable information from the study material
+1. Generate 15-20 high-quality questions for EACH topic (total ~30-40 questions for this batch)
+2. Extract the MOST IMPORTANT testable information from the study material
 3. NO DUPLICATES - each question must test a unique concept or angle
 4. For EACH topic, include multiple EXAMPLE-BASED questions (e.g., "Which scenario is an example of operant conditioning?")
 5. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
