@@ -402,7 +402,7 @@ TopicSchema.model_rebuild()
 class CreateStudySessionRequest(BaseModel):
     """Request schema for creating a study session."""
     title: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
+    content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit for base64 encoded files (large PDFs)
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
     questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
     progressive_load: bool = Field(default=True)  # Enable progressive loading for large documents
@@ -410,7 +410,7 @@ class CreateStudySessionRequest(BaseModel):
 
 class AnalyzeContentRequest(BaseModel):
     """Request schema for analyzing content before creating a session."""
-    content: str = Field(..., min_length=10, max_length=10000000)
+    content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit
 
 
 class ContentAnalysisResponse(BaseModel):
