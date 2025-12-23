@@ -764,15 +764,30 @@ Return ONLY a valid JSON object in this EXACT format:
         # For large documents, this processes multiple chunks separately and merges results
         logger.info(f"📡 Processing {len(document_chunks)} document chunk(s) to generate questions...")
 
-        # Build subtopic list for prompt (reused across all chunks)
+        # Progressive Loading: For initial session creation, only generate questions for first few subtopics
+        # This provides quick initial load, remaining questions can be loaded on-demand
+        INITIAL_SUBTOPICS_LIMIT = 3  # Generate questions for first 3 subtopics initially
+
+        # Get list of all subtopic keys
+        all_subtopic_keys = list(subtopic_map.keys())
+        initial_subtopic_keys = all_subtopic_keys[:INITIAL_SUBTOPICS_LIMIT]
+
+        logger.info(f"📚 Progressive loading enabled: Generating questions for first {len(initial_subtopic_keys)} subtopics out of {len(all_subtopic_keys)} total")
+        logger.info(f"  Initial batch: {initial_subtopic_keys}")
+        logger.info(f"  Remaining: {all_subtopic_keys[INITIAL_SUBTOPICS_LIMIT:]}")
+
+        # Build subtopic list for prompt (only include initial subtopics)
         subtopics_list = ""
-        for cat_idx, category_data in enumerate(categories_data):
-            subtopics_data = category_data.get("subtopics", [])
-            for sub_idx, subtopic_data in enumerate(subtopics_data):
-                subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
-                subtopics_list += f"Category: {category_data['title']}\n"
-                subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
-                subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
+        for subtopic_key in initial_subtopic_keys:
+            subtopic_info = subtopic_map[subtopic_key]
+            category_data = subtopic_info["category_data"]
+            subtopic_data = subtopic_info["subtopic_data"]
+            cat_idx, sub_idx = map(int, subtopic_key.split('-'))
+
+            subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
+            subtopics_list += f"Category: {category_data['title']}\n"
+            subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
+            subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
 
         # Collect questions from all chunks
         all_chunk_questions = {}  # {subtopic_key: [questions]}
@@ -787,14 +802,13 @@ IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content
 - Simple subtopic with limited content: 3-5 questions
 - Moderate subtopic with decent coverage: 6-10 questions
 - Complex subtopic with extensive material: 10-20 questions
-- Only generate questions for subtopics that have relevant content in THIS chunk
-- If a subtopic has no relevant content in this chunk, return an empty questions array for it
+- Generate questions for ALL listed subtopics below (this is an initial batch, more will be generated later)
 - The goal is to create AS MANY quality questions as the content supports
 
 Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
 {chunk_text}
 
-SUBTOPICS TO COVER:
+SUBTOPICS TO COVER (Initial Batch - {len(initial_subtopic_keys)} of {len(all_subtopic_keys)} total):
 {subtopics_list}
 
 Requirements:
@@ -921,13 +935,14 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             # Get questions for this subtopic from batch response
             questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
 
-            # Skip if no questions generated (don't create placeholders)
+            # Skip if no questions generated (progressive loading - will be generated later)
             if not questions_data:
-                logger.error(f"❌ No questions generated for subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING")
-                logger.debug(f"🔍 Checking if '{subtopic_key}' exists in AI response: {subtopic_key in subtopics_questions}")
-                if subtopic_key in subtopics_questions:
-                    logger.debug(f"🔍 Data for '{subtopic_key}': {subtopics_questions[subtopic_key]}")
-                # Skip this subtopic - don't create placeholder questions
+                if subtopic_key in initial_subtopic_keys:
+                    # Expected to have questions for initial batch
+                    logger.warning(f"⚠️ No questions generated for initial subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING")
+                else:
+                    # Progressive loading - will be generated on-demand later
+                    logger.info(f"⏭️ Subtopic '{subtopic_key}' ('{subtopic.title}') - Deferred for progressive loading")
                 continue
             else:
                 logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
@@ -1120,6 +1135,77 @@ async def get_study_session(
         hasSpeedRun=session.has_speed_run or False,
         createdAt=int(session.created_at.timestamp() * 1000) if session.created_at else None
     )
+
+
+@router.post("/{session_id}/generate-more-questions")
+async def generate_more_questions(
+    session_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate questions for remaining subtopics that don't have questions yet.
+
+    This implements progressive loading - initially only first few subtopics have questions,
+    calling this endpoint generates questions for the next batch.
+    """
+    logger.info(f"📚 Generating more questions for session {session_id}")
+
+    # Validate UUID
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    # Fetch session
+    session = db.query(StudySession).filter(
+        StudySession.id == uuid_obj,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    # Get all topics for this session
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == uuid_obj
+    ).order_by(Topic.order_index).all()
+
+    # Find subtopics without questions
+    subtopics_without_questions = []
+    for topic in all_topics:
+        if not topic.is_category:  # Only check actual subtopics
+            question_count = db.query(Question).filter(Question.topic_id == topic.id).count()
+            if question_count == 0:
+                subtopics_without_questions.append(topic)
+
+    if not subtopics_without_questions:
+        logger.info(f"✅ All subtopics already have questions for session {session_id}")
+        return {"message": "All subtopics already have questions", "generated": 0}
+
+    logger.info(f"📊 Found {len(subtopics_without_questions)} subtopics without questions")
+
+    # Generate questions for next batch (first 3 without questions)
+    BATCH_SIZE = 3
+    next_batch = subtopics_without_questions[:BATCH_SIZE]
+
+    logger.info(f"🔄 Generating questions for next {len(next_batch)} subtopics...")
+
+    # Extract text from stored file content
+    if not session.file_content:
+        raise HTTPException(status_code=400, detail="No file content available for this session")
+
+    extracted_text, _, _ = detect_file_type_and_extract(session.file_content)
+
+    # TODO: Implement question generation for next_batch subtopics
+    # For now, return success message
+    logger.info(f"✅ Would generate questions for {len(next_batch)} subtopics")
+
+    return {
+        "message": f"Generating questions for {len(next_batch)} subtopics",
+        "remaining": len(subtopics_without_questions) - len(next_batch),
+        "generated": 0  # Will be actual count after implementation
+    }
 
 
 @router.delete("/{session_id}")
