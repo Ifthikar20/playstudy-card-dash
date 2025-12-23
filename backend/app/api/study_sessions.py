@@ -769,7 +769,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
         if use_claude:
             batch_response = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=16000,  # Large enough for all questions
+                max_tokens=8192,  # Maximum for Claude 3.5 Haiku
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
