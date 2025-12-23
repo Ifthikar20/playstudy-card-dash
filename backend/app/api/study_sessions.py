@@ -611,7 +611,7 @@ async def create_study_session_with_ai(
             logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
-        topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories and subtopics.
+        topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories, subtopics, and sub-subtopics.
 
 Study Material:
 {extracted_text}
@@ -624,13 +624,14 @@ Content Analysis:
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
 2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
-3. Each subtopic can support varying numbers of questions (3-20 based on content depth)
-4. Provide clear titles and brief descriptions for both categories and subtopics
-5. Organize logically (foundational concepts first, building to advanced topics)
-6. Create AT LEAST {initial_topics} total subtopics across all categories (focus on the most important topics first)
-7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
-8. Ensure subtopics are distinct and cover different aspects of the material
-9. Focus on core concepts and foundational topics first
+3. For each subtopic, if it covers multiple distinct concepts, break it down into sub-subtopics (2-5 sub-subtopics per subtopic when appropriate)
+4. Each sub-subtopic can support varying numbers of questions (3-20 based on content depth)
+5. Provide clear titles and brief descriptions for categories, subtopics, and sub-subtopics
+6. Organize logically (foundational concepts first, building to advanced topics)
+7. Create AT LEAST {initial_topics} total subtopics across all categories (focus on the most important topics first)
+8. For complex content, create more detailed sub-subtopics; for simpler content, use subtopics without breaking them down
+9. Ensure all levels are distinct and cover different aspects of the material
+10. Focus on core concepts and foundational topics first
 
 Return ONLY a valid JSON object in this EXACT format:
 {{
@@ -641,12 +642,20 @@ Return ONLY a valid JSON object in this EXACT format:
       "subtopics": [
         {{
           "title": "Subtopic Title",
-          "description": "Brief description of what this subtopic covers"
+          "description": "Brief description of what this subtopic covers",
+          "subsubtopics": [
+            {{
+              "title": "Sub-subtopic Title",
+              "description": "Brief description of this specific aspect"
+            }}
+          ]
         }}
       ]
     }}
   ]
-}}"""
+}}
+
+Note: subsubtopics array can be empty [] if the subtopic doesn't need further breakdown."""
 
         # Call AI to extract topics
         if use_claude:
@@ -740,39 +749,86 @@ Return ONLY a valid JSON object in this EXACT format:
             # Create all subtopics for this category
             subtopics_data = category_data.get("subtopics", [])
             for sub_idx, subtopic_data in enumerate(subtopics_data):
+                # Check if this subtopic has sub-subtopics
+                subsubtopics_data = subtopic_data.get("subsubtopics", [])
+                has_subsubtopics = len(subsubtopics_data) > 0
+
+                # Create parent subtopic (this will be a container if it has sub-subtopics)
                 subtopic = Topic(
                     study_session_id=study_session.id,
                     parent_topic_id=category_topic.id,
                     title=subtopic_data["title"],
                     description=subtopic_data.get("description", ""),
                     order_index=sub_idx,
-                    is_category=False
+                    is_category=has_subsubtopics  # Mark as category if it has children
                 )
                 db.add(subtopic)
                 db.flush()
 
-                # Track subtopic for later question assignment
-                subtopic_key = f"{cat_idx}-{sub_idx}"
-                subtopic_map[subtopic_key] = {
-                    "topic": subtopic,
-                    "category_data": category_data,
-                    "subtopic_data": subtopic_data,
-                    "schema": TopicSchema(
-                        id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
-                        db_id=subtopic.id,
-                        title=subtopic_data["title"],
-                        description=subtopic_data.get("description", ""),
-                        questions=[],
-                        completed=False,
-                        score=None,
-                        currentQuestionIndex=0,
-                        isCategory=False,
-                        parentTopicId=f"category-{cat_idx+1}",
-                        subtopics=[]
-                    ),
-                    "category_schema": category_schema
-                }
-                overall_idx += 1
+                subtopic_schema = TopicSchema(
+                    id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                    db_id=subtopic.id,
+                    title=subtopic_data["title"],
+                    description=subtopic_data.get("description", ""),
+                    questions=[],
+                    completed=False,
+                    score=None,
+                    currentQuestionIndex=0,
+                    isCategory=has_subsubtopics,
+                    parentTopicId=f"category-{cat_idx+1}",
+                    subtopics=[]
+                )
+
+                if has_subsubtopics:
+                    # Create sub-subtopics (leaf nodes that will have questions)
+                    for subsub_idx, subsubtopic_data in enumerate(subsubtopics_data):
+                        subsubtopic = Topic(
+                            study_session_id=study_session.id,
+                            parent_topic_id=subtopic.id,  # Parent is the subtopic
+                            title=subsubtopic_data["title"],
+                            description=subsubtopic_data.get("description", ""),
+                            order_index=subsub_idx,
+                            is_category=False  # Leaf node
+                        )
+                        db.add(subsubtopic)
+                        db.flush()
+
+                        # Track sub-subtopic for question generation
+                        subsubtopic_key = f"{cat_idx}-{sub_idx}-{subsub_idx}"
+                        subtopic_map[subsubtopic_key] = {
+                            "topic": subsubtopic,
+                            "category_data": category_data,
+                            "subtopic_data": subtopic_data,
+                            "subsubtopic_data": subsubtopic_data,
+                            "schema": TopicSchema(
+                                id=f"subsubtopic-{cat_idx+1}-{sub_idx+1}-{subsub_idx+1}",
+                                db_id=subsubtopic.id,
+                                title=subsubtopic_data["title"],
+                                description=subsubtopic_data.get("description", ""),
+                                questions=[],
+                                completed=False,
+                                score=None,
+                                currentQuestionIndex=0,
+                                isCategory=False,
+                                parentTopicId=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                                subtopics=[]
+                            ),
+                            "subtopic_schema": subtopic_schema
+                        }
+                        overall_idx += 1
+                else:
+                    # No sub-subtopics, this subtopic will have questions directly
+                    subtopic_key = f"{cat_idx}-{sub_idx}"
+                    subtopic_map[subtopic_key] = {
+                        "topic": subtopic,
+                        "category_data": category_data,
+                        "subtopic_data": subtopic_data,
+                        "schema": subtopic_schema,
+                        "category_schema": category_schema
+                    }
+                    overall_idx += 1
+
+                category_schema.subtopics.append(subtopic_schema)
 
             all_topics.append(category_schema)
 
@@ -818,12 +874,27 @@ Return ONLY a valid JSON object in this EXACT format:
                     subtopic_info = subtopic_map[subtopic_key]
                     category_data = subtopic_info["category_data"]
                     subtopic_data = subtopic_info["subtopic_data"]
-                    cat_idx, sub_idx = map(int, subtopic_key.split('-'))
 
-                    subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
-                    subtopics_list += f"Category: {category_data['title']}\n"
-                    subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
-                    subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
+                    # Check if this is a sub-subtopic (has 3 parts: cat-sub-subsub)
+                    key_parts = subtopic_key.split('-')
+                    if len(key_parts) == 3:
+                        # This is a sub-subtopic
+                        cat_idx, sub_idx, subsub_idx = map(int, key_parts)
+                        subsubtopic_data = subtopic_info.get("subsubtopic_data", {})
+
+                        subtopics_list += f"\n[Sub-subtopic {cat_idx}-{sub_idx}-{subsub_idx}]\n"
+                        subtopics_list += f"Category: {category_data['title']}\n"
+                        subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
+                        subtopics_list += f"Sub-subtopic: {subsubtopic_data.get('title', '')}\n"
+                        subtopics_list += f"Description: {subsubtopic_data.get('description', '')}\n"
+                    else:
+                        # This is a regular subtopic
+                        cat_idx, sub_idx = map(int, key_parts)
+
+                        subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
+                        subtopics_list += f"Category: {category_data['title']}\n"
+                        subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
+                        subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
 
                 # Build prompt for this chunk and subtopic batch
                 batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
@@ -989,7 +1060,8 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
         for subtopic_key, subtopic_info in subtopic_map.items():
             subtopic = subtopic_info["topic"]
             subtopic_schema = subtopic_info["schema"]
-            category_schema = subtopic_info["category_schema"]
+            # Get parent schema (either category_schema or subtopic_schema)
+            parent_schema = subtopic_info.get("category_schema") or subtopic_info.get("subtopic_schema")
 
             # Get questions for this subtopic from batch response
             questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
@@ -998,6 +1070,9 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             if not questions_data:
                 # Expected to have questions for all subtopics
                 logger.warning(f"⚠️ No questions generated for subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING (may lack relevant content in document)")
+                # If this is a sub-subtopic without questions, still add it to parent
+                if "subtopic_schema" in subtopic_info:
+                    parent_schema.subtopics.append(subtopic_schema)
                 continue
             else:
                 logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
@@ -1059,7 +1134,9 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
             # Update subtopic schema with questions
             subtopic_schema.questions = questions_list
-            category_schema.subtopics.append(subtopic_schema)
+            # Add to parent (either category or parent subtopic)
+            if parent_schema:
+                parent_schema.subtopics.append(subtopic_schema)
 
         # Validate that questions were generated for a reasonable number of subtopics
         subtopics_with_questions = len([k for k, v in subtopics_questions.items() if v.get("questions")])
