@@ -544,7 +544,8 @@ async def create_study_session_with_ai(
 
         # Claude 3.5 Haiku has 200k token context window
         # Use chunking for documents that would exceed safe limits
-        CHUNK_SIZE_TOKENS = 100000  # 100k tokens per chunk (~400k chars)
+        # Reduced from 100k to account for prompt overhead (instructions, subtopics list, etc.)
+        CHUNK_SIZE_TOKENS = 60000  # 60k tokens per chunk (~240k chars) - leaves room for 90k prompt overhead
         OVERLAP_TOKENS = 5000  # 5k token overlap between chunks for context preservation
 
         chunk_size_chars = CHUNK_SIZE_TOKENS * 4
@@ -858,7 +859,17 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 }}"""
 
             # Make API call for this chunk
-            logger.info(f"📊 Chunk {chunk_idx} prompt length: {len(batch_prompt):,} characters")
+            prompt_tokens = len(batch_prompt) // 4  # Rough estimate
+            logger.info(f"📊 Chunk {chunk_idx} prompt length: {len(batch_prompt):,} characters (~{prompt_tokens:,} tokens)")
+
+            # Claude 3.5 Haiku has 200k context window, but we should stay well under that
+            MAX_PROMPT_TOKENS = 150000
+            if prompt_tokens > MAX_PROMPT_TOKENS:
+                logger.error(f"❌ Chunk {chunk_idx} prompt too large: {prompt_tokens:,} tokens (max: {MAX_PROMPT_TOKENS:,})")
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Document chunk {chunk_idx} is too large for processing (~{prompt_tokens:,} tokens). The document may need to be split into smaller files."
+                )
 
             try:
                 if use_claude:
@@ -902,6 +913,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
                 if start_idx == -1 or end_idx == 0:
                     logger.error(f"❌ Chunk {chunk_idx} - No JSON found in AI response")
+                    logger.error(f"❌ AI returned: {batch_text[:500]}...")  # Log first 500 chars
                     chunk_questions = {}
                 else:
                     json_str = batch_text[start_idx:end_idx]
