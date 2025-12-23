@@ -473,6 +473,11 @@ export const createStudySessionWithAI = async (
         }, 2000);
         throw new Error('Your session has expired. Please log in again.');
       }
+      if (response.status === 413) {
+        // File too large
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'File size is too large. Please use a smaller file (max 35MB).');
+      }
       const errorData = await response.json();
       throw new Error(errorData.detail || 'Failed to create study session');
     }

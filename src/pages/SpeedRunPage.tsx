@@ -43,6 +43,8 @@ export default function SpeedRunPage() {
 
   // Session loading state
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [isLoadingMoreQuestions, setIsLoadingMoreQuestions] = useState(false);
+  const [previousQuestionCount, setPreviousQuestionCount] = useState(0);
 
   // Document viewing state
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
@@ -127,6 +129,84 @@ export default function SpeedRunPage() {
 
     loadSession();
   }, [sessionId, currentSession?.id, studySessions, setCurrentSession]);
+
+  // Poll for new questions being loaded in the background
+  useEffect(() => {
+    if (!sessionId || !currentSession) return;
+
+    const checkForNewQuestions = async () => {
+      try {
+        console.log(`🔍 Polling for new questions... Current: ${allQuestions.length}, At index: ${currentQuestionIndex + 1}`);
+        const updatedSession = await getStudySession(sessionId);
+
+        // Count current questions
+        const currentCount = allQuestions.length;
+        const updatedSubtopics = updatedSession.extractedTopics?.flatMap(category =>
+          category.subtopics || []
+        ) || [];
+        const updatedCount = updatedSubtopics.flatMap(topic => topic.questions || []).length;
+
+        console.log(`📊 Poll result: ${currentCount} -> ${updatedCount} questions`);
+
+        // If question count increased, update the session
+        if (updatedCount > currentCount) {
+          console.log(`✅ New questions loaded! Updating ${currentCount} -> ${updatedCount}`);
+          setCurrentSession(updatedSession);
+          setPreviousQuestionCount(currentCount);
+
+          // Check if there are still subtopics without questions
+          const hasSubtopicsWithoutQuestions = updatedSubtopics.some(t => !t.questions || t.questions.length === 0);
+          console.log(`🔄 Still loading more? ${hasSubtopicsWithoutQuestions}`);
+          setIsLoadingMoreQuestions(hasSubtopicsWithoutQuestions);
+        }
+      } catch (error) {
+        console.error('❌ Error checking for new questions:', error);
+      }
+    };
+
+    // More aggressive polling when at the max question - every 2 seconds
+    // Regular polling when near the end - every 4 seconds
+    const isAtMax = currentQuestionIndex >= allQuestions.length - 1;
+    const isNearEnd = currentQuestionIndex >= allQuestions.length - 5;
+    const shouldPoll = (isAtMax || isNearEnd) && isLoadingMoreQuestions;
+
+    if (shouldPoll) {
+      const pollInterval = isAtMax ? 2000 : 4000;
+      console.log(`⏱️ Starting polling (every ${pollInterval}ms) - At max: ${isAtMax}, Loading: ${isLoadingMoreQuestions}`);
+      const interval = setInterval(checkForNewQuestions, pollInterval);
+      return () => {
+        console.log('🛑 Stopping polling');
+        clearInterval(interval);
+      };
+    }
+  }, [sessionId, currentSession, currentQuestionIndex, allQuestions.length, isLoadingMoreQuestions]);
+
+  // Track when question count changes to detect new questions being loaded
+  useEffect(() => {
+    if (allQuestions.length > 0 && previousQuestionCount === 0) {
+      setPreviousQuestionCount(allQuestions.length);
+    } else if (allQuestions.length > previousQuestionCount && previousQuestionCount > 0) {
+      setPreviousQuestionCount(allQuestions.length);
+    }
+  }, [allQuestions.length, previousQuestionCount]);
+
+  // Detect if we're at the max and should show loading indicator
+  useEffect(() => {
+    if (!currentSession?.extractedTopics) return;
+
+    const subtopics = currentSession.extractedTopics.flatMap(category => category.subtopics || []);
+    const hasSubtopicsWithoutQuestions = subtopics.some(topic => !topic.questions || topic.questions.length === 0);
+
+    console.log(`🎯 Loading state check:`, {
+      totalSubtopics: subtopics.length,
+      subtopicsWithoutQuestions: subtopics.filter(t => !t.questions || t.questions.length === 0).length,
+      totalQuestions: allQuestions.length,
+      isLoadingMoreQuestions: hasSubtopicsWithoutQuestions,
+      currentQuestionIndex: currentQuestionIndex + 1
+    });
+
+    setIsLoadingMoreQuestions(hasSubtopicsWithoutQuestions);
+  }, [currentSession?.extractedTopics, allQuestions.length, currentQuestionIndex]);
 
   // Convert base64 to blob URL for PDF viewing
   const getPdfDataUrl = () => {
@@ -608,13 +688,47 @@ export default function SpeedRunPage() {
                   {/* Question Header */}
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">
-                        Question {currentQuestionIndex + 1} / {allQuestions.length}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          Question {currentQuestionIndex + 1} / {allQuestions.length}
+                        </span>
+                        {isLoadingMoreQuestions && (
+                          <div className="flex items-center gap-1 text-xs text-primary animate-pulse">
+                            <RotateCw className="h-3 w-3 animate-spin" />
+                            <span>Loading more...</span>
+                          </div>
+                        )}
+                      </div>
                       <span className="text-sm font-medium text-primary">
                         Correct: {correctCount} / {currentQuestionIndex + (hasAnswered ? 1 : 0)}
                       </span>
                     </div>
+
+                    {/* Show prominent message when AT the max question count */}
+                    {isLoadingMoreQuestions && currentQuestionIndex >= allQuestions.length - 1 && (
+                      <div className="mt-3 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 border-2 border-blue-400 dark:border-blue-600 rounded-lg shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <RotateCw className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-spin mt-0.5" />
+                          <div>
+                            <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                              📚 Generating More Questions...
+                            </p>
+                            <p className="text-xs text-blue-700 dark:text-blue-300">
+                              You've reached question {allQuestions.length}, but more are being generated! The count will update automatically (e.g., {allQuestions.length}/{allQuestions.length} → {allQuestions.length}/{allQuestions.length + 19} → {allQuestions.length + 19}/{allQuestions.length + 46}).
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show subtle message when near the end but not at max */}
+                    {isLoadingMoreQuestions && currentQuestionIndex < allQuestions.length - 1 && currentQuestionIndex >= allQuestions.length - 5 && (
+                      <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950/20 border-l-4 border-blue-500 rounded">
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          💡 More questions are being generated in the background. Keep going!
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {speedRunMode === 'mcq' ? (
@@ -781,11 +895,25 @@ export default function SpeedRunPage() {
                     </Button>
                     <Button
                       onClick={nextQuestion}
-                      disabled={currentQuestionIndex >= allQuestions.length - 1}
+                      disabled={currentQuestionIndex >= allQuestions.length - 1 && !isLoadingMoreQuestions}
                       className="flex-1"
                     >
-                      Next
-                      <ChevronRight className="h-4 w-4 ml-2" />
+                      {currentQuestionIndex >= allQuestions.length - 1 && isLoadingMoreQuestions ? (
+                        <>
+                          <RotateCw className="h-4 w-4 mr-2 animate-spin" />
+                          Loading More Questions...
+                        </>
+                      ) : currentQuestionIndex >= allQuestions.length - 1 ? (
+                        <>
+                          Finished
+                          <CheckCircle2 className="h-4 w-4 ml-2" />
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-2" />
+                        </>
+                      )}
                     </Button>
                   </div>
                 </>
