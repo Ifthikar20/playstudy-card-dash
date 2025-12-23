@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
-import { createStudySessionWithAI, analyzeContent, ContentAnalysis } from "@/services/api";
+import { createStudySessionWithAI, analyzeContent, ContentAnalysis, generateAllRemainingQuestions } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
@@ -168,11 +168,27 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
       toast({
         title: "Session Created!",
-        description: `${newSession.topics} topics generated with ${questionCount[0]} questions each.`,
+        description: `Initial questions loaded. Generating remaining questions in background...`,
       });
 
       setIsProcessing(false);
       setStep("select-mode");
+
+      // Start loading remaining questions automatically in background
+      generateAllRemainingQuestions(newSession.id, (generated, remaining) => {
+        console.log(`📊 Progress: Generated ${generated} more subtopics, ${remaining} remaining`);
+
+        // Show toast when all done
+        if (remaining === 0) {
+          toast({
+            title: "All Questions Ready!",
+            description: "All questions have been generated for this session.",
+          });
+        }
+      }).catch((error) => {
+        console.error('Failed to generate remaining questions:', error);
+        // Don't show error toast - initial questions are already available
+      });
     } catch (error: any) {
       setIsProcessing(false);
       toast({

@@ -1197,14 +1197,193 @@ async def generate_more_questions(
 
     extracted_text, _, _ = detect_file_type_and_extract(session.file_content)
 
-    # TODO: Implement question generation for next_batch subtopics
-    # For now, return success message
-    logger.info(f"✅ Would generate questions for {len(next_batch)} subtopics")
+    # Initialize AI client
+    use_claude = bool(settings.ANTHROPIC_API_KEY)
+    if use_claude:
+        anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        logger.info("🚀 Using Claude Haiku for question generation")
+    else:
+        deepseek_client = OpenAI(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
+        logger.info("⏱️ Using DeepSeek")
+
+    # Build prompt for next batch
+    subtopics_list = ""
+    subtopic_map = {}
+
+    # Get parent categories to build proper context
+    categories = db.query(Topic).filter(
+        Topic.study_session_id == uuid_obj,
+        Topic.is_category == True,
+        Topic.parent_topic_id == None
+    ).all()
+
+    for topic in next_batch:
+        # Find parent category
+        parent = db.query(Topic).filter(Topic.id == topic.parent_topic_id).first()
+        category_title = parent.title if parent else "General"
+
+        # Create mapping key (we'll use topic db_id)
+        key = f"topic-{topic.id}"
+        subtopic_map[key] = topic
+
+        subtopics_list += f"\n[Subtopic {key}]\n"
+        subtopics_list += f"Category: {category_title}\n"
+        subtopics_list += f"Subtopic: {topic.title}\n"
+        subtopics_list += f"Description: {topic.description or ''}\n"
+
+    # Build prompt
+    batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+
+IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
+- Simple subtopic with limited content: 3-5 questions
+- Moderate subtopic with decent coverage: 6-10 questions
+- Complex subtopic with extensive material: 10-20 questions
+- Generate questions for ALL listed subtopics below
+- The goal is to create AS MANY quality questions as the content supports
+
+Study Material:
+{extracted_text[:400000]}
+
+SUBTOPICS TO COVER:
+{subtopics_list}
+
+Requirements:
+1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
+2. Prioritize quality over quantity - each question should test real understanding
+3. Each question must have exactly 4 options
+4. Questions should test understanding of the material
+5. Provide clear explanations
+6. For EACH question, include the source text from the study material with FULL CONTEXT
+7. Source text should include the complete sentence(s) or paragraph that contains the answer
+8. Include enough surrounding context so students can easily locate it in their document
+9. Aim for 2-4 sentences of context (not just a fragment)
+10. Return ONLY valid JSON
+
+Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
+{{
+  "subtopics": {{
+    "topic-123": {{
+      "questions": [
+        {{
+          "question": "Question text?",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correctAnswer": 0,
+          "explanation": "Why this answer is correct",
+          "sourceText": "The complete sentence or paragraph from the study material with context."
+        }}
+      ]
+    }},
+    "topic-456": {{
+      "questions": [...]
+    }}
+  }}
+}}"""
+
+    # Make API call
+    logger.info(f"📊 Prompt length: {len(batch_prompt):,} characters")
+
+    try:
+        if use_claude:
+            batch_response = anthropic_client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=8192,
+                temperature=0.7,
+                messages=[{"role": "user", "content": batch_prompt}]
+            )
+            batch_text = batch_response.content[0].text
+        else:
+            batch_response = deepseek_client.chat.completions.create(
+                model="deepseek-chat",
+                max_tokens=16000,
+                temperature=0.7,
+                messages=[{"role": "user", "content": batch_prompt}]
+            )
+            batch_text = batch_response.choices[0].message.content
+    except Exception as api_error:
+        logger.error(f"❌ AI API call failed: {type(api_error).__name__}: {str(api_error)}")
+        raise HTTPException(status_code=500, detail=f"AI API error: {str(api_error)}")
+
+    # Parse response
+    logger.info(f"📨 Received AI response, length: {len(batch_text)} characters")
+
+    try:
+        start_idx = batch_text.find('{')
+        end_idx = batch_text.rfind('}') + 1
+
+        if start_idx == -1 or end_idx == 0:
+            logger.error(f"❌ No JSON found in AI response")
+            raise HTTPException(status_code=500, detail="Failed to parse AI response")
+
+        json_str = batch_text[start_idx:end_idx]
+        batch_json = json.loads(json_str)
+        subtopics_questions = batch_json.get("subtopics", {})
+
+        logger.info(f"✅ Parsed {len(subtopics_questions)} subtopics from AI response")
+        for key in subtopics_questions.keys():
+            q_count = len(subtopics_questions[key].get("questions", []))
+            logger.info(f"  - Subtopic {key}: {q_count} questions")
+
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        logger.error(f"❌ Failed to parse questions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+
+    # Save questions to database
+    total_questions_generated = 0
+
+    for key, topic in subtopic_map.items():
+        questions_data = subtopics_questions.get(key, {}).get("questions", [])
+
+        if not questions_data:
+            logger.warning(f"⚠️ No questions generated for subtopic '{key}' ('{topic.title}')")
+            continue
+
+        logger.info(f"✅ Saving {len(questions_data)} questions for subtopic '{topic.title}'")
+
+        for q_idx, q_data in enumerate(questions_data):
+            # Ensure options is a list
+            options = q_data.get("options", ["A", "B", "C", "D"])
+            if isinstance(options, str):
+                try:
+                    options = json.loads(options)
+                except json.JSONDecodeError:
+                    options = ["Option A", "Option B", "Option C", "Option D"]
+
+            question = Question(
+                topic_id=topic.id,
+                question=q_data.get("question", f"Question {q_idx+1}"),
+                options=options,
+                correct_answer=q_data.get("correctAnswer", 0),
+                explanation=q_data.get("explanation", ""),
+                source_text=q_data.get("sourceText"),
+                order_index=q_idx
+            )
+            db.add(question)
+            total_questions_generated += 1
+
+    # Commit to database
+    try:
+        db.commit()
+        logger.info(f"✅ Successfully saved {total_questions_generated} questions to database")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Failed to save questions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save questions: {str(e)}")
+
+    # Count remaining subtopics without questions
+    remaining_count = len(subtopics_without_questions) - len(next_batch)
+
+    logger.info(f"✅ Generated {total_questions_generated} questions for {len(next_batch)} subtopics")
+    logger.info(f"📊 Remaining subtopics without questions: {remaining_count}")
 
     return {
-        "message": f"Generating questions for {len(next_batch)} subtopics",
-        "remaining": len(subtopics_without_questions) - len(next_batch),
-        "generated": 0  # Will be actual count after implementation
+        "message": f"Successfully generated questions for {len(next_batch)} subtopics",
+        "generated": len(next_batch),
+        "totalQuestions": total_questions_generated,
+        "remaining": remaining_count,
+        "hasMore": remaining_count > 0
     }
 
 

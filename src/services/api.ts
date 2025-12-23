@@ -590,6 +590,66 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 };
 
 /**
+ * Generate more questions for remaining subtopics (automatic progressive loading)
+ * This should be called automatically after session creation to load all remaining questions
+ */
+export const generateAllRemainingQuestions = async (
+  sessionId: string,
+  onProgress?: (generated: number, remaining: number) => void
+): Promise<void> => {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    let hasMore = true;
+    let totalGenerated = 0;
+
+    console.log(`🔄 Starting automatic question generation for session ${sessionId}`);
+
+    while (hasMore) {
+      const response = await fetch(`${API_URL}/study-sessions/${sessionId}/generate-more-questions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Failed to generate more questions:', response.statusText);
+        break;
+      }
+
+      const data = await response.json();
+
+      totalGenerated += data.generated || 0;
+      hasMore = data.hasMore || false;
+
+      console.log(`✅ Generated ${data.generated} more subtopics (${data.totalQuestions} questions). Remaining: ${data.remaining}`);
+
+      // Notify progress callback
+      if (onProgress) {
+        onProgress(data.generated, data.remaining);
+      }
+
+      // If there are more, continue loading
+      if (!hasMore) {
+        console.log(`🎉 All questions generated! Total: ${totalGenerated} batches`);
+        break;
+      }
+
+      // Small delay between requests to avoid overwhelming server
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+  } catch (error) {
+    console.error('Error generating remaining questions:', error);
+    throw error;
+  }
+};
+
+/**
  * Update topic progress (score, current question index, completion status)
  */
 export const updateTopicProgress = async (
