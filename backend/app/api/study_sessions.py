@@ -764,21 +764,18 @@ Return ONLY a valid JSON object in this EXACT format:
         # For large documents, this processes multiple chunks separately and merges results
         logger.info(f"📡 Processing {len(document_chunks)} document chunk(s) to generate questions...")
 
-        # Progressive Loading: For initial session creation, only generate questions for first few subtopics
-        # This provides quick initial load, remaining questions can be loaded on-demand
-        INITIAL_SUBTOPICS_LIMIT = 3  # Generate questions for first 3 subtopics initially
+        # Generate questions for ALL subtopics during initial creation
+        # This ensures maximum question coverage from the uploaded document
 
         # Get list of all subtopic keys
         all_subtopic_keys = list(subtopic_map.keys())
-        initial_subtopic_keys = all_subtopic_keys[:INITIAL_SUBTOPICS_LIMIT]
 
-        logger.info(f"📚 Progressive loading enabled: Generating questions for first {len(initial_subtopic_keys)} subtopics out of {len(all_subtopic_keys)} total")
-        logger.info(f"  Initial batch: {initial_subtopic_keys}")
-        logger.info(f"  Remaining: {all_subtopic_keys[INITIAL_SUBTOPICS_LIMIT:]}")
+        logger.info(f"📚 Generating questions for ALL {len(all_subtopic_keys)} subtopics to maximize coverage")
+        logger.info(f"  Subtopics: {all_subtopic_keys}")
 
-        # Build subtopic list for prompt (only include initial subtopics)
+        # Build subtopic list for prompt (include ALL subtopics)
         subtopics_list = ""
-        for subtopic_key in initial_subtopic_keys:
+        for subtopic_key in all_subtopic_keys:
             subtopic_info = subtopic_map[subtopic_key]
             category_data = subtopic_info["category_data"]
             subtopic_data = subtopic_info["subtopic_data"]
@@ -798,25 +795,27 @@ Return ONLY a valid JSON object in this EXACT format:
             # Build prompt for this chunk
             batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
 
-IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
-- Simple subtopic with limited content: 3-5 questions
-- Moderate subtopic with decent coverage: 6-10 questions
-- Complex subtopic with extensive material: 10-20 questions
-- Generate questions for ALL listed subtopics below (this is an initial batch, more will be generated later)
-- The goal is to create AS MANY quality questions as the content supports
+IMPORTANT: Generate MAXIMUM questions per subtopic based on content depth:
+- Simple subtopic with limited content: 5-10 questions minimum
+- Moderate subtopic with decent coverage: 10-15 questions
+- Complex subtopic with extensive material: 15-30 questions
+- Generate questions for ALL listed subtopics below
+- GOAL: Create the MAXIMUM number of quality, non-duplicate questions the content supports
+- Extract every testable concept from the material
+- Cover different aspects and difficulty levels
 
 Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
 {chunk_text}
 
-SUBTOPICS TO COVER (Initial Batch - {len(initial_subtopic_keys)} of {len(all_subtopic_keys)} total):
+SUBTOPICS TO COVER (ALL {len(all_subtopic_keys)} subtopics):
 {subtopics_list}
 
 Requirements:
-1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
-2. Prioritize quality over quantity - each question should test real understanding
-3. Each question must have exactly 4 options
-4. Questions should test understanding of the material
-5. Provide clear explanations
+1. Generate MAXIMUM questions for EACH subtopic (5-30 questions based on content depth)
+2. NO DUPLICATES - each question must test a unique concept
+3. Each question must have exactly 4 plausible options
+4. Questions should test deep understanding, not just recall
+5. Provide detailed explanations
 6. For EACH question, include the source text from the study material with FULL CONTEXT
 7. Source text should include the complete sentence(s) or paragraph that contains the answer
 8. Include enough surrounding context so students can easily locate it in their document
@@ -935,21 +934,31 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             # Get questions for this subtopic from batch response
             questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
 
-            # Skip if no questions generated (progressive loading - will be generated later)
+            # Skip if no questions generated
             if not questions_data:
-                if subtopic_key in initial_subtopic_keys:
-                    # Expected to have questions for initial batch
-                    logger.warning(f"⚠️ No questions generated for initial subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING")
-                else:
-                    # Progressive loading - will be generated on-demand later
-                    logger.info(f"⏭️ Subtopic '{subtopic_key}' ('{subtopic.title}') - Deferred for progressive loading")
+                # Expected to have questions for all subtopics
+                logger.warning(f"⚠️ No questions generated for subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING (may lack relevant content in document)")
                 continue
             else:
                 logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
 
             # Save ALL questions to database (no limit - variable per topic)
+            # Get existing questions for this topic to check for duplicates
+            existing_questions = db.query(Question).filter(Question.topic_id == subtopic.id).all()
+            existing_question_texts = {q.question.lower().strip() for q in existing_questions}
+
             questions_list = []
+            duplicates_skipped = 0
+
             for q_idx, q_data in enumerate(questions_data):
+                question_text = q_data.get("question", f"Question {q_idx+1}")
+
+                # Check for duplicate questions (case-insensitive)
+                if question_text.lower().strip() in existing_question_texts:
+                    logger.debug(f"⏭️ Skipping duplicate question: {question_text[:50]}...")
+                    duplicates_skipped += 1
+                    continue
+
                 # Ensure options is a list
                 options = q_data.get("options", ["A", "B", "C", "D"])
                 if isinstance(options, str):
@@ -960,14 +969,17 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
                 question = Question(
                     topic_id=subtopic.id,
-                    question=q_data.get("question", f"Question {q_idx+1}"),
+                    question=question_text,
                     options=options,
                     correct_answer=q_data.get("correctAnswer", 0),
                     explanation=q_data.get("explanation", ""),
                     source_text=q_data.get("sourceText"),
-                    order_index=q_idx
+                    order_index=len(questions_list)  # Use actual index in list
                 )
                 db.add(question)
+
+                # Add to existing set to catch duplicates within this batch
+                existing_question_texts.add(question_text.lower().strip())
 
                 questions_list.append(QuestionSchema(
                     id=f"q-{question_counter}",
@@ -978,6 +990,10 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     sourceText=q_data.get("sourceText")
                 ))
                 question_counter += 1
+
+            # Log duplicate detection results
+            if duplicates_skipped > 0:
+                logger.info(f"  ⏭️ Skipped {duplicates_skipped} duplicate questions for '{subtopic.title}'")
 
             # Update subtopic schema with questions
             subtopic_schema.questions = questions_list
