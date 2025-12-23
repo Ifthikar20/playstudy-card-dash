@@ -1397,22 +1397,22 @@ async def generate_more_questions(
         Topic.study_session_id == uuid_obj
     ).order_by(Topic.order_index).all()
 
-    # Find subtopics without questions
+    # Find ALL topics without questions (including categories for overview questions)
     subtopics_without_questions = []
     for topic in all_topics:
-        if not topic.is_category:  # Only check actual subtopics
-            question_count = db.query(Question).filter(Question.topic_id == topic.id).count()
-            if question_count == 0:
-                subtopics_without_questions.append(topic)
+        # Check ALL topics (both categories and leaf nodes) for questions
+        question_count = db.query(Question).filter(Question.topic_id == topic.id).count()
+        if question_count == 0:
+            subtopics_without_questions.append(topic)
 
     if not subtopics_without_questions:
         logger.info(f"✅ All subtopics already have questions for session {session_id}")
         return {"message": "All subtopics already have questions", "generated": 0}
 
-    logger.info(f"📊 Found {len(subtopics_without_questions)} subtopics without questions")
+    logger.info(f"📊 Found {len(subtopics_without_questions)} topics without questions")
 
-    # Generate questions for next batch (first 3 without questions)
-    BATCH_SIZE = 3
+    # Generate questions for next batch (2 topics at a time for better coverage)
+    BATCH_SIZE = 2
     next_batch = subtopics_without_questions[:BATCH_SIZE]
 
     logger.info(f"🔄 Generating questions for next {len(next_batch)} subtopics...")
@@ -1439,13 +1439,6 @@ async def generate_more_questions(
     subtopics_list = ""
     subtopic_map = {}
 
-    # Get parent categories to build proper context
-    categories = db.query(Topic).filter(
-        Topic.study_session_id == uuid_obj,
-        Topic.is_category == True,
-        Topic.parent_topic_id == None
-    ).all()
-
     for topic in next_batch:
         # Find parent category
         parent = db.query(Topic).filter(Topic.id == topic.parent_topic_id).first()
@@ -1455,22 +1448,45 @@ async def generate_more_questions(
         key = f"topic-{topic.id}"
         subtopic_map[key] = topic
 
-        subtopics_list += f"\n[Subtopic {key}]\n"
-        subtopics_list += f"Category: {category_title}\n"
-        subtopics_list += f"Subtopic: {topic.title}\n"
+        # Include type information for the AI
+        topic_type = "CATEGORY (overview/synthesis questions)" if topic.is_category else "SPECIFIC TOPIC (detailed questions)"
+
+        subtopics_list += f"\n[Topic {key}]\n"
+        subtopics_list += f"Title: {topic.title}\n"
         subtopics_list += f"Description: {topic.description or ''}\n"
+        subtopics_list += f"Type: {topic_type}\n"
+        if parent:
+            subtopics_list += f"Parent Category: {category_title}\n"
 
     # Build prompt
-    batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
+    batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following topics from the study material.
 
 CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
 - Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
-- DO NOT impose any limits on the number of questions - generate as many as the content supports
+- DO NOT impose any limits on the number of questions - generate as many as the content supports (aim for 15-30+ questions per topic)
 - Break down EVERY concept into multiple questions from different angles
 - Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
 - Create questions for every sentence that contains testable information
-- Generate questions for ALL listed subtopics below
+- Generate questions for ALL listed topics below - if the material is light on a topic, use the topic title and description to create questions
+- Even if a topic is only mentioned briefly, create comprehensive questions based on what IS mentioned
 - Continue generating until you have exhausted ALL testable content
+
+QUESTION TYPES BASED ON TOPIC TYPE:
+1. For CATEGORY topics (overview/synthesis questions):
+   - Test overall understanding of the category and how subtopics relate
+   - Ask synthesis questions that integrate concepts from multiple subtopics
+   - Include comparison questions between different subtopics within the category
+   - Test the big picture and overarching principles
+
+2. For SPECIFIC TOPIC (detailed questions):
+   - Test deep, specific knowledge about that particular topic
+   - Include detailed questions about definitions, principles, and mechanisms
+   - Ask application questions specific to that topic
+
+3. For ALL topics (CRITICAL - include these):
+   - EXAMPLE-BASED QUESTIONS: "Give an example of...", "Which scenario demonstrates...", "Which of the following is an example of..."
+   - Application questions that require applying concepts to real scenarios
+   - Questions that test practical understanding through examples
 
 DIFFICULTY LEVEL: CHALLENGING
 - Make questions that require DEEP analysis and critical thinking
@@ -1480,31 +1496,39 @@ DIFFICULTY LEVEL: CHALLENGING
 - Include "all of the above" or "none of the above" when appropriate
 - Use comparative questions (e.g., "Which is the PRIMARY..." "What is the MAIN difference...")
 - Create questions that test WHY and HOW, not just WHAT
+- For every concept, include at least one EXAMPLE-BASED question
 
 Study Material:
 {extracted_text[:400000]}
 
-SUBTOPICS TO COVER:
+TOPICS TO COVER ({len(next_batch)} topics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate UNLIMITED questions for EACH subtopic - as many as the content supports
+1. Generate UNLIMITED questions for EACH topic - aim for 15-30+ questions per topic minimum
 2. Extract EVERY piece of testable information from the study material
-3. Prioritize comprehensive coverage - each question should test real understanding
-4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
-5. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
-6. Distractors should be subtle and based on common misconceptions
-7. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
-8. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
-9. Source text should include the complete sentence(s) or paragraph that contains the answer
-10. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
-11. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
-12. For PDF documents, estimate which section/page the content appears in
-13. Return ONLY valid JSON
+3. NO DUPLICATES - each question must test a unique concept or angle
+4. For EACH topic, include multiple EXAMPLE-BASED questions (e.g., "Which scenario is an example of...?")
+5. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+6. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+7. Distractors should be subtle and based on common misconceptions
+8. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+9. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+10. Source text should include the complete sentence(s) or paragraph that contains the answer
+11. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+12. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+13. For PDF documents, estimate which section/page the content appears in
+14. Return ONLY valid JSON
 
-GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
+GOAL: Create the MAXIMUM number of questions possible per topic (15-30+ each). Include example-based questions for EVERY concept. More questions = better learning coverage!
 
-Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
+CRITICAL REQUIREMENTS:
+- You MUST generate questions for EVERY SINGLE topic key listed above - NO EXCEPTIONS
+- If a topic is listed, it MUST appear in your JSON response with questions
+- Missing even ONE topic key will result in incomplete learning coverage
+- Each topic MUST have at least 10-15 questions minimum
+
+Return in this EXACT format (use topic keys EXACTLY as shown above - EVERY topic listed must be in the response):
 {{
   "subtopics": {{
     "topic-123": {{
@@ -1516,14 +1540,21 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
           "explanation": "Why this answer is correct",
           "sourceText": "The complete sentence or paragraph from the study material with context.",
           "sourcePage": null
-        }}
+        }},
+        ... (10-30+ questions for topic "topic-123")
       ]
     }},
     "topic-456": {{
-      "questions": [...]
-    }}
+      "questions": [
+        {{question object}},
+        ... (10-30+ questions for topic "topic-456")
+      ]
+    }},
+    ... (MUST include ALL topic keys from the list above)
   }}
-}}"""
+}}
+
+REMINDER: The response MUST include questions for ALL {len(next_batch)} topics listed above. Double-check that every topic key appears in your JSON response."""
 
     # Make API call
     logger.info(f"📊 Prompt length: {len(batch_prompt):,} characters")
@@ -1564,10 +1595,18 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         batch_json = json.loads(json_str)
         subtopics_questions = batch_json.get("subtopics", {})
 
-        logger.info(f"✅ Parsed {len(subtopics_questions)} subtopics from AI response")
+        logger.info(f"✅ Parsed {len(subtopics_questions)} topics from AI response")
         for key in subtopics_questions.keys():
             q_count = len(subtopics_questions[key].get("questions", []))
-            logger.info(f"  - Subtopic {key}: {q_count} questions")
+            logger.info(f"  - Topic {key}: {q_count} questions")
+
+        # Validate that ALL topics in this batch got questions
+        missing_topics = [key for key in subtopic_map.keys() if key not in subtopics_questions or not subtopics_questions[key].get("questions")]
+        if missing_topics:
+            logger.warning(f"⚠️ AI did NOT generate questions for {len(missing_topics)} topics: {missing_topics}")
+            logger.warning(f"⚠️ Topics requested: {list(subtopic_map.keys())}")
+        else:
+            logger.info(f"✅ ALL {len(subtopic_map)} topics have questions")
 
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         logger.error(f"❌ Failed to parse questions: {e}")
