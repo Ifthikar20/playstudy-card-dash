@@ -560,7 +560,7 @@ Content Analysis:
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
 2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
-3. Each subtopic should be substantial enough for {data.questions_per_topic} questions
+3. Each subtopic can support varying numbers of questions (3-20 based on content depth)
 4. Provide clear titles and brief descriptions for both categories and subtopics
 5. Organize logically (foundational concepts first, building to advanced topics)
 6. Create AT LEAST {data.num_topics} total subtopics across all categories, but feel free to add more if the content warrants it
@@ -714,7 +714,13 @@ Return ONLY a valid JSON object in this EXACT format:
 
         # Step 4: Generate ALL questions in ONE batch request
         # Build comprehensive batch prompt listing all subtopics
-        batch_prompt = f"""Generate {data.questions_per_topic} multiple-choice questions for EACH of the following subtopics from the study material.
+        batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+
+IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
+- Simple subtopic with limited content: 3-5 questions
+- Moderate subtopic with decent coverage: 6-10 questions
+- Complex subtopic with extensive material: 10-20 questions
+- The goal is to create AS MANY quality questions as the content supports
 
 Study Material:
 {extracted_text}
@@ -733,15 +739,16 @@ SUBTOPICS TO COVER:
 
         batch_prompt += f"""
 Requirements:
-1. Generate exactly {data.questions_per_topic} questions for EACH subtopic listed above
-2. Each question must have exactly 4 options
-3. Questions should test understanding of the material
-4. Provide clear explanations
-5. For EACH question, include the source text from the study material with FULL CONTEXT
-6. Source text should include the complete sentence(s) or paragraph that contains the answer
-7. Include enough surrounding context so students can easily locate it in their document
-8. Aim for 2-4 sentences of context (not just a fragment)
-9. Return ONLY valid JSON
+1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
+2. Prioritize quality over quantity - each question should test real understanding
+3. Each question must have exactly 4 options
+4. Questions should test understanding of the material
+5. Provide clear explanations
+6. For EACH question, include the source text from the study material with FULL CONTEXT
+7. Source text should include the complete sentence(s) or paragraph that contains the answer
+8. Include enough surrounding context so students can easily locate it in their document
+9. Aim for 2-4 sentences of context (not just a fragment)
+10. Return ONLY valid JSON
 
 Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 {{
@@ -764,7 +771,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 }}"""
 
         # Make ONE API call for all questions
-        logger.info(f"📡 Generating {len(subtopic_map)} × {data.questions_per_topic} = {len(subtopic_map) * data.questions_per_topic} questions in batch...")
+        logger.info(f"📡 Generating variable questions for {len(subtopic_map)} subtopics (3-20 per topic based on content depth)...")
 
         if use_claude:
             batch_response = anthropic_client.messages.create(
@@ -803,19 +810,19 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             # Get questions for this subtopic from batch response
             questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
 
-            # Fallback if no questions generated
+            # Fallback if no questions generated (create 5 as default)
             if not questions_data:
-                logger.warning(f"No questions found for subtopic {subtopic_key}, creating placeholders")
+                logger.warning(f"No questions found for subtopic {subtopic_key}, creating 5 placeholder questions")
                 questions_data = [{
                     "question": f"Question {i+1} about {subtopic.title}",
                     "options": ["Option A", "Option B", "Option C", "Option D"],
                     "correctAnswer": 0,
                     "explanation": "This is a placeholder question."
-                } for i in range(data.questions_per_topic)]
+                } for i in range(5)]
 
-            # Save questions to database
+            # Save ALL questions to database (no limit - variable per topic)
             questions_list = []
-            for q_idx, q_data in enumerate(questions_data[:data.questions_per_topic]):
+            for q_idx, q_data in enumerate(questions_data):
                 # Ensure options is a list
                 options = q_data.get("options", ["A", "B", "C", "D"])
                 if isinstance(options, str):
