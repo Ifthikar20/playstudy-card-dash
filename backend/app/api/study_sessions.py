@@ -404,7 +404,7 @@ class CreateStudySessionRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit for base64 encoded files (large PDFs)
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
-    questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
+    questions_per_topic: int = Field(default=50, ge=5, le=200)  # Lowered minimum to 5 to support flexible question generation
     progressive_load: bool = Field(default=False)  # DISABLED: Generate ALL questions upfront for better UX
 
 
@@ -544,9 +544,9 @@ async def create_study_session_with_ai(
 
         # Claude 3.5 Haiku has 200k token context window
         # Use chunking for documents that would exceed safe limits
-        # Reduced from 100k to account for prompt overhead (instructions, subtopics list, etc.)
-        CHUNK_SIZE_TOKENS = 60000  # 60k tokens per chunk (~240k chars) - leaves room for 90k prompt overhead
-        OVERLAP_TOKENS = 5000  # 5k token overlap between chunks for context preservation
+        # Reduced significantly to account for prompt overhead (instructions, subtopics list, output, etc.)
+        CHUNK_SIZE_TOKENS = 20000  # 20k tokens per chunk (~80k chars) - conservative to prevent "too large" errors
+        OVERLAP_TOKENS = 2000  # 2k token overlap between chunks for context preservation
 
         chunk_size_chars = CHUNK_SIZE_TOKENS * 4
         overlap_chars = OVERLAP_TOKENS * 4
@@ -599,19 +599,24 @@ async def create_study_session_with_ai(
 
         # Initialize AI client (prefer Claude Haiku for speed, fallback to DeepSeek)
         use_claude = bool(settings.ANTHROPIC_API_KEY)
+        anthropic_client = None
+        deepseek_client = None
 
         if use_claude:
             anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
             logger.info("🚀 Using Claude Haiku for fast generation")
-        else:
+
+        # Always initialize DeepSeek as fallback
+        if settings.DEEPSEEK_API_KEY:
             deepseek_client = OpenAI(
                 api_key=settings.DEEPSEEK_API_KEY,
                 base_url="https://api.deepseek.com"
             )
-            logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
+            if not use_claude:
+                logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
-        topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories and subtopics.
+        topics_prompt = f"""Analyze this study material and organize it into a DEEPLY NESTED hierarchical structure with UNLIMITED depth.
 
 Study Material:
 {extracted_text}
@@ -623,16 +628,19 @@ Content Analysis:
 
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
-2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
-3. Each subtopic can support varying numbers of questions (3-20 based on content depth)
-4. Provide clear titles and brief descriptions for both categories and subtopics
-5. Organize logically (foundational concepts first, building to advanced topics)
-6. Create AT LEAST {initial_topics} total subtopics across all categories (focus on the most important topics first)
-7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
-8. Ensure subtopics are distinct and cover different aspects of the material
-9. Focus on core concepts and foundational topics first
+2. Within each category, break down into subtopics
+3. RECURSIVELY break down complex subtopics into deeper levels (4, 5, 6, 7, 8+ levels if needed!)
+4. Only stop nesting when you reach atomic concepts that can be tested with questions (leaf nodes)
+5. Each leaf node should be a single, focused concept that supports 3-20 questions
+6. Provide clear titles and brief descriptions at ALL levels
+7. Organize logically (foundational concepts first, building to advanced topics)
+8. Create AT LEAST {initial_topics} total LEAF topics across all categories
+9. For complex content, create DEEP hierarchies; for simpler content, use shallow hierarchies
+10. Focus on core concepts and foundational topics first
 
-Return ONLY a valid JSON object in this EXACT format:
+IMPORTANT: The "subtopics" array at EVERY level can contain more nested subtopics. Keep nesting until you reach atomic, testable concepts.
+
+Return ONLY a valid JSON object in this EXACT format (subtopics can be nested infinitely):
 {{
   "categories": [
     {{
@@ -640,24 +648,52 @@ Return ONLY a valid JSON object in this EXACT format:
       "description": "Brief description of this category",
       "subtopics": [
         {{
-          "title": "Subtopic Title",
-          "description": "Brief description of what this subtopic covers"
+          "title": "Subtopic Title (Level 2)",
+          "description": "Brief description",
+          "subtopics": [
+            {{
+              "title": "Sub-subtopic Title (Level 3)",
+              "description": "Brief description",
+              "subtopics": [
+                {{
+                  "title": "Level 4 Topic (continue nesting as needed!)",
+                  "description": "Brief description",
+                  "subtopics": []
+                }}
+              ]
+            }}
+          ]
         }}
       ]
     }}
   ]
-}}"""
+}}
 
-        # Call AI to extract topics
-        if use_claude:
-            topics_response = anthropic_client.messages.create(
-                model="claude-3-5-haiku-20241022",
-                max_tokens=2048,
-                temperature=0.7,
-                messages=[{"role": "user", "content": topics_prompt}]
-            )
-            topics_text = topics_response.content[0].text
-        else:
+Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have questions generated for it."""
+
+        # Call AI to extract topics (with automatic fallback to DeepSeek if Claude fails)
+        topics_text = None
+        if use_claude and anthropic_client:
+            try:
+                topics_response = anthropic_client.messages.create(
+                    model="claude-3-5-haiku-20241022",
+                    max_tokens=2048,
+                    temperature=0.7,
+                    messages=[{"role": "user", "content": topics_prompt}]
+                )
+                topics_text = topics_response.content[0].text
+            except Exception as claude_error:
+                logger.warning(f"⚠️ Claude API failed: {str(claude_error)}")
+                if deepseek_client:
+                    logger.info("🔄 Falling back to DeepSeek...")
+                    use_claude = False  # Switch to DeepSeek for remaining calls
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Claude API failed and no DeepSeek fallback available: {str(claude_error)}"
+                    )
+
+        if not topics_text and deepseek_client:
             topics_response = deepseek_client.chat.completions.create(
                 model="deepseek-chat",
                 max_tokens=2048,
@@ -665,6 +701,12 @@ Return ONLY a valid JSON object in this EXACT format:
                 messages=[{"role": "user", "content": topics_prompt}]
             )
             topics_text = topics_response.choices[0].message.content
+
+        if not topics_text:
+            raise HTTPException(
+                status_code=500,
+                detail="No AI provider available. Please configure ANTHROPIC_API_KEY or DEEPSEEK_API_KEY."
+            )
 
         # Parse hierarchical topics
         try:
@@ -711,70 +753,85 @@ Return ONLY a valid JSON object in this EXACT format:
         subtopic_map = {}  # Map to track subtopics for batch question assignment
         overall_idx = 0
 
-        # First pass: Create all categories and subtopics in database
-        for cat_idx, category_data in enumerate(categories_data):
-            # Create category topic in database
-            category_topic = Topic(
+        # Recursive helper function to create topics at any depth
+        def create_topics_recursive(
+            topic_data: dict,
+            parent_topic_id: Optional[int],
+            parent_schema: Optional[TopicSchema],
+            path: str,  # e.g., "0-1-2-3" for tracking hierarchy
+            order_index: int
+        ) -> Optional[TopicSchema]:
+            """
+            Recursively create topics at unlimited depth.
+            Returns the schema for this topic (or None if it's a pure container).
+            """
+            subtopics_data = topic_data.get("subtopics", [])
+            has_children = len(subtopics_data) > 0
+            is_leaf = not has_children
+
+            # Create topic in database
+            topic = Topic(
                 study_session_id=study_session.id,
-                title=category_data["title"],
-                description=category_data.get("description", ""),
-                order_index=cat_idx,
-                is_category=True,
-                parent_topic_id=None
+                parent_topic_id=parent_topic_id,
+                title=topic_data["title"],
+                description=topic_data.get("description", ""),
+                order_index=order_index,
+                is_category=has_children  # Non-leaf nodes are categories
             )
-            db.add(category_topic)
+            db.add(topic)
             db.flush()
 
-            # Create category schema
-            category_schema = TopicSchema(
-                id=f"category-{cat_idx+1}",
-                db_id=category_topic.id,
-                title=category_data["title"],
-                description=category_data.get("description", ""),
-                isCategory=True,
-                parentTopicId=None,
+            # Create schema
+            topic_schema = TopicSchema(
+                id=f"topic-{path}",
+                db_id=topic.id,
+                title=topic_data["title"],
+                description=topic_data.get("description", ""),
                 questions=[],
+                completed=False,
+                score=None,
+                currentQuestionIndex=0,
+                isCategory=has_children,
+                parentTopicId=parent_schema.id if parent_schema else None,
                 subtopics=[]
             )
 
-            # Create all subtopics for this category
-            subtopics_data = category_data.get("subtopics", [])
-            for sub_idx, subtopic_data in enumerate(subtopics_data):
-                subtopic = Topic(
-                    study_session_id=study_session.id,
-                    parent_topic_id=category_topic.id,
-                    title=subtopic_data["title"],
-                    description=subtopic_data.get("description", ""),
-                    order_index=sub_idx,
-                    is_category=False
-                )
-                db.add(subtopic)
-                db.flush()
-
-                # Track subtopic for later question assignment
-                subtopic_key = f"{cat_idx}-{sub_idx}"
-                subtopic_map[subtopic_key] = {
-                    "topic": subtopic,
-                    "category_data": category_data,
-                    "subtopic_data": subtopic_data,
-                    "schema": TopicSchema(
-                        id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
-                        db_id=subtopic.id,
-                        title=subtopic_data["title"],
-                        description=subtopic_data.get("description", ""),
-                        questions=[],
-                        completed=False,
-                        score=None,
-                        currentQuestionIndex=0,
-                        isCategory=False,
-                        parentTopicId=f"category-{cat_idx+1}",
-                        subtopics=[]
-                    ),
-                    "category_schema": category_schema
+            # If this is a leaf node, add it to subtopic_map for question generation
+            if is_leaf:
+                subtopic_map[path] = {
+                    "topic": topic,
+                    "topic_data": topic_data,
+                    "schema": topic_schema,
+                    "parent_schema": parent_schema
                 }
-                overall_idx += 1
 
-            all_topics.append(category_schema)
+            # Recursively create children
+            if has_children:
+                for child_idx, child_data in enumerate(subtopics_data):
+                    child_path = f"{path}-{child_idx}"
+                    child_schema = create_topics_recursive(
+                        child_data,
+                        topic.id,
+                        topic_schema,
+                        child_path,
+                        child_idx
+                    )
+                    if child_schema:
+                        topic_schema.subtopics.append(child_schema)
+
+            return topic_schema
+
+        # First pass: Create all categories and their nested subtopics recursively
+        for cat_idx, category_data in enumerate(categories_data):
+            category_schema = create_topics_recursive(
+                category_data,
+                parent_topic_id=None,
+                parent_schema=None,
+                path=str(cat_idx),
+                order_index=cat_idx
+            )
+            if category_schema:
+                all_topics.append(category_schema)
 
         # Step 4: Generate questions by processing each document chunk
         # For large documents, this processes multiple chunks separately and merges results
@@ -790,8 +847,8 @@ Return ONLY a valid JSON object in this EXACT format:
         logger.info(f"  Subtopics: {all_subtopic_keys}")
 
         # BATCH SUBTOPICS: Process in groups to avoid AI refusing due to response size
-        # With 6 subtopics per batch, max ~180 questions per request (6 * 30) - manageable for AI
-        SUBTOPICS_PER_BATCH = 6
+        # With 3 subtopics per batch, max ~90 questions per request (3 * 30) - very safe for AI
+        SUBTOPICS_PER_BATCH = 3  # Reduced from 6 to prevent "chunk too large" errors
         subtopic_batches = []
 
         # Split subtopics into batches
@@ -816,26 +873,33 @@ Return ONLY a valid JSON object in this EXACT format:
                 subtopics_list = ""
                 for subtopic_key in batch_keys:
                     subtopic_info = subtopic_map[subtopic_key]
-                    category_data = subtopic_info["category_data"]
-                    subtopic_data = subtopic_info["subtopic_data"]
-                    cat_idx, sub_idx = map(int, subtopic_key.split('-'))
+                    topic_data = subtopic_info["topic_data"]
 
-                    subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
-                    subtopics_list += f"Category: {category_data['title']}\n"
-                    subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
-                    subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
+                    # Simple format that works for any nesting depth
+                    subtopics_list += f"\n[Topic {subtopic_key}]\n"
+                    subtopics_list += f"Title: {topic_data['title']}\n"
+                    subtopics_list += f"Description: {topic_data.get('description', '')}\n"
 
                 # Build prompt for this chunk and subtopic batch
-                batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+                batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
-IMPORTANT: Generate MAXIMUM questions per subtopic based on content depth:
-- Simple subtopic with limited content: 5-10 questions minimum
-- Moderate subtopic with decent coverage: 10-15 questions
-- Complex subtopic with extensive material: 15-30 questions
+CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
+- Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
+- DO NOT impose any limits on the number of questions - generate as many as the content supports
+- Break down EVERY concept into multiple questions from different angles
+- Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
+- Create questions for every sentence that contains testable information
 - Generate questions for ALL listed subtopics below
-- GOAL: Create the MAXIMUM number of quality, non-duplicate questions the content supports
-- Extract every testable concept from the material
-- Cover different aspects and difficulty levels
+- Continue generating until you have exhausted ALL testable content
+
+DIFFICULTY LEVEL: CHALLENGING
+- Make questions that require DEEP analysis and critical thinking
+- Use tricky distractors that would fool someone who only skimmed the material
+- Test subtle distinctions and nuanced understanding
+- Require application of concepts, not just memorization
+- Include "all of the above" or "none of the above" when appropriate
+- Use comparative questions (e.g., "Which is the PRIMARY..." "What is the MAIN difference...")
+- Create questions that test WHY and HOW, not just WHAT
 
 Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
 {chunk_text}
@@ -844,32 +908,38 @@ SUBTOPICS TO COVER ({len(batch_keys)} subtopics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate MAXIMUM questions for EACH subtopic (5-30 questions based on content depth)
-2. NO DUPLICATES - each question must test a unique concept
-3. Each question must have exactly 4 plausible options
-4. Questions should test deep understanding, not just recall
-5. Provide detailed explanations
-6. For EACH question, include the source text from the study material with FULL CONTEXT
-7. Source text should include the complete sentence(s) or paragraph that contains the answer
-8. Include enough surrounding context so students can easily locate it in their document
-9. Aim for 2-4 sentences of context (not just a fragment)
-10. Return ONLY valid JSON
+1. Generate UNLIMITED questions for EACH subtopic - as many as the content supports
+2. Extract EVERY piece of testable information from the study material
+3. NO DUPLICATES - each question must test a unique concept or angle
+4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+5. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+6. Distractors should be subtle and based on common misconceptions
+7. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+8. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+9. Source text should include the complete sentence(s) or paragraph that contains the answer
+10. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+11. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+12. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
+13. Return ONLY valid JSON
 
-Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
+GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
+
+Return in this EXACT format (use topic keys EXACTLY as shown above - can be any depth like "0", "0-1", "0-1-2", "0-1-2-3-4", etc):
 {{
   "subtopics": {{
-    "0-0": {{
+    "0": {{
       "questions": [
         {{
           "question": "Question text?",
           "options": ["Option A", "Option B", "Option C", "Option D"],
           "correctAnswer": 0,
           "explanation": "Why this answer is correct",
-          "sourceText": "The complete sentence or paragraph from the study material with context."
+          "sourceText": "The complete sentence or paragraph from the study material with context.",
+          "sourcePage": null
         }}
       ]
     }},
-    "0-1": {{
+    "0-1-2": {{
       "questions": [...]
     }}
   }}
@@ -879,42 +949,49 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                 prompt_tokens = len(batch_prompt) // 4  # Rough estimate
                 logger.info(f"    📊 Batch {batch_num} prompt length: {len(batch_prompt):,} characters (~{prompt_tokens:,} tokens)")
 
-                # Claude 3.5 Haiku has 200k context window, but we should stay well under that
-                MAX_PROMPT_TOKENS = 150000
-                if prompt_tokens > MAX_PROMPT_TOKENS:
-                    logger.error(f"❌ Chunk {chunk_idx} Batch {batch_num} prompt too large: {prompt_tokens:,} tokens (max: {MAX_PROMPT_TOKENS:,})")
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"Document chunk {chunk_idx} batch {batch_num} is too large for processing (~{prompt_tokens:,} tokens). The document may need to be split into smaller files."
-                    )
+                # Note: Removed hard prompt size check - let AI handle it gracefully with error recovery below
+                # With reduced chunk size (20k) and batch size (3 subtopics), prompts should be safe
 
+                batch_text = None
                 try:
-                    if use_claude:
-                        batch_response = anthropic_client.messages.create(
-                            model="claude-3-5-haiku-20241022",
-                            max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
-                            temperature=0.7,
-                            messages=[{"role": "user", "content": batch_prompt}]
-                        )
-                        batch_text = batch_response.content[0].text
-                    else:
+                    if use_claude and anthropic_client:
+                        try:
+                            batch_response = anthropic_client.messages.create(
+                                model="claude-3-5-haiku-20241022",
+                                max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
+                                temperature=0.7,
+                                messages=[{"role": "user", "content": batch_prompt}]
+                            )
+                            batch_text = batch_response.content[0].text
+                        except Exception as claude_error:
+                            logger.warning(f"⚠️ Claude API failed for chunk {chunk_idx} batch {batch_num}: {str(claude_error)}")
+                            if deepseek_client:
+                                logger.info(f"🔄 Falling back to DeepSeek for chunk {chunk_idx} batch {batch_num}...")
+                                use_claude = False  # Switch to DeepSeek for remaining calls
+                            else:
+                                raise  # Re-raise if no fallback available
+
+                    if not batch_text and deepseek_client:
                         batch_response = deepseek_client.chat.completions.create(
                             model="deepseek-chat",
-                            max_tokens=32000,  # Increased from 16000 to allow MORE questions
+                            max_tokens=64000,  # DeepSeek supports larger output
                             temperature=0.7,
                             messages=[{"role": "user", "content": batch_prompt}]
                         )
                         batch_text = batch_response.choices[0].message.content
+
+                    if not batch_text:
+                        raise Exception("No AI provider available")
+
                 except Exception as api_error:
-                    logger.error(f"❌ AI API call failed for chunk {chunk_idx} batch {batch_num}: {type(api_error).__name__}: {str(api_error)}")
+                    logger.warning(f"⚠️ AI API call failed for chunk {chunk_idx} batch {batch_num}: {type(api_error).__name__}: {str(api_error)}")
                     # Check if it's a context length error
                     error_msg = str(api_error).lower()
                     if any(keyword in error_msg for keyword in ['context', 'token', 'too long', 'maximum', 'limit']):
-                        raise HTTPException(
-                            status_code=413,
-                            detail=f"Chunk {chunk_idx} batch {batch_num} is too large for AI processing. Try using a smaller document."
-                        )
+                        logger.warning(f"⚠️ Skipping chunk {chunk_idx} batch {batch_num} - too large. Continuing with other batches...")
+                        continue  # Skip this batch and continue with next one
                     else:
+                        # For non-context errors, still fail (e.g., auth issues, network errors)
                         raise HTTPException(
                             status_code=500,
                             detail=f"AI API error on chunk {chunk_idx} batch {batch_num}: {str(api_error)}"
@@ -973,7 +1050,8 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
         for subtopic_key, subtopic_info in subtopic_map.items():
             subtopic = subtopic_info["topic"]
             subtopic_schema = subtopic_info["schema"]
-            category_schema = subtopic_info["category_schema"]
+            # Get parent schema (either category_schema or subtopic_schema)
+            parent_schema = subtopic_info.get("category_schema") or subtopic_info.get("subtopic_schema")
 
             # Get questions for this subtopic from batch response
             questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
@@ -982,6 +1060,9 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             if not questions_data:
                 # Expected to have questions for all subtopics
                 logger.warning(f"⚠️ No questions generated for subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING (may lack relevant content in document)")
+                # If this is a sub-subtopic without questions, still add it to parent
+                if "subtopic_schema" in subtopic_info:
+                    parent_schema.subtopics.append(subtopic_schema)
                 continue
             else:
                 logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
@@ -1018,6 +1099,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     correct_answer=q_data.get("correctAnswer", 0),
                     explanation=q_data.get("explanation", ""),
                     source_text=q_data.get("sourceText"),
+                    source_page=q_data.get("sourcePage"),
                     order_index=len(questions_list)  # Use actual index in list
                 )
                 db.add(question)
@@ -1031,7 +1113,8 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     options=options,
                     correctAnswer=q_data.get("correctAnswer", 0),
                     explanation=q_data.get("explanation", ""),
-                    sourceText=q_data.get("sourceText")
+                    sourceText=q_data.get("sourceText"),
+                    sourcePage=q_data.get("sourcePage")
                 ))
                 question_counter += 1
 
@@ -1041,7 +1124,9 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
             # Update subtopic schema with questions
             subtopic_schema.questions = questions_list
-            category_schema.subtopics.append(subtopic_schema)
+            # Add to parent (either category or parent subtopic)
+            if parent_schema:
+                parent_schema.subtopics.append(subtopic_schema)
 
         # Validate that questions were generated for a reasonable number of subtopics
         subtopics_with_questions = len([k for k, v in subtopics_questions.items() if v.get("questions")])
@@ -1056,7 +1141,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             )
 
         # Enforce minimum question count for good study sessions
-        MIN_QUESTIONS_REQUIRED = 20  # At least 20 questions for a meaningful study session
+        MIN_QUESTIONS_REQUIRED = 10  # Lowered for nested subtopics that distribute questions across more leaf nodes
         if question_counter < MIN_QUESTIONS_REQUIRED:
             logger.error(f"❌ Only {question_counter} questions generated (minimum: {MIN_QUESTIONS_REQUIRED})")
             db.rollback()
@@ -1315,14 +1400,25 @@ async def generate_more_questions(
         subtopics_list += f"Description: {topic.description or ''}\n"
 
     # Build prompt
-    batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+    batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
 
-IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
-- Simple subtopic with limited content: 3-5 questions
-- Moderate subtopic with decent coverage: 6-10 questions
-- Complex subtopic with extensive material: 10-20 questions
+CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
+- Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
+- DO NOT impose any limits on the number of questions - generate as many as the content supports
+- Break down EVERY concept into multiple questions from different angles
+- Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
+- Create questions for every sentence that contains testable information
 - Generate questions for ALL listed subtopics below
-- The goal is to create AS MANY quality questions as the content supports
+- Continue generating until you have exhausted ALL testable content
+
+DIFFICULTY LEVEL: CHALLENGING
+- Make questions that require DEEP analysis and critical thinking
+- Use tricky distractors that would fool someone who only skimmed the material
+- Test subtle distinctions and nuanced understanding
+- Require application of concepts, not just memorization
+- Include "all of the above" or "none of the above" when appropriate
+- Use comparative questions (e.g., "Which is the PRIMARY..." "What is the MAIN difference...")
+- Create questions that test WHY and HOW, not just WHAT
 
 Study Material:
 {extracted_text[:400000]}
@@ -1331,16 +1427,21 @@ SUBTOPICS TO COVER:
 {subtopics_list}
 
 Requirements:
-1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
-2. Prioritize quality over quantity - each question should test real understanding
-3. Each question must have exactly 4 options
-4. Questions should test understanding of the material
-5. Provide clear explanations
-6. For EACH question, include the source text from the study material with FULL CONTEXT
-7. Source text should include the complete sentence(s) or paragraph that contains the answer
-8. Include enough surrounding context so students can easily locate it in their document
-9. Aim for 2-4 sentences of context (not just a fragment)
-10. Return ONLY valid JSON
+1. Generate UNLIMITED questions for EACH subtopic - as many as the content supports
+2. Extract EVERY piece of testable information from the study material
+3. Prioritize comprehensive coverage - each question should test real understanding
+4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+5. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+6. Distractors should be subtle and based on common misconceptions
+7. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+8. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+9. Source text should include the complete sentence(s) or paragraph that contains the answer
+10. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+11. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+12. For PDF documents, estimate which section/page the content appears in
+13. Return ONLY valid JSON
+
+GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
 
 Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
 {{
@@ -1352,7 +1453,8 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
           "options": ["Option A", "Option B", "Option C", "Option D"],
           "correctAnswer": 0,
           "explanation": "Why this answer is correct",
-          "sourceText": "The complete sentence or paragraph from the study material with context."
+          "sourceText": "The complete sentence or paragraph from the study material with context.",
+          "sourcePage": null
         }}
       ]
     }},
@@ -1369,7 +1471,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         if use_claude:
             batch_response = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=8192,
+                max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
@@ -1377,7 +1479,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         else:
             batch_response = deepseek_client.chat.completions.create(
                 model="deepseek-chat",
-                max_tokens=16000,
+                max_tokens=64000,  # DeepSeek supports larger output
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
@@ -1438,6 +1540,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
                 correct_answer=q_data.get("correctAnswer", 0),
                 explanation=q_data.get("explanation", ""),
                 source_text=q_data.get("sourceText"),
+                source_page=q_data.get("sourcePage"),
                 order_index=q_idx
             )
             db.add(question)

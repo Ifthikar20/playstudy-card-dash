@@ -286,24 +286,29 @@ export default function FullStudyPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [syncPendingProgress]);
 
-  // Flatten topics for easier access (includes both categories and subtopics)
+  // Flatten topics for easier access (includes categories, subtopics, and sub-subtopics recursively)
   const flattenedTopics = useMemo(() => {
     const topics = currentSession?.extractedTopics || [];
     const flattened: any[] = [];
 
-    topics.forEach((category) => {
-      flattened.push(category);
-      if (category.subtopics && category.subtopics.length > 0) {
-        flattened.push(...category.subtopics);
+    // Recursive function to flatten all levels
+    const flattenRecursive = (topic: any) => {
+      flattened.push(topic);
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        topic.subtopics.forEach((subtopic: any) => flattenRecursive(subtopic));
       }
+    };
+
+    topics.forEach((category) => {
+      flattenRecursive(category);
     });
 
     return flattened;
   }, [currentSession?.extractedTopics]);
 
-  // Get only leaf topics (topics with questions, not categories)
+  // Get only leaf topics (topics with questions, not categories or intermediate subtopics)
   const leafTopics = useMemo(() => {
-    return flattenedTopics.filter(t => !t.isCategory);
+    return flattenedTopics.filter(t => !t.isCategory && t.questions && t.questions.length > 0);
   }, [flattenedTopics]);
 
   // Create a completion hash to trigger re-renders when any topic is completed
@@ -623,6 +628,20 @@ export default function FullStudyPage() {
                     <BookOpen size={24} />
                     {currentSession.title}
                   </h2>
+                  <div className="flex items-center gap-2 mt-1 text-sm">
+                    <p className="font-medium text-primary">
+                      {(() => {
+                        const categories = currentSession?.extractedTopics || [];
+                        if (categories.length === 0) return 'No topics';
+                        if (categories.length === 1) return categories[0].title;
+                        return `${categories[0].title} + ${categories.length - 1} more`;
+                      })()}
+                    </p>
+                    <span className="text-muted-foreground">•</span>
+                    <p className="text-muted-foreground">
+                      {currentSession.fileType?.toUpperCase() || 'Unknown'} Document
+                    </p>
+                  </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     {leafTopics.filter(t => t.completed).length} of {leafTopics.length} subtopics completed
                     {selectedTopicId && !showSummary && (

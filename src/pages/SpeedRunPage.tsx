@@ -76,9 +76,25 @@ export default function SpeedRunPage() {
   const fileContent = currentSession?.fileContent;
   const fileType = currentSession?.fileType;
 
-  // Get all subtopics and their questions
+  // Helper function to recursively get all topics with questions (including sub-subtopics)
+  const getAllTopicsWithQuestions = (topics: any[]): any[] => {
+    const result: any[] = [];
+    for (const topic of topics) {
+      // If this topic has questions, include it
+      if (topic.questions && topic.questions.length > 0) {
+        result.push(topic);
+      }
+      // If this topic has subtopics, recursively get their questions
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        result.push(...getAllTopicsWithQuestions(topic.subtopics));
+      }
+    }
+    return result;
+  };
+
+  // Get all subtopics and their questions (including nested sub-subtopics)
   const subtopics = currentSession?.extractedTopics?.flatMap(category =>
-    category.subtopics || []
+    getAllTopicsWithQuestions(category.subtopics || [])
   ) || [];
 
   // For now, show all questions (we'll implement page-specific filtering later)
@@ -141,10 +157,10 @@ export default function SpeedRunPage() {
 
         // Count current questions
         const currentCount = allQuestions.length;
-        const updatedSubtopics = updatedSession.extractedTopics?.flatMap(category =>
-          category.subtopics || []
+        const updatedTopics = updatedSession.extractedTopics?.flatMap(category =>
+          getAllTopicsWithQuestions(category.subtopics || [])
         ) || [];
-        const updatedCount = updatedSubtopics.flatMap(topic => topic.questions || []).length;
+        const updatedCount = updatedTopics.flatMap(topic => topic.questions || []).length;
 
         console.log(`📊 Poll result: ${currentCount} -> ${updatedCount} questions`);
 
@@ -155,7 +171,7 @@ export default function SpeedRunPage() {
           setPreviousQuestionCount(currentCount);
 
           // Check if there are still subtopics without questions
-          const hasSubtopicsWithoutQuestions = updatedSubtopics.some(t => !t.questions || t.questions.length === 0);
+          const hasSubtopicsWithoutQuestions = updatedTopics.some(t => !t.questions || t.questions.length === 0);
           console.log(`🔄 Still loading more? ${hasSubtopicsWithoutQuestions}`);
           setIsLoadingMoreQuestions(hasSubtopicsWithoutQuestions);
         }
@@ -194,8 +210,10 @@ export default function SpeedRunPage() {
   useEffect(() => {
     if (!currentSession?.extractedTopics) return;
 
-    const subtopics = currentSession.extractedTopics.flatMap(category => category.subtopics || []);
-    const hasSubtopicsWithoutQuestions = subtopics.some(topic => !topic.questions || topic.questions.length === 0);
+    const allTopics = currentSession.extractedTopics.flatMap(category =>
+      getAllTopicsWithQuestions(category.subtopics || [])
+    );
+    const hasSubtopicsWithoutQuestions = allTopics.some(topic => !topic.questions || topic.questions.length === 0);
 
     console.log(`🎯 Loading state check:`, {
       totalSubtopics: subtopics.length,
@@ -221,14 +239,29 @@ export default function SpeedRunPage() {
     setNumPages(numPages);
   };
 
-  // Update highlighted text when question changes or is answered
+  // Update highlighted text and scroll to source page when question changes or is answered
   useEffect(() => {
     if (hasAnswered && currentQuestion?.sourceText) {
       setHighlightedText(currentQuestion.sourceText);
+
+      // Auto-scroll to the page where the answer is found
+      if (currentQuestion.sourcePage && fileType === 'pdf') {
+        setCurrentPageNumber(currentQuestion.sourcePage);
+        // Also update visible pages to ensure the page is loaded
+        setVisiblePagesStart(Math.max(1, currentQuestion.sourcePage - 2));
+
+        // Smooth scroll to top of document viewer after a brief delay
+        setTimeout(() => {
+          const documentViewer = document.querySelector('.h-full.overflow-y-auto.p-6.bg-muted\\/20');
+          if (documentViewer) {
+            documentViewer.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }, 100);
+      }
     } else {
       setHighlightedText(null);
     }
-  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText]);
+  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText, currentQuestion?.sourcePage, fileType]);
 
   // Render Word documents when loaded
   useEffect(() => {
@@ -347,7 +380,7 @@ export default function SpeedRunPage() {
         return (
           <mark
             key={index}
-            className="bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-100 px-1 rounded animate-pulse"
+            className="bg-yellow-300 dark:bg-yellow-600/60 text-yellow-900 dark:text-yellow-100 px-2 py-1 rounded font-semibold animate-pulse"
             style={{ animationDuration: '2s', animationIterationCount: '3' }}
           >
             {part}
@@ -365,7 +398,7 @@ export default function SpeedRunPage() {
     const searchText = highlightedText.trim();
     const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
 
-    return html.replace(regex, '<mark style="background-color: #86efac; color: #166534; padding: 2px 4px; border-radius: 2px; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
+    return html.replace(regex, '<mark style="background-color: #fde047; color: #713f12; padding: 4px 8px; border-radius: 4px; font-weight: 600; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
   };
 
   // Show loading state while fetching session
@@ -416,9 +449,20 @@ export default function SpeedRunPage() {
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold">{currentSession.title}</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {fileType?.toUpperCase()} Document
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm font-medium text-primary">
+                      {(() => {
+                        const categories = currentSession?.extractedTopics || [];
+                        if (categories.length === 0) return 'No topics';
+                        if (categories.length === 1) return categories[0].title;
+                        return `${categories[0].title} + ${categories.length - 1} more`;
+                      })()}
+                    </p>
+                    <span className="text-sm text-muted-foreground">•</span>
+                    <p className="text-sm text-muted-foreground">
+                      {fileType?.toUpperCase()} Document
+                    </p>
+                  </div>
                 </div>
 
                 {fileType === 'pdf' && numPages > 0 && (
@@ -442,6 +486,11 @@ export default function SpeedRunPage() {
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
+                    {hasAnswered && currentQuestion?.sourcePage && currentPageNumber === currentQuestion.sourcePage && (
+                      <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400 font-semibold animate-pulse">
+                        📍 Answer found here
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -455,15 +504,16 @@ export default function SpeedRunPage() {
                       {highlightedText && (
                         <style>{`
                           .react-pdf__Page__textContent mark {
-                            background-color: #86efac !important;
-                            color: #166534 !important;
-                            padding: 2px 4px;
-                            border-radius: 2px;
+                            background-color: #fde047 !important;
+                            color: #713f12 !important;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-weight: 600;
                             animation: highlight-pulse 2s ease-in-out 3;
                           }
                           @keyframes highlight-pulse {
-                            0%, 100% { background-color: #86efac; }
-                            50% { background-color: #4ade80; }
+                            0%, 100% { background-color: #fde047; }
+                            50% { background-color: #fbbf24; }
                           }
                         `}</style>
                       )}
@@ -555,9 +605,9 @@ export default function SpeedRunPage() {
                         style={{ maxHeight: '70vh' }}
                       />
                       {highlightedText && (
-                        <div className="w-full p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded">
-                          <p className="text-sm text-green-700 dark:text-green-300">
-                            <mark className="bg-green-200 dark:bg-green-900/40 px-2 py-1 rounded">
+                        <div className="w-full p-3 bg-yellow-50 dark:bg-yellow-950/20 border-l-4 border-yellow-500 rounded">
+                          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                            <mark className="bg-yellow-300 dark:bg-yellow-600/60 px-2 py-1 rounded font-semibold">
                               {highlightedText}
                             </mark>
                           </p>
@@ -815,11 +865,13 @@ export default function SpeedRunPage() {
                             })}
                           </div>
 
-                          {/* Explanation */}
+                          {/* Explanation and Source Text */}
                           {hasAnswered && (
-                            <div className="mt-6 p-4 bg-muted rounded-lg">
-                              <p className="text-sm font-semibold mb-2">Explanation:</p>
-                              <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                            <div className="mt-6 space-y-3">
+                              <div className="p-4 bg-muted rounded-lg">
+                                <p className="text-sm font-semibold mb-2">Explanation:</p>
+                                <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                              </div>
                             </div>
                           )}
                         </CardContent>
@@ -865,13 +917,14 @@ export default function SpeedRunPage() {
                               transform: 'rotateY(180deg)',
                             }}
                           >
-                            <CardContent className="p-8 h-full flex flex-col items-center justify-center text-white">
-                              <h3 className="text-xl font-semibold text-center mb-6">
+                            <CardContent className="p-8 h-full flex flex-col items-center justify-center text-white overflow-y-auto">
+                              <h3 className="text-xl font-semibold text-center mb-4">
                                 {currentQuestion.options[currentQuestion.correctAnswer]}
                               </h3>
-                              <p className="text-sm opacity-90 text-center">
+                              <p className="text-sm opacity-90 text-center mb-4">
                                 {currentQuestion.explanation}
                               </p>
+
                               <p className="text-xs opacity-75 text-center mt-auto">
                                 Click to see question
                               </p>

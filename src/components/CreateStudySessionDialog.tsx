@@ -496,41 +496,6 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground">Full Study Session</h3>
                       <p className="text-sm text-muted-foreground">Complete learning path with progress tracking</p>
-                      
-                      {selectedMode === "full-study" && (
-                        <div className="mt-4 space-y-4">
-                          <div>
-                            <div className="flex justify-between text-sm mb-2">
-                              <span className="text-muted-foreground">Topics to generate</span>
-                              <span className="font-medium">
-                                {topicCount[0]}
-                                {contentAnalysis && topicCount[0] === contentAnalysis.recommended_topics && (
-                                  <span className="ml-1 text-xs text-primary">(recommended)</span>
-                                )}
-                              </span>
-                            </div>
-                            <Slider value={topicCount} onValueChange={setTopicCount} min={1} max={100} step={1} />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Truly dynamic: 1-100 topics based on content size (AI recommends optimal count)
-                            </p>
-                          </div>
-                          <div>
-                            <div className="flex justify-between text-sm mb-2">
-                              <span className="text-muted-foreground">Questions per topic</span>
-                              <span className="font-medium">
-                                {questionCount[0]}
-                                {contentAnalysis && questionCount[0] === contentAnalysis.recommended_questions && (
-                                  <span className="ml-1 text-xs text-primary">(recommended)</span>
-                                )}
-                              </span>
-                            </div>
-                            <Slider value={questionCount} onValueChange={setQuestionCount} min={5} max={50} step={5} />
-                            <p className="text-xs text-muted-foreground mt-1">
-                              More questions = deeper understanding
-                            </p>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -551,16 +516,6 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground">Speed Run</h3>
                       <p className="text-sm text-muted-foreground">Rapid fire flip cards for quick review</p>
-                      
-                      {selectedMode === "speed-run" && (
-                        <div className="mt-4">
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="text-muted-foreground">Duration (minutes)</span>
-                            <span className="font-medium">{speedRunDuration[0]} min</span>
-                          </div>
-                          <Slider value={speedRunDuration} onValueChange={setSpeedRunDuration} min={5} max={30} step={5} />
-                        </div>
-                      )}
                     </div>
                   </div>
                 </CardContent>
