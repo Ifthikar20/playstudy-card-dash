@@ -523,24 +523,46 @@ async def create_study_session_with_ai(
                 detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
             )
 
-        # Check document size and truncate if necessary to fit within AI context limits
+        # Check document size and use chunking for large documents
         estimated_tokens = len(extracted_text) // 4  # Rough estimate: 1 token ≈ 4 characters
         logger.info(f"📊 Document size: {len(extracted_text):,} chars, ~{estimated_tokens:,} estimated tokens")
 
         # Claude 3.5 Haiku has 200k token context window
-        # Leave room for prompt structure, topics, and response
-        MAX_TOKENS = 150000  # Conservative limit to ensure prompt + response fits
-        max_chars = MAX_TOKENS * 4
+        # Use chunking for documents that would exceed safe limits
+        CHUNK_SIZE_TOKENS = 100000  # 100k tokens per chunk (~400k chars)
+        OVERLAP_TOKENS = 5000  # 5k token overlap between chunks for context preservation
 
-        if estimated_tokens > MAX_TOKENS:
-            logger.warning(f"⚠️ Document too large ({estimated_tokens:,} tokens). Truncating to fit {MAX_TOKENS:,} token limit.")
-            original_length = len(extracted_text)
-            extracted_text = extracted_text[:max_chars] + "\n\n[Document truncated due to size limits. Original size: {} chars]".format(original_length)
-            logger.info(f"✂️ Truncated from {original_length:,} to {len(extracted_text):,} characters")
-            estimated_tokens = len(extracted_text) // 4
+        chunk_size_chars = CHUNK_SIZE_TOKENS * 4
+        overlap_chars = OVERLAP_TOKENS * 4
 
-        # Analyze content to get smart recommendations
-        analysis = analyze_content_complexity(extracted_text)
+        # Split document into chunks if necessary
+        document_chunks = []
+        if estimated_tokens > CHUNK_SIZE_TOKENS:
+            logger.info(f"📚 Large document detected. Splitting into chunks of ~{CHUNK_SIZE_TOKENS:,} tokens with {OVERLAP_TOKENS:,} token overlap...")
+
+            # Split into overlapping chunks
+            current_pos = 0
+            chunk_num = 1
+            while current_pos < len(extracted_text):
+                end_pos = min(current_pos + chunk_size_chars, len(extracted_text))
+                chunk = extracted_text[current_pos:end_pos]
+                document_chunks.append(chunk)
+                logger.info(f"  📄 Chunk {chunk_num}: {len(chunk):,} chars (~{len(chunk)//4:,} tokens)")
+
+                # Move forward with overlap
+                current_pos = end_pos - overlap_chars
+                if current_pos >= len(extracted_text) - overlap_chars:
+                    break  # Last chunk
+                chunk_num += 1
+
+            logger.info(f"✅ Created {len(document_chunks)} chunks for processing")
+        else:
+            # Document fits in one chunk
+            document_chunks = [extracted_text]
+            logger.info(f"✅ Document fits in single chunk, no splitting needed")
+
+        # Analyze content to get smart recommendations (use first chunk for analysis)
+        analysis = analyze_content_complexity(document_chunks[0])
 
         # Progressive loading: For large documents (>5000 words), start with fewer topics
         is_large_doc = analysis['word_count'] > 5000
@@ -738,32 +760,43 @@ Return ONLY a valid JSON object in this EXACT format:
 
             all_topics.append(category_schema)
 
-        # Step 4: Generate ALL questions in ONE batch request
-        # Build comprehensive batch prompt listing all subtopics
-        batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+        # Step 4: Generate questions by processing each document chunk
+        # For large documents, this processes multiple chunks separately and merges results
+        logger.info(f"📡 Processing {len(document_chunks)} document chunk(s) to generate questions...")
+
+        # Build subtopic list for prompt (reused across all chunks)
+        subtopics_list = ""
+        for cat_idx, category_data in enumerate(categories_data):
+            subtopics_data = category_data.get("subtopics", [])
+            for sub_idx, subtopic_data in enumerate(subtopics_data):
+                subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
+                subtopics_list += f"Category: {category_data['title']}\n"
+                subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
+                subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
+
+        # Collect questions from all chunks
+        all_chunk_questions = {}  # {subtopic_key: [questions]}
+
+        for chunk_idx, chunk_text in enumerate(document_chunks, 1):
+            logger.info(f"📄 Processing chunk {chunk_idx}/{len(document_chunks)}...")
+
+            # Build prompt for this chunk
+            batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
 
 IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
 - Simple subtopic with limited content: 3-5 questions
 - Moderate subtopic with decent coverage: 6-10 questions
 - Complex subtopic with extensive material: 10-20 questions
+- Only generate questions for subtopics that have relevant content in THIS chunk
+- If a subtopic has no relevant content in this chunk, return an empty questions array for it
 - The goal is to create AS MANY quality questions as the content supports
 
-Study Material:
-{extracted_text}
+Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
+{chunk_text}
 
 SUBTOPICS TO COVER:
-"""
+{subtopics_list}
 
-        # Add all subtopics to the prompt
-        for cat_idx, category_data in enumerate(categories_data):
-            subtopics_data = category_data.get("subtopics", [])
-            for sub_idx, subtopic_data in enumerate(subtopics_data):
-                batch_prompt += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
-                batch_prompt += f"Category: {category_data['title']}\n"
-                batch_prompt += f"Subtopic: {subtopic_data['title']}\n"
-                batch_prompt += f"Description: {subtopic_data.get('description', '')}\n"
-
-        batch_prompt += f"""
 Requirements:
 1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
 2. Prioritize quality over quantity - each question should test real understanding
@@ -796,70 +829,83 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
   }}
 }}"""
 
-        # Make ONE API call for all questions
-        logger.info(f"📡 Generating variable questions for {len(subtopic_map)} subtopics (3-20 per topic based on content depth)...")
-        logger.info(f"📊 Final prompt length: {len(batch_prompt):,} characters")
+            # Make API call for this chunk
+            logger.info(f"📊 Chunk {chunk_idx} prompt length: {len(batch_prompt):,} characters")
 
-        try:
-            if use_claude:
-                batch_response = anthropic_client.messages.create(
-                    model="claude-3-5-haiku-20241022",
-                    max_tokens=8192,  # Maximum for Claude 3.5 Haiku
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": batch_prompt}]
-                )
-                batch_text = batch_response.content[0].text
-            else:
-                batch_response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
-                    max_tokens=16000,
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": batch_prompt}]
-                )
-                batch_text = batch_response.choices[0].message.content
-        except Exception as api_error:
-            logger.error(f"❌ AI API call failed: {type(api_error).__name__}: {str(api_error)}")
-            # Check if it's a context length error
-            error_msg = str(api_error).lower()
-            if any(keyword in error_msg for keyword in ['context', 'token', 'too long', 'maximum', 'limit']):
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"Document is too large for AI processing. Try using a smaller document or enabling progressive loading."
-                )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"AI API error: {str(api_error)}"
-                )
+            try:
+                if use_claude:
+                    batch_response = anthropic_client.messages.create(
+                        model="claude-3-5-haiku-20241022",
+                        max_tokens=8192,  # Maximum for Claude 3.5 Haiku
+                        temperature=0.7,
+                        messages=[{"role": "user", "content": batch_prompt}]
+                    )
+                    batch_text = batch_response.content[0].text
+                else:
+                    batch_response = deepseek_client.chat.completions.create(
+                        model="deepseek-chat",
+                        max_tokens=16000,
+                        temperature=0.7,
+                        messages=[{"role": "user", "content": batch_prompt}]
+                    )
+                    batch_text = batch_response.choices[0].message.content
+            except Exception as api_error:
+                logger.error(f"❌ AI API call failed for chunk {chunk_idx}: {type(api_error).__name__}: {str(api_error)}")
+                # Check if it's a context length error
+                error_msg = str(api_error).lower()
+                if any(keyword in error_msg for keyword in ['context', 'token', 'too long', 'maximum', 'limit']):
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Chunk {chunk_idx} is too large for AI processing. Try using a smaller document."
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"AI API error on chunk {chunk_idx}: {str(api_error)}"
+                    )
 
-        # Log AI response details
-        logger.info(f"📨 Received AI response, length: {len(batch_text)} characters")
-        logger.debug(f"📄 First 500 chars of response: {batch_text[:500]}")
+            # Log AI response details
+            logger.info(f"📨 Chunk {chunk_idx} - Received AI response, length: {len(batch_text)} characters")
 
-        # Parse batch response with detailed error logging
-        try:
-            start_idx = batch_text.find('{')
-            end_idx = batch_text.rfind('}') + 1
+            # Parse chunk response with detailed error logging
+            try:
+                start_idx = batch_text.find('{')
+                end_idx = batch_text.rfind('}') + 1
 
-            if start_idx == -1 or end_idx == 0:
-                logger.error(f"❌ No JSON found in AI response. Full response: {batch_text}")
-                subtopics_questions = {}
-            else:
-                json_str = batch_text[start_idx:end_idx]
-                logger.debug(f"📋 Extracted JSON string, length: {len(json_str)}")
+                if start_idx == -1 or end_idx == 0:
+                    logger.error(f"❌ Chunk {chunk_idx} - No JSON found in AI response")
+                    chunk_questions = {}
+                else:
+                    json_str = batch_text[start_idx:end_idx]
+                    batch_json = json.loads(json_str)
+                    chunk_questions = batch_json.get("subtopics", {})
 
-                batch_json = json.loads(json_str)
-                subtopics_questions = batch_json.get("subtopics", {})
+                    logger.info(f"✅ Chunk {chunk_idx} - Parsed {len(chunk_questions)} subtopics")
+                    for key in chunk_questions.keys():
+                        q_count = len(chunk_questions[key].get("questions", []))
+                        if q_count > 0:
+                            logger.info(f"  - Subtopic {key}: {q_count} questions")
 
-                logger.info(f"✅ Successfully parsed {len(subtopics_questions)} subtopics from AI response")
-                for key in subtopics_questions.keys():
-                    q_count = len(subtopics_questions[key].get("questions", []))
-                    logger.info(f"  - Subtopic {key}: {q_count} questions")
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                logger.error(f"❌ Chunk {chunk_idx} - Failed to parse questions: {e}")
+                chunk_questions = {}
 
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.error(f"❌ Failed to parse batch questions: {e}")
-            logger.error(f"📄 Problematic JSON substring (first 1000 chars): {batch_text[start_idx:min(start_idx+1000, end_idx)] if start_idx != -1 else 'N/A'}")
-            subtopics_questions = {}
+            # Merge questions from this chunk into all_chunk_questions
+            for subtopic_key, subtopic_data in chunk_questions.items():
+                questions = subtopic_data.get("questions", [])
+                if questions:
+                    if subtopic_key not in all_chunk_questions:
+                        all_chunk_questions[subtopic_key] = []
+                    all_chunk_questions[subtopic_key].extend(questions)
+                    logger.debug(f"  🔄 Added {len(questions)} questions for subtopic {subtopic_key}")
+
+        # Log merged results
+        logger.info(f"🎯 Merging complete - Total subtopics with questions: {len(all_chunk_questions)}")
+        for key, questions in all_chunk_questions.items():
+            logger.info(f"  - Subtopic {key}: {len(questions)} total questions from all chunks")
+
+        # Use merged questions as the final subtopics_questions
+        subtopics_questions = {key: {"questions": questions} for key, questions in all_chunk_questions.items()}
 
         # Step 5: Assign questions to subtopics
         question_counter = 0
