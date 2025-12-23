@@ -863,7 +863,8 @@ Requirements:
 8. Source text should include the complete sentence(s) or paragraph that contains the answer
 9. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
 10. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
-11. Return ONLY valid JSON
+11. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
+12. Return ONLY valid JSON
 
 Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 {{
@@ -875,7 +876,8 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
           "options": ["Option A", "Option B", "Option C", "Option D"],
           "correctAnswer": 0,
           "explanation": "Why this answer is correct",
-          "sourceText": "The complete sentence or paragraph from the study material with context."
+          "sourceText": "The complete sentence or paragraph from the study material with context.",
+          "sourcePage": null
         }}
       ]
     }},
@@ -1028,6 +1030,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     correct_answer=q_data.get("correctAnswer", 0),
                     explanation=q_data.get("explanation", ""),
                     source_text=q_data.get("sourceText"),
+                    source_page=q_data.get("sourcePage"),
                     order_index=len(questions_list)  # Use actual index in list
                 )
                 db.add(question)
@@ -1041,7 +1044,8 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     options=options,
                     correctAnswer=q_data.get("correctAnswer", 0),
                     explanation=q_data.get("explanation", ""),
-                    sourceText=q_data.get("sourceText")
+                    sourceText=q_data.get("sourceText"),
+                    sourcePage=q_data.get("sourcePage")
                 ))
                 question_counter += 1
 
@@ -1360,7 +1364,8 @@ Requirements:
 8. Source text should include the complete sentence(s) or paragraph that contains the answer
 9. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
 10. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
-11. Return ONLY valid JSON
+11. For PDF documents, estimate which section/page the content appears in
+12. Return ONLY valid JSON
 
 Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
 {{
@@ -1372,7 +1377,8 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
           "options": ["Option A", "Option B", "Option C", "Option D"],
           "correctAnswer": 0,
           "explanation": "Why this answer is correct",
-          "sourceText": "The complete sentence or paragraph from the study material with context."
+          "sourceText": "The complete sentence or paragraph from the study material with context.",
+          "sourcePage": null
         }}
       ]
     }},
@@ -1458,6 +1464,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
                 correct_answer=q_data.get("correctAnswer", 0),
                 explanation=q_data.get("explanation", ""),
                 source_text=q_data.get("sourceText"),
+                source_page=q_data.get("sourcePage"),
                 order_index=q_idx
             )
             db.add(question)

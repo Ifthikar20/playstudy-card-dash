@@ -221,14 +221,29 @@ export default function SpeedRunPage() {
     setNumPages(numPages);
   };
 
-  // Update highlighted text when question changes or is answered
+  // Update highlighted text and scroll to source page when question changes or is answered
   useEffect(() => {
     if (hasAnswered && currentQuestion?.sourceText) {
       setHighlightedText(currentQuestion.sourceText);
+
+      // Auto-scroll to the page where the answer is found
+      if (currentQuestion.sourcePage && fileType === 'pdf') {
+        setCurrentPageNumber(currentQuestion.sourcePage);
+        // Also update visible pages to ensure the page is loaded
+        setVisiblePagesStart(Math.max(1, currentQuestion.sourcePage - 2));
+
+        // Smooth scroll to top of document viewer after a brief delay
+        setTimeout(() => {
+          const documentViewer = document.querySelector('.h-full.overflow-y-auto.p-6.bg-muted\\/20');
+          if (documentViewer) {
+            documentViewer.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }, 100);
+      }
     } else {
       setHighlightedText(null);
     }
-  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText]);
+  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText, currentQuestion?.sourcePage, fileType]);
 
   // Render Word documents when loaded
   useEffect(() => {
@@ -442,6 +457,11 @@ export default function SpeedRunPage() {
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
+                    {hasAnswered && currentQuestion?.sourcePage && currentPageNumber === currentQuestion.sourcePage && (
+                      <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400 font-semibold animate-pulse">
+                        📍 Answer found here
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
