@@ -175,16 +175,19 @@ def analyze_content_complexity(text: str) -> dict:
     recommended_topics = max(1, min(35, round(base_topics * (0.8 + complexity_score * 0.4))))
 
     # Recommend questions per topic based on content depth
-    # More complex content = more questions to test understanding
+    # Aim for maximum questions to ensure comprehensive coverage
+    # More questions = better learning coverage and understanding
     if word_count < 1000:
-        base_questions = 8
-    elif word_count < 3000:
-        base_questions = 12
-    else:
         base_questions = 15
+    elif word_count < 3000:
+        base_questions = 20
+    elif word_count < 10000:
+        base_questions = 25
+    else:
+        base_questions = 30
 
-    # Adjust based on complexity
-    recommended_questions = max(5, min(50, round(base_questions * (0.8 + complexity_score * 0.4))))
+    # Adjust based on complexity (allow up to 100 questions for complex topics)
+    recommended_questions = max(10, min(100, round(base_questions * (0.9 + complexity_score * 0.6))))
 
     return {
         'word_count': word_count,
@@ -806,14 +809,16 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
                 subtopics=[]
             )
 
-            # If this is a leaf node, add it to subtopic_map for question generation
-            if is_leaf:
-                subtopic_map[path] = {
-                    "topic": topic,
-                    "topic_data": topic_data,
-                    "schema": topic_schema,
-                    "parent_schema": parent_schema
-                }
+            # Add ALL topics (both categories and leaf nodes) to subtopic_map for question generation
+            # Categories will get overview/synthesis questions, leaf nodes get specific questions
+            subtopic_map[path] = {
+                "topic": topic,
+                "topic_data": topic_data,
+                "schema": topic_schema,
+                "parent_schema": parent_schema,
+                "is_category": has_children,
+                "is_leaf": is_leaf
+            }
 
             # Recursively create children
             if has_children:
@@ -885,23 +890,43 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
                 for subtopic_key in batch_keys:
                     subtopic_info = subtopic_map[subtopic_key]
                     topic_data = subtopic_info["topic_data"]
+                    is_category = subtopic_info.get("is_category", False)
+                    is_leaf = subtopic_info.get("is_leaf", True)
 
                     # Simple format that works for any nesting depth
                     subtopics_list += f"\n[Topic {subtopic_key}]\n"
                     subtopics_list += f"Title: {topic_data['title']}\n"
                     subtopics_list += f"Description: {topic_data.get('description', '')}\n"
+                    subtopics_list += f"Type: {'CATEGORY (overview/synthesis questions)' if is_category else 'SPECIFIC TOPIC (detailed questions)'}\n"
 
                 # Build prompt for this chunk and subtopic batch
-                batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
+                batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following topics from the study material.
 
 CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
 - Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
-- DO NOT impose any limits on the number of questions - generate as many as the content supports
+- DO NOT impose any limits on the number of questions - generate as many as the content supports (aim for 15-30+ questions per topic)
 - Break down EVERY concept into multiple questions from different angles
 - Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
 - Create questions for every sentence that contains testable information
-- Generate questions for ALL listed subtopics below
+- Generate questions for ALL listed topics below
 - Continue generating until you have exhausted ALL testable content
+
+QUESTION TYPES BASED ON TOPIC TYPE:
+1. For CATEGORY topics (overview/synthesis questions):
+   - Test overall understanding of the category and how subtopics relate
+   - Ask synthesis questions that integrate concepts from multiple subtopics
+   - Include comparison questions between different subtopics within the category
+   - Test the big picture and overarching principles
+
+2. For SPECIFIC TOPIC (detailed questions):
+   - Test deep, specific knowledge about that particular topic
+   - Include detailed questions about definitions, principles, and mechanisms
+   - Ask application questions specific to that topic
+
+3. For ALL topics (CRITICAL - include these):
+   - EXAMPLE-BASED QUESTIONS: "Give an example of...", "Which scenario demonstrates...", "Which of the following is an example of..."
+   - Application questions that require applying concepts to real scenarios
+   - Questions that test practical understanding through examples
 
 DIFFICULTY LEVEL: CHALLENGING
 - Make questions that require DEEP analysis and critical thinking
@@ -911,29 +936,31 @@ DIFFICULTY LEVEL: CHALLENGING
 - Include "all of the above" or "none of the above" when appropriate
 - Use comparative questions (e.g., "Which is the PRIMARY..." "What is the MAIN difference...")
 - Create questions that test WHY and HOW, not just WHAT
+- For every concept, include at least one EXAMPLE-BASED question
 
 Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
 {chunk_text}
 
-SUBTOPICS TO COVER ({len(batch_keys)} subtopics in this batch):
+TOPICS TO COVER ({len(batch_keys)} topics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate UNLIMITED questions for EACH subtopic - as many as the content supports
+1. Generate UNLIMITED questions for EACH topic - aim for 15-30+ questions per topic minimum
 2. Extract EVERY piece of testable information from the study material
 3. NO DUPLICATES - each question must test a unique concept or angle
-4. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
-5. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
-6. Distractors should be subtle and based on common misconceptions
-7. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
-8. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
-9. Source text should include the complete sentence(s) or paragraph that contains the answer
-10. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
-11. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
-12. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
-13. Return ONLY valid JSON
+4. For EACH topic, include multiple EXAMPLE-BASED questions (e.g., "Which scenario is an example of operant conditioning?")
+5. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
+6. Questions should be TRICKY and CHALLENGING - test deep understanding and critical thinking
+7. Distractors should be subtle and based on common misconceptions
+8. Provide detailed explanations that explain why the correct answer is right AND why the distractors are wrong
+9. For EACH question, include the EXACT source text from the study material with FULL CONTEXT
+10. Source text should include the complete sentence(s) or paragraph that contains the answer
+11. Include enough surrounding context (2-4 sentences) so students can easily locate it in their document
+12. The sourceText must be VERBATIM from the study material - copy it EXACTLY as it appears
+13. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
+14. Return ONLY valid JSON
 
-GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
+GOAL: Create the MAXIMUM number of questions possible per topic (15-30+ each). Include example-based questions for EVERY concept. More questions = better learning coverage!
 
 Return in this EXACT format (use topic keys EXACTLY as shown above - can be any depth like "0", "0-1", "0-1-2", "0-1-2-3-4", etc):
 {{
