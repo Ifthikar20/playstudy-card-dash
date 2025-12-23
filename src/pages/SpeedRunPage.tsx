@@ -449,9 +449,20 @@ export default function SpeedRunPage() {
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold">{currentSession.title}</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {fileType?.toUpperCase()} Document
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm font-medium text-primary">
+                      {(() => {
+                        const categories = currentSession?.extractedTopics || [];
+                        if (categories.length === 0) return 'No topics';
+                        if (categories.length === 1) return categories[0].title;
+                        return `${categories[0].title} + ${categories.length - 1} more`;
+                      })()}
+                    </p>
+                    <span className="text-sm text-muted-foreground">•</span>
+                    <p className="text-sm text-muted-foreground">
+                      {fileType?.toUpperCase()} Document
+                    </p>
+                  </div>
                 </div>
 
                 {fileType === 'pdf' && numPages > 0 && (
