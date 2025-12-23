@@ -908,7 +908,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     if use_claude:
                         batch_response = anthropic_client.messages.create(
                             model="claude-3-5-haiku-20241022",
-                            max_tokens=16384,  # Maximum output tokens for more questions (increased from 8192)
+                            max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
                             temperature=0.7,
                             messages=[{"role": "user", "content": batch_prompt}]
                         )
@@ -916,7 +916,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                     else:
                         batch_response = deepseek_client.chat.completions.create(
                             model="deepseek-chat",
-                            max_tokens=64000,  # Increased from 32000 to allow MORE questions
+                            max_tokens=64000,  # DeepSeek supports larger output
                             temperature=0.7,
                             messages=[{"role": "user", "content": batch_prompt}]
                         )
@@ -1404,7 +1404,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         if use_claude:
             batch_response = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=16384,  # Increased for more questions
+                max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
@@ -1412,7 +1412,7 @@ Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc
         else:
             batch_response = deepseek_client.chat.completions.create(
                 model="deepseek-chat",
-                max_tokens=64000,  # Increased for more questions
+                max_tokens=64000,  # DeepSeek supports larger output
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
