@@ -286,24 +286,29 @@ export default function FullStudyPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [syncPendingProgress]);
 
-  // Flatten topics for easier access (includes both categories and subtopics)
+  // Flatten topics for easier access (includes categories, subtopics, and sub-subtopics recursively)
   const flattenedTopics = useMemo(() => {
     const topics = currentSession?.extractedTopics || [];
     const flattened: any[] = [];
 
-    topics.forEach((category) => {
-      flattened.push(category);
-      if (category.subtopics && category.subtopics.length > 0) {
-        flattened.push(...category.subtopics);
+    // Recursive function to flatten all levels
+    const flattenRecursive = (topic: any) => {
+      flattened.push(topic);
+      if (topic.subtopics && topic.subtopics.length > 0) {
+        topic.subtopics.forEach((subtopic: any) => flattenRecursive(subtopic));
       }
+    };
+
+    topics.forEach((category) => {
+      flattenRecursive(category);
     });
 
     return flattened;
   }, [currentSession?.extractedTopics]);
 
-  // Get only leaf topics (topics with questions, not categories)
+  // Get only leaf topics (topics with questions, not categories or intermediate subtopics)
   const leafTopics = useMemo(() => {
-    return flattenedTopics.filter(t => !t.isCategory);
+    return flattenedTopics.filter(t => !t.isCategory && t.questions && t.questions.length > 0);
   }, [flattenedTopics]);
 
   // Create a completion hash to trigger re-renders when any topic is completed
