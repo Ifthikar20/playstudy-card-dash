@@ -405,6 +405,7 @@ class CreateStudySessionRequest(BaseModel):
     content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
     questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
+    progressive_load: bool = Field(default=True)  # Enable progressive loading for large documents
 
 
 class AnalyzeContentRequest(BaseModel):
@@ -525,13 +526,22 @@ async def create_study_session_with_ai(
         # Analyze content to get smart recommendations
         analysis = analyze_content_complexity(extracted_text)
 
-        # Calculate number of categories based on total topics requested
+        # Progressive loading: For large documents (>5000 words), start with fewer topics
+        is_large_doc = analysis['word_count'] > 5000
+        initial_topics = data.num_topics
+
+        if data.progressive_load and is_large_doc:
+            # Start with only 2-3 categories and 4-6 subtopics for quick initial load
+            initial_topics = min(6, data.num_topics)
+            logger.info(f"📚 Large document detected ({analysis['word_count']} words). Using progressive load: {initial_topics} initial topics")
+
+        # Calculate number of categories based on topics to generate
         # For 2-5 topics: 2 categories
         # For 6-10 topics: 3 categories
         # For 11-15 topics: 4 categories
         # For 16-20 topics: 5 categories
-        num_categories = max(2, min(5, (data.num_topics + 3) // 4))
-        subtopics_per_category = max(1, data.num_topics // num_categories)  # Allow single subtopic per category
+        num_categories = max(2, min(5, (initial_topics + 3) // 4))
+        subtopics_per_category = max(1, initial_topics // num_categories)  # Allow single subtopic per category
 
         # Initialize AI client (prefer Claude Haiku for speed, fallback to DeepSeek)
         use_claude = bool(settings.ANTHROPIC_API_KEY)
@@ -563,10 +573,10 @@ Requirements:
 3. Each subtopic can support varying numbers of questions (3-20 based on content depth)
 4. Provide clear titles and brief descriptions for both categories and subtopics
 5. Organize logically (foundational concepts first, building to advanced topics)
-6. Create AT LEAST {data.num_topics} total subtopics across all categories, but feel free to add more if the content warrants it
+6. Create AT LEAST {initial_topics} total subtopics across all categories (focus on the most important topics first)
 7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
 8. Ensure subtopics are distinct and cover different aspects of the material
-9. Don't limit yourself - if there are more concepts to cover, create additional subtopics
+9. Focus on core concepts and foundational topics first
 
 Return ONLY a valid JSON object in this EXACT format:
 {{
