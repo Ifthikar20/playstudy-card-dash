@@ -514,8 +514,9 @@ async def create_study_session_with_ai(
         - 5 requests per minute per user
     """
     try:
-        # Validate file size before processing (prevent 32MB+ uploads)
-        MAX_FILE_SIZE_MB = 20
+        # Validate file size before processing
+        # Note: Base64 encoding increases file size by ~33%, so 25MB raw = ~33MB encoded
+        MAX_FILE_SIZE_MB = 25
         MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
         content_size = len(data.content)
 
@@ -523,7 +524,7 @@ async def create_study_session_with_ai(
             logger.error(f"❌ File too large: {content_size / (1024*1024):.1f}MB (max: {MAX_FILE_SIZE_MB}MB)")
             raise HTTPException(
                 status_code=413,
-                detail=f"File size ({content_size / (1024*1024):.1f}MB) exceeds maximum allowed size ({MAX_FILE_SIZE_MB}MB). Please use a smaller file."
+                detail=f"File size ({content_size / (1024*1024):.1f}MB) exceeds maximum allowed size ({MAX_FILE_SIZE_MB}MB). Please use a smaller file or split it into multiple documents."
             )
 
         logger.info(f"📁 Processing file: {content_size / (1024*1024):.1f}MB")

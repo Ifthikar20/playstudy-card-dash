@@ -119,14 +119,14 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
 
-      // Check file size (max 20MB)
-      const MAX_FILE_SIZE_MB = 20;
+      // Check file size (max 25MB)
+      const MAX_FILE_SIZE_MB = 25;
       const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
       if (file.size > MAX_FILE_SIZE_BYTES) {
         toast({
           title: "File Too Large",
-          description: `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed size of ${MAX_FILE_SIZE_MB}MB. Please use a smaller file.`,
+          description: `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed size of ${MAX_FILE_SIZE_MB}MB. Please compress the file or split it into smaller documents.`,
           variant: "destructive",
         });
         // Clear the file input
