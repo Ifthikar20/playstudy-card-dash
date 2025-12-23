@@ -1151,7 +1151,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             )
 
         # Enforce minimum question count for good study sessions
-        MIN_QUESTIONS_REQUIRED = 20  # At least 20 questions for a meaningful study session
+        MIN_QUESTIONS_REQUIRED = 10  # Lowered for nested subtopics that distribute questions across more leaf nodes
         if question_counter < MIN_QUESTIONS_REQUIRED:
             logger.error(f"❌ Only {question_counter} questions generated (minimum: {MIN_QUESTIONS_REQUIRED})")
             db.rollback()
