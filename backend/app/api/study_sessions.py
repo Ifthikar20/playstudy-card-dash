@@ -515,8 +515,8 @@ async def create_study_session_with_ai(
     """
     try:
         # Validate file size before processing
-        # Note: Base64 encoding increases file size by ~33%, so 25MB raw = ~33MB encoded
-        MAX_FILE_SIZE_MB = 25
+        # Note: Base64 encoding increases file size by ~33%, so 35MB raw = ~47MB encoded
+        MAX_FILE_SIZE_MB = 35
         MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
         content_size = len(data.content)
 

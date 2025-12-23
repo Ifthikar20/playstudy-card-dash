@@ -119,8 +119,8 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
 
-      // Check file size (max 25MB)
-      const MAX_FILE_SIZE_MB = 25;
+      // Check file size (max 35MB)
+      const MAX_FILE_SIZE_MB = 35;
       const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
       if (file.size > MAX_FILE_SIZE_BYTES) {
