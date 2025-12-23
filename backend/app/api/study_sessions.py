@@ -800,18 +800,41 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             )
             batch_text = batch_response.choices[0].message.content
 
-        # Parse batch response
+        # Log AI response details
+        logger.info(f"📨 Received AI response, length: {len(batch_text)} characters")
+        logger.debug(f"📄 First 500 chars of response: {batch_text[:500]}")
+
+        # Parse batch response with detailed error logging
         try:
             start_idx = batch_text.find('{')
             end_idx = batch_text.rfind('}') + 1
-            batch_json = json.loads(batch_text[start_idx:end_idx])
-            subtopics_questions = batch_json.get("subtopics", {})
+
+            if start_idx == -1 or end_idx == 0:
+                logger.error(f"❌ No JSON found in AI response. Full response: {batch_text}")
+                subtopics_questions = {}
+            else:
+                json_str = batch_text[start_idx:end_idx]
+                logger.debug(f"📋 Extracted JSON string, length: {len(json_str)}")
+
+                batch_json = json.loads(json_str)
+                subtopics_questions = batch_json.get("subtopics", {})
+
+                logger.info(f"✅ Successfully parsed {len(subtopics_questions)} subtopics from AI response")
+                for key in subtopics_questions.keys():
+                    q_count = len(subtopics_questions[key].get("questions", []))
+                    logger.info(f"  - Subtopic {key}: {q_count} questions")
+
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.error(f"Failed to parse batch questions: {e}")
+            logger.error(f"❌ Failed to parse batch questions: {e}")
+            logger.error(f"📄 Problematic JSON substring (first 1000 chars): {batch_text[start_idx:min(start_idx+1000, end_idx)] if start_idx != -1 else 'N/A'}")
             subtopics_questions = {}
 
         # Step 5: Assign questions to subtopics
         question_counter = 0
+        logger.info(f"🔄 Assigning questions to {len(subtopic_map)} subtopics...")
+        logger.debug(f"🗂️ Subtopic keys in map: {list(subtopic_map.keys())}")
+        logger.debug(f"🗂️ Subtopic keys in AI response: {list(subtopics_questions.keys())}")
+
         for subtopic_key, subtopic_info in subtopic_map.items():
             subtopic = subtopic_info["topic"]
             subtopic_schema = subtopic_info["schema"]
@@ -822,13 +845,18 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
             # Fallback if no questions generated (create 5 as default)
             if not questions_data:
-                logger.warning(f"No questions found for subtopic {subtopic_key}, creating 5 placeholder questions")
+                logger.warning(f"⚠️ No questions found for subtopic '{subtopic_key}' ('{subtopic.title}'), creating 5 placeholder questions")
+                logger.debug(f"🔍 Checking if '{subtopic_key}' exists in AI response: {subtopic_key in subtopics_questions}")
+                if subtopic_key in subtopics_questions:
+                    logger.debug(f"🔍 Data for '{subtopic_key}': {subtopics_questions[subtopic_key]}")
                 questions_data = [{
                     "question": f"Question {i+1} about {subtopic.title}",
                     "options": ["Option A", "Option B", "Option C", "Option D"],
                     "correctAnswer": 0,
                     "explanation": "This is a placeholder question."
                 } for i in range(5)]
+            else:
+                logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
 
             # Save ALL questions to database (no limit - variable per topic)
             questions_list = []
