@@ -405,7 +405,7 @@ class CreateStudySessionRequest(BaseModel):
     content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit for base64 encoded files (large PDFs)
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
     questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
-    progressive_load: bool = Field(default=True)  # Enable progressive loading for large documents
+    progressive_load: bool = Field(default=False)  # DISABLED: Generate ALL questions upfront for better UX
 
 
 class AnalyzeContentRequest(BaseModel):
@@ -875,7 +875,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                 if use_claude:
                     batch_response = anthropic_client.messages.create(
                         model="claude-3-5-haiku-20241022",
-                        max_tokens=8192,  # Maximum for Claude 3.5 Haiku
+                        max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
                         temperature=0.7,
                         messages=[{"role": "user", "content": batch_prompt}]
                     )
@@ -883,7 +883,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                 else:
                     batch_response = deepseek_client.chat.completions.create(
                         model="deepseek-chat",
-                        max_tokens=16000,
+                        max_tokens=32000,  # Increased from 16000 to allow MORE questions
                         temperature=0.7,
                         messages=[{"role": "user", "content": batch_prompt}]
                     )
@@ -1038,9 +1038,15 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                 detail="Failed to generate questions. The AI did not return any valid questions. This may be due to document format or content issues. Please try:\n1. A different document\n2. Splitting the document into smaller files\n3. Converting to PDF format if using Word/PowerPoint"
             )
 
-        # Warn if very few questions generated
-        if question_counter < 10:
-            logger.warning(f"⚠️ Only {question_counter} questions generated - this may not be enough for a good study session")
+        # Enforce minimum question count for good study sessions
+        MIN_QUESTIONS_REQUIRED = 20  # At least 20 questions for a meaningful study session
+        if question_counter < MIN_QUESTIONS_REQUIRED:
+            logger.error(f"❌ Only {question_counter} questions generated (minimum: {MIN_QUESTIONS_REQUIRED})")
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Not enough questions generated ({question_counter}/{MIN_QUESTIONS_REQUIRED} required). The document may be too short, too complex, or in an unsupported format. Please try:\n1. A longer or more detailed document\n2. Converting to PDF format\n3. Checking that the content is educational material"
+            )
 
         # Log coverage statistics
         coverage_percent = (subtopics_with_questions / total_subtopics * 100) if total_subtopics > 0 else 0
