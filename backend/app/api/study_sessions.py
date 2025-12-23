@@ -599,16 +599,21 @@ async def create_study_session_with_ai(
 
         # Initialize AI client (prefer Claude Haiku for speed, fallback to DeepSeek)
         use_claude = bool(settings.ANTHROPIC_API_KEY)
+        anthropic_client = None
+        deepseek_client = None
 
         if use_claude:
             anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
             logger.info("🚀 Using Claude Haiku for fast generation")
-        else:
+
+        # Always initialize DeepSeek as fallback
+        if settings.DEEPSEEK_API_KEY:
             deepseek_client = OpenAI(
                 api_key=settings.DEEPSEEK_API_KEY,
                 base_url="https://api.deepseek.com"
             )
-            logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
+            if not use_claude:
+                logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
         topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories, subtopics, and sub-subtopics.
@@ -657,16 +662,29 @@ Return ONLY a valid JSON object in this EXACT format:
 
 Note: subsubtopics array can be empty [] if the subtopic doesn't need further breakdown."""
 
-        # Call AI to extract topics
-        if use_claude:
-            topics_response = anthropic_client.messages.create(
-                model="claude-3-5-haiku-20241022",
-                max_tokens=2048,
-                temperature=0.7,
-                messages=[{"role": "user", "content": topics_prompt}]
-            )
-            topics_text = topics_response.content[0].text
-        else:
+        # Call AI to extract topics (with automatic fallback to DeepSeek if Claude fails)
+        topics_text = None
+        if use_claude and anthropic_client:
+            try:
+                topics_response = anthropic_client.messages.create(
+                    model="claude-3-5-haiku-20241022",
+                    max_tokens=2048,
+                    temperature=0.7,
+                    messages=[{"role": "user", "content": topics_prompt}]
+                )
+                topics_text = topics_response.content[0].text
+            except Exception as claude_error:
+                logger.warning(f"⚠️ Claude API failed: {str(claude_error)}")
+                if deepseek_client:
+                    logger.info("🔄 Falling back to DeepSeek...")
+                    use_claude = False  # Switch to DeepSeek for remaining calls
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Claude API failed and no DeepSeek fallback available: {str(claude_error)}"
+                    )
+
+        if not topics_text and deepseek_client:
             topics_response = deepseek_client.chat.completions.create(
                 model="deepseek-chat",
                 max_tokens=2048,
@@ -674,6 +692,12 @@ Note: subsubtopics array can be empty [] if the subtopic doesn't need further br
                 messages=[{"role": "user", "content": topics_prompt}]
             )
             topics_text = topics_response.choices[0].message.content
+
+        if not topics_text:
+            raise HTTPException(
+                status_code=500,
+                detail="No AI provider available. Please configure ANTHROPIC_API_KEY or DEEPSEEK_API_KEY."
+            )
 
         # Parse hierarchical topics
         try:
@@ -975,16 +999,26 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                         detail=f"Document chunk {chunk_idx} batch {batch_num} is too large for processing (~{prompt_tokens:,} tokens). The document may need to be split into smaller files."
                     )
 
+                batch_text = None
                 try:
-                    if use_claude:
-                        batch_response = anthropic_client.messages.create(
-                            model="claude-3-5-haiku-20241022",
-                            max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
-                            temperature=0.7,
-                            messages=[{"role": "user", "content": batch_prompt}]
-                        )
-                        batch_text = batch_response.content[0].text
-                    else:
+                    if use_claude and anthropic_client:
+                        try:
+                            batch_response = anthropic_client.messages.create(
+                                model="claude-3-5-haiku-20241022",
+                                max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
+                                temperature=0.7,
+                                messages=[{"role": "user", "content": batch_prompt}]
+                            )
+                            batch_text = batch_response.content[0].text
+                        except Exception as claude_error:
+                            logger.warning(f"⚠️ Claude API failed for chunk {chunk_idx} batch {batch_num}: {str(claude_error)}")
+                            if deepseek_client:
+                                logger.info(f"🔄 Falling back to DeepSeek for chunk {chunk_idx} batch {batch_num}...")
+                                use_claude = False  # Switch to DeepSeek for remaining calls
+                            else:
+                                raise  # Re-raise if no fallback available
+
+                    if not batch_text and deepseek_client:
                         batch_response = deepseek_client.chat.completions.create(
                             model="deepseek-chat",
                             max_tokens=64000,  # DeepSeek supports larger output
@@ -992,6 +1026,10 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                             messages=[{"role": "user", "content": batch_prompt}]
                         )
                         batch_text = batch_response.choices[0].message.content
+
+                    if not batch_text:
+                        raise Exception("No AI provider available")
+
                 except Exception as api_error:
                     logger.error(f"❌ AI API call failed for chunk {chunk_idx} batch {batch_num}: {type(api_error).__name__}: {str(api_error)}")
                     # Check if it's a context length error
