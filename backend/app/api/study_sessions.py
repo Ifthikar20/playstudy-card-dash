@@ -514,6 +514,20 @@ async def create_study_session_with_ai(
         - 5 requests per minute per user
     """
     try:
+        # Validate file size before processing (prevent 32MB+ uploads)
+        MAX_FILE_SIZE_MB = 20
+        MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+        content_size = len(data.content)
+
+        if content_size > MAX_FILE_SIZE_BYTES:
+            logger.error(f"❌ File too large: {content_size / (1024*1024):.1f}MB (max: {MAX_FILE_SIZE_MB}MB)")
+            raise HTTPException(
+                status_code=413,
+                detail=f"File size ({content_size / (1024*1024):.1f}MB) exceeds maximum allowed size ({MAX_FILE_SIZE_MB}MB). Please use a smaller file."
+            )
+
+        logger.info(f"📁 Processing file: {content_size / (1024*1024):.1f}MB")
+
         # Extract text and detect file type
         extracted_text, file_type, file_content = detect_file_type_and_extract(data.content)
 
@@ -1028,14 +1042,18 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             createdAt=int(study_session.created_at.timestamp() * 1000) if study_session.created_at else None
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 413 for file size)
+        db.rollback()
+        raise
     except Exception as api_error:
+        logger.error(f"❌ Error in create_study_session_with_ai: {type(api_error).__name__}: {str(api_error)}")
+        logger.error(f"❌ Full error: {repr(api_error)}", exc_info=True)
         if "openai" in str(type(api_error).__module__):
             db.rollback()
             raise HTTPException(status_code=500, detail=f"DeepSeek API error: {str(api_error)}")
-        raise
-    except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create study session: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create study session: {str(api_error)}")
 
 
 @router.get("/{session_id}", response_model=CreateStudySessionResponse)
