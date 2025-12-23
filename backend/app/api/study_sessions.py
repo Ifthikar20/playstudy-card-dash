@@ -616,7 +616,7 @@ async def create_study_session_with_ai(
                 logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
-        topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories, subtopics, and sub-subtopics.
+        topics_prompt = f"""Analyze this study material and organize it into a DEEPLY NESTED hierarchical structure with UNLIMITED depth.
 
 Study Material:
 {extracted_text}
@@ -628,17 +628,19 @@ Content Analysis:
 
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
-2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
-3. For each subtopic, if it covers multiple distinct concepts, break it down into sub-subtopics (2-5 sub-subtopics per subtopic when appropriate)
-4. Each sub-subtopic can support varying numbers of questions (3-20 based on content depth)
-5. Provide clear titles and brief descriptions for categories, subtopics, and sub-subtopics
-6. Organize logically (foundational concepts first, building to advanced topics)
-7. Create AT LEAST {initial_topics} total subtopics across all categories (focus on the most important topics first)
-8. For complex content, create more detailed sub-subtopics; for simpler content, use subtopics without breaking them down
-9. Ensure all levels are distinct and cover different aspects of the material
+2. Within each category, break down into subtopics
+3. RECURSIVELY break down complex subtopics into deeper levels (4, 5, 6, 7, 8+ levels if needed!)
+4. Only stop nesting when you reach atomic concepts that can be tested with questions (leaf nodes)
+5. Each leaf node should be a single, focused concept that supports 3-20 questions
+6. Provide clear titles and brief descriptions at ALL levels
+7. Organize logically (foundational concepts first, building to advanced topics)
+8. Create AT LEAST {initial_topics} total LEAF topics across all categories
+9. For complex content, create DEEP hierarchies; for simpler content, use shallow hierarchies
 10. Focus on core concepts and foundational topics first
 
-Return ONLY a valid JSON object in this EXACT format:
+IMPORTANT: The "subtopics" array at EVERY level can contain more nested subtopics. Keep nesting until you reach atomic, testable concepts.
+
+Return ONLY a valid JSON object in this EXACT format (subtopics can be nested infinitely):
 {{
   "categories": [
     {{
@@ -646,12 +648,19 @@ Return ONLY a valid JSON object in this EXACT format:
       "description": "Brief description of this category",
       "subtopics": [
         {{
-          "title": "Subtopic Title",
-          "description": "Brief description of what this subtopic covers",
-          "subsubtopics": [
+          "title": "Subtopic Title (Level 2)",
+          "description": "Brief description",
+          "subtopics": [
             {{
-              "title": "Sub-subtopic Title",
-              "description": "Brief description of this specific aspect"
+              "title": "Sub-subtopic Title (Level 3)",
+              "description": "Brief description",
+              "subtopics": [
+                {{
+                  "title": "Level 4 Topic (continue nesting as needed!)",
+                  "description": "Brief description",
+                  "subtopics": []
+                }}
+              ]
             }}
           ]
         }}
@@ -660,7 +669,7 @@ Return ONLY a valid JSON object in this EXACT format:
   ]
 }}
 
-Note: subsubtopics array can be empty [] if the subtopic doesn't need further breakdown."""
+Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have questions generated for it."""
 
         # Call AI to extract topics (with automatic fallback to DeepSeek if Claude fails)
         topics_text = None
@@ -744,117 +753,85 @@ Note: subsubtopics array can be empty [] if the subtopic doesn't need further br
         subtopic_map = {}  # Map to track subtopics for batch question assignment
         overall_idx = 0
 
-        # First pass: Create all categories and subtopics in database
-        for cat_idx, category_data in enumerate(categories_data):
-            # Create category topic in database
-            category_topic = Topic(
+        # Recursive helper function to create topics at any depth
+        def create_topics_recursive(
+            topic_data: dict,
+            parent_topic_id: Optional[int],
+            parent_schema: Optional[TopicSchema],
+            path: str,  # e.g., "0-1-2-3" for tracking hierarchy
+            order_index: int
+        ) -> Optional[TopicSchema]:
+            """
+            Recursively create topics at unlimited depth.
+            Returns the schema for this topic (or None if it's a pure container).
+            """
+            subtopics_data = topic_data.get("subtopics", [])
+            has_children = len(subtopics_data) > 0
+            is_leaf = not has_children
+
+            # Create topic in database
+            topic = Topic(
                 study_session_id=study_session.id,
-                title=category_data["title"],
-                description=category_data.get("description", ""),
-                order_index=cat_idx,
-                is_category=True,
-                parent_topic_id=None
+                parent_topic_id=parent_topic_id,
+                title=topic_data["title"],
+                description=topic_data.get("description", ""),
+                order_index=order_index,
+                is_category=has_children  # Non-leaf nodes are categories
             )
-            db.add(category_topic)
+            db.add(topic)
             db.flush()
 
-            # Create category schema
-            category_schema = TopicSchema(
-                id=f"category-{cat_idx+1}",
-                db_id=category_topic.id,
-                title=category_data["title"],
-                description=category_data.get("description", ""),
-                isCategory=True,
-                parentTopicId=None,
+            # Create schema
+            topic_schema = TopicSchema(
+                id=f"topic-{path}",
+                db_id=topic.id,
+                title=topic_data["title"],
+                description=topic_data.get("description", ""),
                 questions=[],
+                completed=False,
+                score=None,
+                currentQuestionIndex=0,
+                isCategory=has_children,
+                parentTopicId=parent_schema.id if parent_schema else None,
                 subtopics=[]
             )
 
-            # Create all subtopics for this category
-            subtopics_data = category_data.get("subtopics", [])
-            for sub_idx, subtopic_data in enumerate(subtopics_data):
-                # Check if this subtopic has sub-subtopics
-                subsubtopics_data = subtopic_data.get("subsubtopics", [])
-                has_subsubtopics = len(subsubtopics_data) > 0
+            # If this is a leaf node, add it to subtopic_map for question generation
+            if is_leaf:
+                subtopic_map[path] = {
+                    "topic": topic,
+                    "topic_data": topic_data,
+                    "schema": topic_schema,
+                    "parent_schema": parent_schema
+                }
 
-                # Create parent subtopic (this will be a container if it has sub-subtopics)
-                subtopic = Topic(
-                    study_session_id=study_session.id,
-                    parent_topic_id=category_topic.id,
-                    title=subtopic_data["title"],
-                    description=subtopic_data.get("description", ""),
-                    order_index=sub_idx,
-                    is_category=has_subsubtopics  # Mark as category if it has children
-                )
-                db.add(subtopic)
-                db.flush()
+            # Recursively create children
+            if has_children:
+                for child_idx, child_data in enumerate(subtopics_data):
+                    child_path = f"{path}-{child_idx}"
+                    child_schema = create_topics_recursive(
+                        child_data,
+                        topic.id,
+                        topic_schema,
+                        child_path,
+                        child_idx
+                    )
+                    if child_schema:
+                        topic_schema.subtopics.append(child_schema)
 
-                subtopic_schema = TopicSchema(
-                    id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
-                    db_id=subtopic.id,
-                    title=subtopic_data["title"],
-                    description=subtopic_data.get("description", ""),
-                    questions=[],
-                    completed=False,
-                    score=None,
-                    currentQuestionIndex=0,
-                    isCategory=has_subsubtopics,
-                    parentTopicId=f"category-{cat_idx+1}",
-                    subtopics=[]
-                )
+            return topic_schema
 
-                if has_subsubtopics:
-                    # Create sub-subtopics (leaf nodes that will have questions)
-                    for subsub_idx, subsubtopic_data in enumerate(subsubtopics_data):
-                        subsubtopic = Topic(
-                            study_session_id=study_session.id,
-                            parent_topic_id=subtopic.id,  # Parent is the subtopic
-                            title=subsubtopic_data["title"],
-                            description=subsubtopic_data.get("description", ""),
-                            order_index=subsub_idx,
-                            is_category=False  # Leaf node
-                        )
-                        db.add(subsubtopic)
-                        db.flush()
-
-                        # Track sub-subtopic for question generation
-                        subsubtopic_key = f"{cat_idx}-{sub_idx}-{subsub_idx}"
-                        subtopic_map[subsubtopic_key] = {
-                            "topic": subsubtopic,
-                            "category_data": category_data,
-                            "subtopic_data": subtopic_data,
-                            "subsubtopic_data": subsubtopic_data,
-                            "schema": TopicSchema(
-                                id=f"subsubtopic-{cat_idx+1}-{sub_idx+1}-{subsub_idx+1}",
-                                db_id=subsubtopic.id,
-                                title=subsubtopic_data["title"],
-                                description=subsubtopic_data.get("description", ""),
-                                questions=[],
-                                completed=False,
-                                score=None,
-                                currentQuestionIndex=0,
-                                isCategory=False,
-                                parentTopicId=f"subtopic-{cat_idx+1}-{sub_idx+1}",
-                                subtopics=[]
-                            ),
-                            "subtopic_schema": subtopic_schema
-                        }
-                        overall_idx += 1
-                else:
-                    # No sub-subtopics, this subtopic will have questions directly
-                    subtopic_key = f"{cat_idx}-{sub_idx}"
-                    subtopic_map[subtopic_key] = {
-                        "topic": subtopic,
-                        "category_data": category_data,
-                        "subtopic_data": subtopic_data,
-                        "schema": subtopic_schema,
-                        "category_schema": category_schema
-                    }
-                    overall_idx += 1
-
-                category_schema.subtopics.append(subtopic_schema)
-
-            all_topics.append(category_schema)
+        # First pass: Create all categories and their nested subtopics recursively
+        for cat_idx, category_data in enumerate(categories_data):
+            category_schema = create_topics_recursive(
+                category_data,
+                parent_topic_id=None,
+                parent_schema=None,
+                path=str(cat_idx),
+                order_index=cat_idx
+            )
+            if category_schema:
+                all_topics.append(category_schema)
 
         # Step 4: Generate questions by processing each document chunk
         # For large documents, this processes multiple chunks separately and merges results
@@ -896,29 +873,12 @@ Note: subsubtopics array can be empty [] if the subtopic doesn't need further br
                 subtopics_list = ""
                 for subtopic_key in batch_keys:
                     subtopic_info = subtopic_map[subtopic_key]
-                    category_data = subtopic_info["category_data"]
-                    subtopic_data = subtopic_info["subtopic_data"]
+                    topic_data = subtopic_info["topic_data"]
 
-                    # Check if this is a sub-subtopic (has 3 parts: cat-sub-subsub)
-                    key_parts = subtopic_key.split('-')
-                    if len(key_parts) == 3:
-                        # This is a sub-subtopic
-                        cat_idx, sub_idx, subsub_idx = map(int, key_parts)
-                        subsubtopic_data = subtopic_info.get("subsubtopic_data", {})
-
-                        subtopics_list += f"\n[Sub-subtopic {cat_idx}-{sub_idx}-{subsub_idx}]\n"
-                        subtopics_list += f"Category: {category_data['title']}\n"
-                        subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
-                        subtopics_list += f"Sub-subtopic: {subsubtopic_data.get('title', '')}\n"
-                        subtopics_list += f"Description: {subsubtopic_data.get('description', '')}\n"
-                    else:
-                        # This is a regular subtopic
-                        cat_idx, sub_idx = map(int, key_parts)
-
-                        subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
-                        subtopics_list += f"Category: {category_data['title']}\n"
-                        subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
-                        subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
+                    # Simple format that works for any nesting depth
+                    subtopics_list += f"\n[Topic {subtopic_key}]\n"
+                    subtopics_list += f"Title: {topic_data['title']}\n"
+                    subtopics_list += f"Description: {topic_data.get('description', '')}\n"
 
                 # Build prompt for this chunk and subtopic batch
                 batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following subtopics from the study material.
@@ -964,10 +924,10 @@ Requirements:
 
 GOAL: Create as many questions as possible per subtopic. More questions = better learning coverage!
 
-Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
+Return in this EXACT format (use topic keys EXACTLY as shown above - can be any depth like "0", "0-1", "0-1-2", "0-1-2-3-4", etc):
 {{
   "subtopics": {{
-    "0-0": {{
+    "0": {{
       "questions": [
         {{
           "question": "Question text?",
@@ -979,7 +939,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
         }}
       ]
     }},
-    "0-1": {{
+    "0-1-2": {{
       "questions": [...]
     }}
   }}
