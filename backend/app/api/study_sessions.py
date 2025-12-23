@@ -587,7 +587,7 @@ Return ONLY a valid JSON object in this EXACT format:
         # Call AI to extract topics
         if use_claude:
             topics_response = anthropic_client.messages.create(
-                model="claude-haiku-4-20250514",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=2048,
                 temperature=0.7,
                 messages=[{"role": "user", "content": topics_prompt}]
@@ -768,7 +768,7 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
 
         if use_claude:
             batch_response = anthropic_client.messages.create(
-                model="claude-haiku-4-20250514",
+                model="claude-3-5-haiku-20241022",
                 max_tokens=16000,  # Large enough for all questions
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
