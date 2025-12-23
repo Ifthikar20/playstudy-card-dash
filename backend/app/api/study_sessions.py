@@ -1499,7 +1499,7 @@ DIFFICULTY LEVEL: CHALLENGING
 - For every concept, include at least one EXAMPLE-BASED question
 
 Study Material:
-{extracted_text[:400000]}
+{extracted_text[:80000]}
 
 TOPICS TO COVER ({len(next_batch)} topics in this batch):
 {subtopics_list}
@@ -1563,11 +1563,12 @@ REMINDER: The response MUST include questions for ALL {len(next_batch)} topics l
         if use_claude:
             batch_response = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=8192,  # Maximum output tokens for Claude 3.5 Haiku
+                max_tokens=16384,  # Increased for maximum question generation (2 topics × 30 questions)
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
             batch_text = batch_response.content[0].text
+            logger.info(f"📊 AI response stats: stop_reason={batch_response.stop_reason}, input_tokens={batch_response.usage.input_tokens}, output_tokens={batch_response.usage.output_tokens}")
         else:
             batch_response = deepseek_client.chat.completions.create(
                 model="deepseek-chat",
@@ -1589,7 +1590,9 @@ REMINDER: The response MUST include questions for ALL {len(next_batch)} topics l
 
         if start_idx == -1 or end_idx == 0:
             logger.error(f"❌ No JSON found in AI response")
-            raise HTTPException(status_code=500, detail="Failed to parse AI response")
+            logger.error(f"❌ Full AI response (first 2000 chars):")
+            logger.error(f"{batch_text[:2000]}")
+            raise HTTPException(status_code=500, detail=f"AI returned non-JSON response. First 500 chars: {batch_text[:500]}")
 
         json_str = batch_text[start_idx:end_idx]
         batch_json = json.loads(json_str)
