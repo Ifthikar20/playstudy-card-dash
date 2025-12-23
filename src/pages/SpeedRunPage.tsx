@@ -43,6 +43,8 @@ export default function SpeedRunPage() {
 
   // Session loading state
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [isLoadingMoreQuestions, setIsLoadingMoreQuestions] = useState(false);
+  const [previousQuestionCount, setPreviousQuestionCount] = useState(0);
 
   // Document viewing state
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
@@ -127,6 +129,63 @@ export default function SpeedRunPage() {
 
     loadSession();
   }, [sessionId, currentSession?.id, studySessions, setCurrentSession]);
+
+  // Poll for new questions being loaded in the background
+  useEffect(() => {
+    if (!sessionId || !currentSession) return;
+
+    const checkForNewQuestions = async () => {
+      try {
+        const updatedSession = await getStudySession(sessionId);
+
+        // Count current questions
+        const currentCount = allQuestions.length;
+        const updatedSubtopics = updatedSession.extractedTopics?.flatMap(category =>
+          category.subtopics || []
+        ) || [];
+        const updatedCount = updatedSubtopics.flatMap(topic => topic.questions || []).length;
+
+        // If question count increased, update the session
+        if (updatedCount > currentCount) {
+          console.log(`📚 New questions loaded: ${currentCount} -> ${updatedCount}`);
+          setCurrentSession(updatedSession);
+          setPreviousQuestionCount(currentCount);
+
+          // If we're still loading more, keep the loading state
+          setIsLoadingMoreQuestions(updatedCount > currentCount && updatedSubtopics.some(t => t.questions.length === 0));
+        }
+      } catch (error) {
+        console.error('Error checking for new questions:', error);
+      }
+    };
+
+    // Check every 3 seconds if we're at the current max or if questions are loading
+    const shouldPoll = currentQuestionIndex >= allQuestions.length - 1 || isLoadingMoreQuestions;
+
+    if (shouldPoll) {
+      const interval = setInterval(checkForNewQuestions, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [sessionId, currentSession, currentQuestionIndex, allQuestions.length, isLoadingMoreQuestions]);
+
+  // Track when question count changes to detect new questions being loaded
+  useEffect(() => {
+    if (allQuestions.length > 0 && previousQuestionCount === 0) {
+      setPreviousQuestionCount(allQuestions.length);
+    } else if (allQuestions.length > previousQuestionCount && previousQuestionCount > 0) {
+      setPreviousQuestionCount(allQuestions.length);
+    }
+  }, [allQuestions.length, previousQuestionCount]);
+
+  // Detect if we're at the max and should show loading indicator
+  useEffect(() => {
+    if (!currentSession?.extractedTopics) return;
+
+    const subtopics = currentSession.extractedTopics.flatMap(category => category.subtopics || []);
+    const hasSubtopicsWithoutQuestions = subtopics.some(topic => !topic.questions || topic.questions.length === 0);
+
+    setIsLoadingMoreQuestions(hasSubtopicsWithoutQuestions);
+  }, [currentSession?.extractedTopics]);
 
   // Convert base64 to blob URL for PDF viewing
   const getPdfDataUrl = () => {
@@ -608,13 +667,28 @@ export default function SpeedRunPage() {
                   {/* Question Header */}
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">
-                        Question {currentQuestionIndex + 1} / {allQuestions.length}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          Question {currentQuestionIndex + 1} / {allQuestions.length}
+                        </span>
+                        {isLoadingMoreQuestions && currentQuestionIndex >= allQuestions.length - 3 && (
+                          <div className="flex items-center gap-1 text-xs text-primary animate-pulse">
+                            <RotateCw className="h-3 w-3 animate-spin" />
+                            <span>Loading more...</span>
+                          </div>
+                        )}
+                      </div>
                       <span className="text-sm font-medium text-primary">
                         Correct: {correctCount} / {currentQuestionIndex + (hasAnswered ? 1 : 0)}
                       </span>
                     </div>
+                    {isLoadingMoreQuestions && currentQuestionIndex >= allQuestions.length - 3 && (
+                      <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950/20 border-l-4 border-blue-500 rounded">
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          📚 More questions are being generated in the background. Keep answering, and new questions will appear automatically!
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {speedRunMode === 'mcq' ? (
@@ -784,8 +858,17 @@ export default function SpeedRunPage() {
                       disabled={currentQuestionIndex >= allQuestions.length - 1}
                       className="flex-1"
                     >
-                      Next
-                      <ChevronRight className="h-4 w-4 ml-2" />
+                      {currentQuestionIndex >= allQuestions.length - 1 && isLoadingMoreQuestions ? (
+                        <>
+                          <RotateCw className="h-4 w-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-2" />
+                        </>
+                      )}
                     </Button>
                   </div>
                 </>
