@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Timer, FileText, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Timer, FileText, RotateCw, Settings } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,9 +10,13 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { Slider } from "@/components/ui/slider";
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { getStudySession } from "@/services/api";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import * as mammoth from "mammoth";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -23,26 +27,48 @@ interface Question {
   options: string[];
   correctAnswer: number;
   explanation: string;
+  sourceText?: string;  // Source text snippet from document
+  sourcePage?: number;  // Page number in source document
 }
 
 export default function SpeedRunPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
-  const { currentSession, speedRunMode, setSpeedRunMode, addXp, answerQuestion } = useAppStore();
+  const currentSession = useAppStore(state => state.currentSession);
+  const setCurrentSession = useAppStore(state => state.setCurrentSession);
+  const studySessions = useAppStore(state => state.studySessions);
+  const speedRunMode = useAppStore(state => state.speedRunMode);
+  const setSpeedRunMode = useAppStore(state => state.setSpeedRunMode);
+  const addXp = useAppStore(state => state.addXp);
+  const answerQuestion = useAppStore(state => state.answerQuestion);
+
+  // Session loading state
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
 
   // Document viewing state
   const [currentPageNumber, setCurrentPageNumber] = useState(1);
   const [numPages, setNumPages] = useState<number>(0);
   const [pdfScale, setPdfScale] = useState(1.0);
+  const [visiblePagesStart, setVisiblePagesStart] = useState(1);
+  const PAGES_PER_BATCH = 10; // Load 10 pages at a time
 
   // Question state
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
+  const [timerDuration, setTimerDuration] = useState(15); // Configurable timer duration
   const [timeLeft, setTimeLeft] = useState(15);
 
   // Flip card state
   const [isFlipped, setIsFlipped] = useState(false);
+
+  // Highlighting state
+  const [highlightedText, setHighlightedText] = useState<string | null>(null);
+
+  // Document rendering
+  const docxContainerRef = useRef<HTMLDivElement>(null);
+  const [renderedDocHTML, setRenderedDocHTML] = useState<string>("");
+  const [isRenderingDoc, setIsRenderingDoc] = useState(false);
 
   // Get file info
   const fileContent = currentSession?.fileContent;
@@ -60,6 +86,48 @@ export default function SpeedRunPage() {
   // Get questions for current page (temporary - using all questions for now)
   const currentPageQuestions = allQuestions;
 
+  // Load session data based on URL parameter
+  useEffect(() => {
+    const loadSession = async () => {
+      // If sessionId is in URL, load that session
+      if (sessionId) {
+        console.log('📥 [SpeedRun] URL sessionId detected:', sessionId);
+
+        // Check if we already have this session in the store
+        const existingSession = studySessions.find(s => s.id === sessionId);
+
+        // If currentSession doesn't match URL, update it
+        if (!currentSession || currentSession.id !== sessionId) {
+          if (existingSession) {
+            console.log('📂 [SpeedRun] Setting session from store:', sessionId);
+            setCurrentSession(existingSession);
+          }
+        }
+
+        // Load full session data if not already loaded or if extractedTopics is missing
+        if (!currentSession?.extractedTopics || currentSession.extractedTopics.length === 0 || currentSession.id !== sessionId) {
+          console.log('📥 [SpeedRun] Loading session data from backend:', sessionId);
+          setIsLoadingSession(true);
+
+          try {
+            const fullSession = await getStudySession(sessionId);
+            console.log('✅ [SpeedRun] Session data loaded:', fullSession);
+
+            // Update the current session with the full data
+            setCurrentSession(fullSession);
+          } catch (error: any) {
+            console.error('❌ [SpeedRun] Failed to load session:', error);
+            // If loading fails, show error (handled by the UI below)
+          } finally {
+            setIsLoadingSession(false);
+          }
+        }
+      }
+    };
+
+    loadSession();
+  }, [sessionId, currentSession?.id, studySessions, setCurrentSession]);
+
   // Convert base64 to blob URL for PDF viewing
   const getPdfDataUrl = () => {
     if (fileType === 'pdf' && fileContent) {
@@ -72,6 +140,45 @@ export default function SpeedRunPage() {
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
   };
+
+  // Update highlighted text when question changes or is answered
+  useEffect(() => {
+    if (hasAnswered && currentQuestion?.sourceText) {
+      setHighlightedText(currentQuestion.sourceText);
+    } else {
+      setHighlightedText(null);
+    }
+  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText]);
+
+  // Render Word documents when loaded
+  useEffect(() => {
+    const renderWordDocument = async () => {
+      if (!fileContent || !fileType) return;
+
+      if (['docx', 'doc'].includes(fileType.toLowerCase())) {
+        setIsRenderingDoc(true);
+        try {
+          // Convert base64 to array buffer
+          const binaryString = atob(fileContent);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          // Use mammoth to convert to HTML
+          const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
+          setRenderedDocHTML(result.value);
+        } catch (error) {
+          console.error('Error rendering Word document:', error);
+          setRenderedDocHTML("");
+        } finally {
+          setIsRenderingDoc(false);
+        }
+      }
+    };
+
+    renderWordDocument();
+  }, [fileContent, fileType]);
 
   // Timer for MCQ mode
   useEffect(() => {
@@ -88,7 +195,7 @@ export default function SpeedRunPage() {
   const resetQuestionState = () => {
     setSelectedAnswer(null);
     setHasAnswered(false);
-    setTimeLeft(15);
+    setTimeLeft(timerDuration);
     setIsFlipped(false);
   };
 
@@ -139,6 +246,59 @@ export default function SpeedRunPage() {
       setCurrentPageNumber(currentPageNumber - 1);
     }
   };
+
+  // Function to highlight text in study content
+  const getHighlightedContent = () => {
+    if (!currentSession?.studyContent || !highlightedText) {
+      return currentSession?.studyContent || "No content available";
+    }
+
+    const content = currentSession.studyContent;
+    const searchText = highlightedText.trim();
+
+    // Find the text (case-insensitive)
+    const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+
+    // Split by the search text and wrap matches in highlight spans
+    const parts = content.split(regex);
+
+    return parts.map((part, index) => {
+      if (regex.test(part)) {
+        return (
+          <mark
+            key={index}
+            className="bg-green-200 dark:bg-green-900/40 text-green-900 dark:text-green-100 px-1 rounded animate-pulse"
+            style={{ animationDuration: '2s', animationIterationCount: '3' }}
+          >
+            {part}
+          </mark>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
+  // Function to highlight text in HTML content
+  const getHighlightedHTML = (html: string) => {
+    if (!highlightedText) return html;
+
+    const searchText = highlightedText.trim();
+    const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+
+    return html.replace(regex, '<mark style="background-color: #86efac; color: #166534; padding: 2px 4px; border-radius: 2px; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
+  };
+
+  // Show loading state while fetching session
+  if (isLoadingSession) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <LoadingSpinner message="Loading speedrun session..." size="lg" />
+        </div>
+      </div>
+    );
+  }
 
   if (!currentSession) {
     return (
@@ -210,31 +370,26 @@ export default function SpeedRunPage() {
               <Card>
                 <CardContent className="p-6">
                   {fileType === 'pdf' ? (
-                    <div className="flex flex-col items-center">
-                      <Document
-                        file={getPdfDataUrl()}
-                        onLoadSuccess={onDocumentLoadSuccess}
-                        loading={
-                          <div className="flex items-center justify-center p-8">
-                            <RotateCw className="h-8 w-8 animate-spin text-primary" />
-                          </div>
-                        }
-                        error={
-                          <div className="text-center p-8 text-destructive">
-                            Failed to load PDF document
-                          </div>
-                        }
-                      >
-                        <Page
-                          pageNumber={currentPageNumber}
-                          scale={pdfScale}
-                          renderTextLayer={true}
-                          renderAnnotationLayer={true}
-                        />
-                      </Document>
+                    <div className="flex flex-col items-center relative w-full">
+                      {/* Add custom CSS for PDF text highlighting */}
+                      {highlightedText && (
+                        <style>{`
+                          .react-pdf__Page__textContent mark {
+                            background-color: #86efac !important;
+                            color: #166534 !important;
+                            padding: 2px 4px;
+                            border-radius: 2px;
+                            animation: highlight-pulse 2s ease-in-out 3;
+                          }
+                          @keyframes highlight-pulse {
+                            0%, 100% { background-color: #86efac; }
+                            50% { background-color: #4ade80; }
+                          }
+                        `}</style>
+                      )}
 
-                      {/* Zoom controls */}
-                      <div className="mt-4 flex gap-2">
+                      {/* Zoom controls at top */}
+                      <div className="mb-4 flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -253,12 +408,121 @@ export default function SpeedRunPage() {
                           +
                         </Button>
                       </div>
+
+                      {/* Scrollable container for multiple pages */}
+                      <div className="w-full max-h-[70vh] overflow-y-auto space-y-4">
+                        <Document
+                          file={getPdfDataUrl()}
+                          onLoadSuccess={onDocumentLoadSuccess}
+                          loading={
+                            <div className="flex items-center justify-center p-8">
+                              <RotateCw className="h-8 w-8 animate-spin text-primary" />
+                            </div>
+                          }
+                          error={
+                            <div className="text-center p-8 text-destructive">
+                              Failed to load PDF document
+                            </div>
+                          }
+                        >
+                          {/* Render pages in batches */}
+                          {Array.from({ length: Math.min(numPages, visiblePagesStart + PAGES_PER_BATCH - 1) - visiblePagesStart + 1 }, (_, index) => {
+                            const pageNum = visiblePagesStart + index;
+                            if (pageNum > numPages) return null;
+                            return (
+                              <div key={pageNum} className="flex flex-col items-center border-b pb-4 last:border-b-0">
+                                <div className="text-sm text-muted-foreground mb-2 font-medium">
+                                  Page {pageNum} of {numPages}
+                                </div>
+                                <Page
+                                  pageNumber={pageNum}
+                                  scale={pdfScale}
+                                  renderTextLayer={true}
+                                  renderAnnotationLayer={true}
+                                  customTextRenderer={(textItem) => {
+                                    // Highlight matching text in PDF
+                                    if (highlightedText && textItem.str.includes(highlightedText)) {
+                                      return `<mark>${textItem.str}</mark>`;
+                                    }
+                                    return textItem.str;
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </Document>
+
+                        {/* Load More Button */}
+                        {numPages > visiblePagesStart + PAGES_PER_BATCH - 1 && (
+                          <div className="text-center py-4">
+                            <Button
+                              onClick={() => setVisiblePagesStart(prev => prev + PAGES_PER_BATCH)}
+                              variant="outline"
+                            >
+                              Load Next {Math.min(PAGES_PER_BATCH, numPages - (visiblePagesStart + PAGES_PER_BATCH - 1))} Pages
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : fileType && ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(fileType.toLowerCase()) ? (
+                    // For image files, display the image
+                    <div className="flex flex-col items-center gap-4">
+                      <img
+                        src={`data:image/${fileType};base64,${fileContent}`}
+                        alt="Study material"
+                        className="max-w-full h-auto rounded-lg shadow-lg"
+                        style={{ maxHeight: '70vh' }}
+                      />
+                      {highlightedText && (
+                        <div className="w-full p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded">
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            <mark className="bg-green-200 dark:bg-green-900/40 px-2 py-1 rounded">
+                              {highlightedText}
+                            </mark>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : fileType && ['docx', 'doc'].includes(fileType.toLowerCase()) ? (
+                    // For Word documents, show rendered HTML with full formatting
+                    <div className="w-full">
+                      {isRenderingDoc ? (
+                        <div className="flex items-center justify-center p-8">
+                          <RotateCw className="h-8 w-8 animate-spin text-primary" />
+                          <span className="ml-2 text-muted-foreground">Rendering document...</span>
+                        </div>
+                      ) : renderedDocHTML ? (
+                        <div className="max-h-[70vh] overflow-y-auto">
+                          <div
+                            className="prose prose-sm max-w-none dark:prose-invert p-4"
+                            dangerouslySetInnerHTML={{ __html: getHighlightedHTML(renderedDocHTML) }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                          <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
+                            {getHighlightedContent()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) ? (
+                    // For PowerPoint, show extracted content (TODO: Add slide-by-slide rendering)
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                      <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 rounded text-sm text-orange-800 dark:text-orange-200">
+                        <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
+                        <p className="text-xs opacity-80">Showing extracted content. Slide-by-slide view coming soon!</p>
+                      </div>
+                      <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
+                        {getHighlightedContent()}
+                      </div>
                     </div>
                   ) : (
-                    // For non-PDF files, show extracted text content
+                    // For other text files, show extracted content with highlighting
                     <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <div className="whitespace-pre-wrap">
-                        {currentSession.studyContent || "No content available"}
+                      <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
+                        {getHighlightedContent()}
                       </div>
                     </div>
                   )}
@@ -285,7 +549,7 @@ export default function SpeedRunPage() {
           <ResizablePanel defaultSize={50} minSize={30}>
             <div className="h-full overflow-y-auto p-6">
               {/* Mode Toggle */}
-              <div className="flex gap-2 p-1 bg-muted rounded-lg mb-6">
+              <div className="flex gap-2 p-1 bg-muted rounded-lg mb-4">
                 <button
                   onClick={() => setSpeedRunMode('cards')}
                   className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -307,6 +571,37 @@ export default function SpeedRunPage() {
                   Timed MCQ
                 </button>
               </div>
+
+              {/* Timer Duration Control - Only show in MCQ mode */}
+              {speedRunMode === 'mcq' && (
+                <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Timer Duration</span>
+                    </div>
+                    <span className="text-sm font-bold text-primary">{timerDuration}s</span>
+                  </div>
+                  <Slider
+                    value={[timerDuration]}
+                    onValueChange={(value) => {
+                      setTimerDuration(value[0]);
+                      if (!hasAnswered) {
+                        setTimeLeft(value[0]);
+                      }
+                    }}
+                    min={5}
+                    max={60}
+                    step={5}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>5s</span>
+                    <span>30s</span>
+                    <span>60s</span>
+                  </div>
+                </div>
+              )}
 
               {currentQuestion ? (
                 <>
@@ -346,7 +641,7 @@ export default function SpeedRunPage() {
                               strokeWidth="4"
                               fill="none"
                               strokeDasharray={`${2 * Math.PI * 36}`}
-                              strokeDashoffset={`${2 * Math.PI * 36 * (1 - timeLeft / 15)}`}
+                              strokeDashoffset={`${2 * Math.PI * 36 * (1 - timeLeft / timerDuration)}`}
                               className={`transition-all ${
                                 timeLeft <= 5 ? 'text-destructive' : 'text-primary'
                               }`}
@@ -498,7 +793,13 @@ export default function SpeedRunPage() {
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center space-y-4">
                     <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">No questions available for this page</p>
+                    <div className="space-y-2">
+                      <p className="text-lg font-semibold text-muted-foreground">No questions available</p>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Questions are still being generated for this session. Please wait a moment and refresh,
+                        or if this persists, the AI may have failed to generate questions. Try creating a new session.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}

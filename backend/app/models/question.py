@@ -19,6 +19,8 @@ class Question(Base):
     correct_answer = Column(Integer, nullable=False)  # Index 0-3
     explanation = Column(Text, nullable=False)
     order_index = Column(Integer, nullable=False, default=0)  # Order within topic
+    source_text = Column(Text, nullable=True)  # Snippet of source material this question is based on
+    source_page = Column(Integer, nullable=True)  # Page number in source document (for PDFs)
 
     # Relationships
     topic = relationship("Topic", back_populates="questions")

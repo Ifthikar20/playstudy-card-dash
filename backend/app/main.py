@@ -165,6 +165,8 @@ if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=3001,
+        port=8000,
         reload=settings.DEBUG,
+        limit_max_requests=1000,  # Allow more concurrent requests
+        timeout_keep_alive=120,   # Keep connections alive longer for large uploads
     )

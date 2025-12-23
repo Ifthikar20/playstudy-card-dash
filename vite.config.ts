@@ -14,6 +14,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "mammoth": "mammoth/mammoth.browser.min.js",
     },
+  },
+  optimizeDeps: {
+    include: ['mammoth'],
   },
 });

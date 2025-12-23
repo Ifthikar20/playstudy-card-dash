@@ -7,6 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 from openai import OpenAI
+from anthropic import Anthropic
 import json
 import io
 import uuid
@@ -78,7 +79,9 @@ def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchem
                     question=q.question,
                     options=q.options,
                     correctAnswer=q.correct_answer,
-                    explanation=q.explanation
+                    explanation=q.explanation,
+                    sourceText=q.source_text,
+                    sourcePage=q.source_page
                 )
                 for q in questions
             ]
@@ -374,6 +377,8 @@ class QuestionSchema(BaseModel):
     options: List[str]
     correctAnswer: int
     explanation: str
+    sourceText: Optional[str] = None  # Source text snippet from document
+    sourcePage: Optional[int] = None  # Page number in source document
 
 
 class TopicSchema(BaseModel):
@@ -397,14 +402,15 @@ TopicSchema.model_rebuild()
 class CreateStudySessionRequest(BaseModel):
     """Request schema for creating a study session."""
     title: str = Field(..., min_length=1, max_length=200)
-    content: str = Field(..., min_length=10, max_length=10000000)  # 10MB limit for base64 encoded files
+    content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit for base64 encoded files (large PDFs)
     num_topics: int = Field(default=4, ge=1, le=100)  # Dynamic: 1-100 topics based on content size
     questions_per_topic: int = Field(default=10, ge=5, le=50)  # Increased from 20 to 50
+    progressive_load: bool = Field(default=True)  # Enable progressive loading for large documents
 
 
 class AnalyzeContentRequest(BaseModel):
     """Request schema for analyzing content before creating a session."""
-    content: str = Field(..., min_length=10, max_length=10000000)
+    content: str = Field(..., min_length=10, max_length=100000000)  # 100MB limit
 
 
 class ContentAnalysisResponse(BaseModel):
@@ -517,22 +523,76 @@ async def create_study_session_with_ai(
                 detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
             )
 
-        # Analyze content to get smart recommendations
-        analysis = analyze_content_complexity(extracted_text)
+        # Check document size and use chunking for large documents
+        estimated_tokens = len(extracted_text) // 4  # Rough estimate: 1 token ≈ 4 characters
+        logger.info(f"📊 Document size: {len(extracted_text):,} chars, ~{estimated_tokens:,} estimated tokens")
 
-        # Calculate number of categories based on total topics requested
+        # Claude 3.5 Haiku has 200k token context window
+        # Use chunking for documents that would exceed safe limits
+        CHUNK_SIZE_TOKENS = 100000  # 100k tokens per chunk (~400k chars)
+        OVERLAP_TOKENS = 5000  # 5k token overlap between chunks for context preservation
+
+        chunk_size_chars = CHUNK_SIZE_TOKENS * 4
+        overlap_chars = OVERLAP_TOKENS * 4
+
+        # Split document into chunks if necessary
+        document_chunks = []
+        if estimated_tokens > CHUNK_SIZE_TOKENS:
+            logger.info(f"📚 Large document detected. Splitting into chunks of ~{CHUNK_SIZE_TOKENS:,} tokens with {OVERLAP_TOKENS:,} token overlap...")
+
+            # Split into overlapping chunks
+            current_pos = 0
+            chunk_num = 1
+            while current_pos < len(extracted_text):
+                end_pos = min(current_pos + chunk_size_chars, len(extracted_text))
+                chunk = extracted_text[current_pos:end_pos]
+                document_chunks.append(chunk)
+                logger.info(f"  📄 Chunk {chunk_num}: {len(chunk):,} chars (~{len(chunk)//4:,} tokens)")
+
+                # Move forward with overlap
+                current_pos = end_pos - overlap_chars
+                if current_pos >= len(extracted_text) - overlap_chars:
+                    break  # Last chunk
+                chunk_num += 1
+
+            logger.info(f"✅ Created {len(document_chunks)} chunks for processing")
+        else:
+            # Document fits in one chunk
+            document_chunks = [extracted_text]
+            logger.info(f"✅ Document fits in single chunk, no splitting needed")
+
+        # Analyze content to get smart recommendations (use first chunk for analysis)
+        analysis = analyze_content_complexity(document_chunks[0])
+
+        # Progressive loading: For large documents (>5000 words), start with fewer topics
+        is_large_doc = analysis['word_count'] > 5000
+        initial_topics = data.num_topics
+
+        if data.progressive_load and is_large_doc:
+            # Start with only 2-3 categories and 4-6 subtopics for quick initial load
+            initial_topics = min(6, data.num_topics)
+            logger.info(f"📚 Large document detected ({analysis['word_count']} words). Using progressive load: {initial_topics} initial topics")
+
+        # Calculate number of categories based on topics to generate
         # For 2-5 topics: 2 categories
         # For 6-10 topics: 3 categories
         # For 11-15 topics: 4 categories
         # For 16-20 topics: 5 categories
-        num_categories = max(2, min(5, (data.num_topics + 3) // 4))
-        subtopics_per_category = max(1, data.num_topics // num_categories)  # Allow single subtopic per category
+        num_categories = max(2, min(5, (initial_topics + 3) // 4))
+        subtopics_per_category = max(1, initial_topics // num_categories)  # Allow single subtopic per category
 
-        # Initialize DeepSeek client (OpenAI-compatible)
-        client = OpenAI(
-            api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com"
-        )
+        # Initialize AI client (prefer Claude Haiku for speed, fallback to DeepSeek)
+        use_claude = bool(settings.ANTHROPIC_API_KEY)
+
+        if use_claude:
+            anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+            logger.info("🚀 Using Claude Haiku for fast generation")
+        else:
+            deepseek_client = OpenAI(
+                api_key=settings.DEEPSEEK_API_KEY,
+                base_url="https://api.deepseek.com"
+            )
+            logger.info("⏱️ Using DeepSeek (consider adding ANTHROPIC_API_KEY for 10x speed)")
 
         # Step 1: Extract topics from content with hierarchical structure (DYNAMIC PROMPT)
         topics_prompt = f"""Analyze this study material and organize it into a hierarchical structure with categories and subtopics.
@@ -548,13 +608,13 @@ Content Analysis:
 Requirements:
 1. Create approximately {num_categories} major categories that organize the content at a high level
 2. Within each category, identify as many specific subtopics as needed to cover the material (aim for {subtopics_per_category} or more per category)
-3. Each subtopic should be substantial enough for {data.questions_per_topic} questions
+3. Each subtopic can support varying numbers of questions (3-20 based on content depth)
 4. Provide clear titles and brief descriptions for both categories and subtopics
 5. Organize logically (foundational concepts first, building to advanced topics)
-6. Create AT LEAST {data.num_topics} total subtopics across all categories, but feel free to add more if the content warrants it
+6. Create AT LEAST {initial_topics} total subtopics across all categories (focus on the most important topics first)
 7. For complex content, create more detailed subtopics; for simpler content, keep subtopics broader
 8. Ensure subtopics are distinct and cover different aspects of the material
-9. Don't limit yourself - if there are more concepts to cover, create additional subtopics
+9. Focus on core concepts and foundational topics first
 
 Return ONLY a valid JSON object in this EXACT format:
 {{
@@ -573,14 +633,22 @@ Return ONLY a valid JSON object in this EXACT format:
 }}"""
 
         # Call AI to extract topics
-        topics_response = client.chat.completions.create(
-            model="deepseek-chat",
-            max_tokens=2048,
-            temperature=0.7,
-            messages=[{"role": "user", "content": topics_prompt}]
-        )
-
-        topics_text = topics_response.choices[0].message.content
+        if use_claude:
+            topics_response = anthropic_client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=2048,
+                temperature=0.7,
+                messages=[{"role": "user", "content": topics_prompt}]
+            )
+            topics_text = topics_response.content[0].text
+        else:
+            topics_response = deepseek_client.chat.completions.create(
+                model="deepseek-chat",
+                max_tokens=2048,
+                temperature=0.7,
+                messages=[{"role": "user", "content": topics_prompt}]
+            )
+            topics_text = topics_response.choices[0].message.content
 
         # Parse hierarchical topics
         try:
@@ -622,10 +690,12 @@ Return ONLY a valid JSON object in this EXACT format:
         db.add(study_session)
         db.flush()  # Get the session ID
 
-        # Step 3: Create categories and subtopics with questions
+        # Step 3: Create categories and subtopics first, then batch generate ALL questions
         all_topics = []
+        subtopic_map = {}  # Map to track subtopics for batch question assignment
         overall_idx = 0
 
+        # First pass: Create all categories and subtopics in database
         for cat_idx, category_data in enumerate(categories_data):
             # Create category topic in database
             category_topic = Topic(
@@ -633,16 +703,16 @@ Return ONLY a valid JSON object in this EXACT format:
                 title=category_data["title"],
                 description=category_data.get("description", ""),
                 order_index=cat_idx,
-                is_category=True,  # This is a category, not a leaf topic
+                is_category=True,
                 parent_topic_id=None
             )
             db.add(category_topic)
-            db.flush()  # Get the category ID
+            db.flush()
 
-            # Create category schema for response
+            # Create category schema
             category_schema = TopicSchema(
                 id=f"category-{cat_idx+1}",
-                db_id=category_topic.id,  # Include database ID
+                db_id=category_topic.id,
                 title=category_data["title"],
                 description=category_data.get("description", ""),
                 isCategory=True,
@@ -651,10 +721,9 @@ Return ONLY a valid JSON object in this EXACT format:
                 subtopics=[]
             )
 
-            # Process subtopics within this category
+            # Create all subtopics for this category
             subtopics_data = category_data.get("subtopics", [])
             for sub_idx, subtopic_data in enumerate(subtopics_data):
-                # Create subtopic in database
                 subtopic = Topic(
                     study_session_id=study_session.id,
                     parent_topic_id=category_topic.id,
@@ -664,101 +733,282 @@ Return ONLY a valid JSON object in this EXACT format:
                     is_category=False
                 )
                 db.add(subtopic)
-                db.flush()  # Get the subtopic ID
+                db.flush()
 
-                # Generate questions for this subtopic
-                questions_prompt = f"""Generate {data.questions_per_topic} multiple-choice questions about this subtopic from the study material.
-
-Category: {category_data['title']}
-Subtopic: {subtopic_data['title']}
-Description: {subtopic_data.get('description', '')}
-
-Study Material:
-{extracted_text}
-
-Requirements:
-1. Generate exactly {data.questions_per_topic} questions
-2. Each question must have exactly 4 options
-3. Questions should test understanding of the material
-4. Provide clear explanations
-5. Return ONLY valid JSON
-
-Return in this EXACT format:
-{{
-  "questions": [
-    {{
-      "question": "Question text?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": 0,
-      "explanation": "Why this answer is correct"
-    }}
-  ]
-}}"""
-
-                # Call AI to generate questions
-                questions_response = client.chat.completions.create(
-                    model="deepseek-chat",
-                    max_tokens=4096,
-                    temperature=0.7,
-                    messages=[{"role": "user", "content": questions_prompt}]
-                )
-
-                questions_text = questions_response.choices[0].message.content
-
-                # Parse questions
-                try:
-                    q_start = questions_text.find('{')
-                    q_end = questions_text.rfind('}') + 1
-                    questions_json = json.loads(questions_text[q_start:q_end])
-                    questions_data = questions_json["questions"][:data.questions_per_topic]
-                except (json.JSONDecodeError, KeyError, ValueError):
-                    # If parsing fails, create default questions
-                    questions_data = [{
-                        "question": f"Question {i+1} about {subtopic_data['title']}",
-                        "options": ["Option A", "Option B", "Option C", "Option D"],
-                        "correctAnswer": 0,
-                        "explanation": "This is a placeholder question."
-                    } for i in range(data.questions_per_topic)]
-
-                # Save questions to database
-                questions_list = []
-                for q_idx, q_data in enumerate(questions_data):
-                    question = Question(
-                        topic_id=subtopic.id,
-                        question=q_data["question"],
-                        options=q_data["options"],
-                        correct_answer=q_data["correctAnswer"],
-                        explanation=q_data["explanation"],
-                        order_index=q_idx
-                    )
-                    db.add(question)
-                    questions_list.append(QuestionSchema(
-                        id=f"topic-{overall_idx+1}-q{q_idx+1}",
-                        question=q_data["question"],
-                        options=q_data["options"],
-                        correctAnswer=q_data["correctAnswer"],
-                        explanation=q_data["explanation"]
-                    ))
-
-                # Build subtopic response
-                subtopic_schema = TopicSchema(
-                    id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
-                    db_id=subtopic.id,  # Include database ID for progress sync
-                    title=subtopic_data["title"],
-                    description=subtopic_data.get("description", ""),
-                    questions=questions_list,
-                    completed=False,
-                    score=None,
-                    currentQuestionIndex=0,
-                    isCategory=False,
-                    parentTopicId=f"category-{cat_idx+1}",
-                    subtopics=[]
-                )
-                category_schema.subtopics.append(subtopic_schema)
+                # Track subtopic for later question assignment
+                subtopic_key = f"{cat_idx}-{sub_idx}"
+                subtopic_map[subtopic_key] = {
+                    "topic": subtopic,
+                    "category_data": category_data,
+                    "subtopic_data": subtopic_data,
+                    "schema": TopicSchema(
+                        id=f"subtopic-{cat_idx+1}-{sub_idx+1}",
+                        db_id=subtopic.id,
+                        title=subtopic_data["title"],
+                        description=subtopic_data.get("description", ""),
+                        questions=[],
+                        completed=False,
+                        score=None,
+                        currentQuestionIndex=0,
+                        isCategory=False,
+                        parentTopicId=f"category-{cat_idx+1}",
+                        subtopics=[]
+                    ),
+                    "category_schema": category_schema
+                }
                 overall_idx += 1
 
-            # Add category to all_topics
             all_topics.append(category_schema)
+
+        # Step 4: Generate questions by processing each document chunk
+        # For large documents, this processes multiple chunks separately and merges results
+        logger.info(f"📡 Processing {len(document_chunks)} document chunk(s) to generate questions...")
+
+        # Generate questions for ALL subtopics during initial creation
+        # This ensures maximum question coverage from the uploaded document
+
+        # Get list of all subtopic keys
+        all_subtopic_keys = list(subtopic_map.keys())
+
+        logger.info(f"📚 Generating questions for ALL {len(all_subtopic_keys)} subtopics to maximize coverage")
+        logger.info(f"  Subtopics: {all_subtopic_keys}")
+
+        # Build subtopic list for prompt (include ALL subtopics)
+        subtopics_list = ""
+        for subtopic_key in all_subtopic_keys:
+            subtopic_info = subtopic_map[subtopic_key]
+            category_data = subtopic_info["category_data"]
+            subtopic_data = subtopic_info["subtopic_data"]
+            cat_idx, sub_idx = map(int, subtopic_key.split('-'))
+
+            subtopics_list += f"\n[Subtopic {cat_idx}-{sub_idx}]\n"
+            subtopics_list += f"Category: {category_data['title']}\n"
+            subtopics_list += f"Subtopic: {subtopic_data['title']}\n"
+            subtopics_list += f"Description: {subtopic_data.get('description', '')}\n"
+
+        # Collect questions from all chunks
+        all_chunk_questions = {}  # {subtopic_key: [questions]}
+
+        for chunk_idx, chunk_text in enumerate(document_chunks, 1):
+            logger.info(f"📄 Processing chunk {chunk_idx}/{len(document_chunks)}...")
+
+            # Build prompt for this chunk
+            batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+
+IMPORTANT: Generate MAXIMUM questions per subtopic based on content depth:
+- Simple subtopic with limited content: 5-10 questions minimum
+- Moderate subtopic with decent coverage: 10-15 questions
+- Complex subtopic with extensive material: 15-30 questions
+- Generate questions for ALL listed subtopics below
+- GOAL: Create the MAXIMUM number of quality, non-duplicate questions the content supports
+- Extract every testable concept from the material
+- Cover different aspects and difficulty levels
+
+Study Material (Chunk {chunk_idx} of {len(document_chunks)}):
+{chunk_text}
+
+SUBTOPICS TO COVER (ALL {len(all_subtopic_keys)} subtopics):
+{subtopics_list}
+
+Requirements:
+1. Generate MAXIMUM questions for EACH subtopic (5-30 questions based on content depth)
+2. NO DUPLICATES - each question must test a unique concept
+3. Each question must have exactly 4 plausible options
+4. Questions should test deep understanding, not just recall
+5. Provide detailed explanations
+6. For EACH question, include the source text from the study material with FULL CONTEXT
+7. Source text should include the complete sentence(s) or paragraph that contains the answer
+8. Include enough surrounding context so students can easily locate it in their document
+9. Aim for 2-4 sentences of context (not just a fragment)
+10. Return ONLY valid JSON
+
+Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
+{{
+  "subtopics": {{
+    "0-0": {{
+      "questions": [
+        {{
+          "question": "Question text?",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correctAnswer": 0,
+          "explanation": "Why this answer is correct",
+          "sourceText": "The complete sentence or paragraph from the study material with context."
+        }}
+      ]
+    }},
+    "0-1": {{
+      "questions": [...]
+    }}
+  }}
+}}"""
+
+            # Make API call for this chunk
+            logger.info(f"📊 Chunk {chunk_idx} prompt length: {len(batch_prompt):,} characters")
+
+            try:
+                if use_claude:
+                    batch_response = anthropic_client.messages.create(
+                        model="claude-3-5-haiku-20241022",
+                        max_tokens=8192,  # Maximum for Claude 3.5 Haiku
+                        temperature=0.7,
+                        messages=[{"role": "user", "content": batch_prompt}]
+                    )
+                    batch_text = batch_response.content[0].text
+                else:
+                    batch_response = deepseek_client.chat.completions.create(
+                        model="deepseek-chat",
+                        max_tokens=16000,
+                        temperature=0.7,
+                        messages=[{"role": "user", "content": batch_prompt}]
+                    )
+                    batch_text = batch_response.choices[0].message.content
+            except Exception as api_error:
+                logger.error(f"❌ AI API call failed for chunk {chunk_idx}: {type(api_error).__name__}: {str(api_error)}")
+                # Check if it's a context length error
+                error_msg = str(api_error).lower()
+                if any(keyword in error_msg for keyword in ['context', 'token', 'too long', 'maximum', 'limit']):
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Chunk {chunk_idx} is too large for AI processing. Try using a smaller document."
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"AI API error on chunk {chunk_idx}: {str(api_error)}"
+                    )
+
+            # Log AI response details
+            logger.info(f"📨 Chunk {chunk_idx} - Received AI response, length: {len(batch_text)} characters")
+
+            # Parse chunk response with detailed error logging
+            try:
+                start_idx = batch_text.find('{')
+                end_idx = batch_text.rfind('}') + 1
+
+                if start_idx == -1 or end_idx == 0:
+                    logger.error(f"❌ Chunk {chunk_idx} - No JSON found in AI response")
+                    chunk_questions = {}
+                else:
+                    json_str = batch_text[start_idx:end_idx]
+                    batch_json = json.loads(json_str)
+                    chunk_questions = batch_json.get("subtopics", {})
+
+                    logger.info(f"✅ Chunk {chunk_idx} - Parsed {len(chunk_questions)} subtopics")
+                    for key in chunk_questions.keys():
+                        q_count = len(chunk_questions[key].get("questions", []))
+                        if q_count > 0:
+                            logger.info(f"  - Subtopic {key}: {q_count} questions")
+
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                logger.error(f"❌ Chunk {chunk_idx} - Failed to parse questions: {e}")
+                chunk_questions = {}
+
+            # Merge questions from this chunk into all_chunk_questions
+            for subtopic_key, subtopic_data in chunk_questions.items():
+                questions = subtopic_data.get("questions", [])
+                if questions:
+                    if subtopic_key not in all_chunk_questions:
+                        all_chunk_questions[subtopic_key] = []
+                    all_chunk_questions[subtopic_key].extend(questions)
+                    logger.debug(f"  🔄 Added {len(questions)} questions for subtopic {subtopic_key}")
+
+        # Log merged results
+        logger.info(f"🎯 Merging complete - Total subtopics with questions: {len(all_chunk_questions)}")
+        for key, questions in all_chunk_questions.items():
+            logger.info(f"  - Subtopic {key}: {len(questions)} total questions from all chunks")
+
+        # Use merged questions as the final subtopics_questions
+        subtopics_questions = {key: {"questions": questions} for key, questions in all_chunk_questions.items()}
+
+        # Step 5: Assign questions to subtopics
+        question_counter = 0
+        logger.info(f"🔄 Assigning questions to {len(subtopic_map)} subtopics...")
+        logger.debug(f"🗂️ Subtopic keys in map: {list(subtopic_map.keys())}")
+        logger.debug(f"🗂️ Subtopic keys in AI response: {list(subtopics_questions.keys())}")
+
+        for subtopic_key, subtopic_info in subtopic_map.items():
+            subtopic = subtopic_info["topic"]
+            subtopic_schema = subtopic_info["schema"]
+            category_schema = subtopic_info["category_schema"]
+
+            # Get questions for this subtopic from batch response
+            questions_data = subtopics_questions.get(subtopic_key, {}).get("questions", [])
+
+            # Skip if no questions generated
+            if not questions_data:
+                # Expected to have questions for all subtopics
+                logger.warning(f"⚠️ No questions generated for subtopic '{subtopic_key}' ('{subtopic.title}') - SKIPPING (may lack relevant content in document)")
+                continue
+            else:
+                logger.info(f"✅ Found {len(questions_data)} questions for subtopic '{subtopic_key}' ('{subtopic.title}')")
+
+            # Save ALL questions to database (no limit - variable per topic)
+            # Get existing questions for this topic to check for duplicates
+            existing_questions = db.query(Question).filter(Question.topic_id == subtopic.id).all()
+            existing_question_texts = {q.question.lower().strip() for q in existing_questions}
+
+            questions_list = []
+            duplicates_skipped = 0
+
+            for q_idx, q_data in enumerate(questions_data):
+                question_text = q_data.get("question", f"Question {q_idx+1}")
+
+                # Check for duplicate questions (case-insensitive)
+                if question_text.lower().strip() in existing_question_texts:
+                    logger.debug(f"⏭️ Skipping duplicate question: {question_text[:50]}...")
+                    duplicates_skipped += 1
+                    continue
+
+                # Ensure options is a list
+                options = q_data.get("options", ["A", "B", "C", "D"])
+                if isinstance(options, str):
+                    try:
+                        options = json.loads(options)
+                    except json.JSONDecodeError:
+                        options = ["Option A", "Option B", "Option C", "Option D"]
+
+                question = Question(
+                    topic_id=subtopic.id,
+                    question=question_text,
+                    options=options,
+                    correct_answer=q_data.get("correctAnswer", 0),
+                    explanation=q_data.get("explanation", ""),
+                    source_text=q_data.get("sourceText"),
+                    order_index=len(questions_list)  # Use actual index in list
+                )
+                db.add(question)
+
+                # Add to existing set to catch duplicates within this batch
+                existing_question_texts.add(question_text.lower().strip())
+
+                questions_list.append(QuestionSchema(
+                    id=f"q-{question_counter}",
+                    question=q_data.get("question", f"Question {q_idx+1}"),
+                    options=options,
+                    correctAnswer=q_data.get("correctAnswer", 0),
+                    explanation=q_data.get("explanation", ""),
+                    sourceText=q_data.get("sourceText")
+                ))
+                question_counter += 1
+
+            # Log duplicate detection results
+            if duplicates_skipped > 0:
+                logger.info(f"  ⏭️ Skipped {duplicates_skipped} duplicate questions for '{subtopic.title}'")
+
+            # Update subtopic schema with questions
+            subtopic_schema.questions = questions_list
+            category_schema.subtopics.append(subtopic_schema)
+
+        # Validate that at least some questions were generated
+        if question_counter == 0:
+            logger.error("❌ FATAL: No questions were generated for any subtopic! AI generation completely failed.")
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate questions. The AI did not return any valid questions. Please try again or use a different document."
+            )
+
+        logger.info(f"✅ Successfully generated {question_counter} total questions across all subtopics")
 
         # Commit all changes
         db.commit()
@@ -856,7 +1106,9 @@ async def get_study_session(
                     question=q.question,
                     options=q.options,
                     correctAnswer=q.correct_answer,
-                    explanation=q.explanation
+                    explanation=q.explanation,
+                    sourceText=q.source_text,
+                    sourcePage=q.source_page
                 )
                 for q in questions
             ]
@@ -899,6 +1151,256 @@ async def get_study_session(
         hasSpeedRun=session.has_speed_run or False,
         createdAt=int(session.created_at.timestamp() * 1000) if session.created_at else None
     )
+
+
+@router.post("/{session_id}/generate-more-questions")
+async def generate_more_questions(
+    session_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate questions for remaining subtopics that don't have questions yet.
+
+    This implements progressive loading - initially only first few subtopics have questions,
+    calling this endpoint generates questions for the next batch.
+    """
+    logger.info(f"📚 Generating more questions for session {session_id}")
+
+    # Validate UUID
+    try:
+        uuid_obj = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    # Fetch session
+    session = db.query(StudySession).filter(
+        StudySession.id == uuid_obj,
+        StudySession.user_id == current_user.id
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    # Get all topics for this session
+    all_topics = db.query(Topic).filter(
+        Topic.study_session_id == uuid_obj
+    ).order_by(Topic.order_index).all()
+
+    # Find subtopics without questions
+    subtopics_without_questions = []
+    for topic in all_topics:
+        if not topic.is_category:  # Only check actual subtopics
+            question_count = db.query(Question).filter(Question.topic_id == topic.id).count()
+            if question_count == 0:
+                subtopics_without_questions.append(topic)
+
+    if not subtopics_without_questions:
+        logger.info(f"✅ All subtopics already have questions for session {session_id}")
+        return {"message": "All subtopics already have questions", "generated": 0}
+
+    logger.info(f"📊 Found {len(subtopics_without_questions)} subtopics without questions")
+
+    # Generate questions for next batch (first 3 without questions)
+    BATCH_SIZE = 3
+    next_batch = subtopics_without_questions[:BATCH_SIZE]
+
+    logger.info(f"🔄 Generating questions for next {len(next_batch)} subtopics...")
+
+    # Extract text from stored file content
+    if not session.file_content:
+        raise HTTPException(status_code=400, detail="No file content available for this session")
+
+    extracted_text, _, _ = detect_file_type_and_extract(session.file_content)
+
+    # Initialize AI client
+    use_claude = bool(settings.ANTHROPIC_API_KEY)
+    if use_claude:
+        anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        logger.info("🚀 Using Claude Haiku for question generation")
+    else:
+        deepseek_client = OpenAI(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
+        logger.info("⏱️ Using DeepSeek")
+
+    # Build prompt for next batch
+    subtopics_list = ""
+    subtopic_map = {}
+
+    # Get parent categories to build proper context
+    categories = db.query(Topic).filter(
+        Topic.study_session_id == uuid_obj,
+        Topic.is_category == True,
+        Topic.parent_topic_id == None
+    ).all()
+
+    for topic in next_batch:
+        # Find parent category
+        parent = db.query(Topic).filter(Topic.id == topic.parent_topic_id).first()
+        category_title = parent.title if parent else "General"
+
+        # Create mapping key (we'll use topic db_id)
+        key = f"topic-{topic.id}"
+        subtopic_map[key] = topic
+
+        subtopics_list += f"\n[Subtopic {key}]\n"
+        subtopics_list += f"Category: {category_title}\n"
+        subtopics_list += f"Subtopic: {topic.title}\n"
+        subtopics_list += f"Description: {topic.description or ''}\n"
+
+    # Build prompt
+    batch_prompt = f"""Generate multiple-choice questions for EACH of the following subtopics from the study material.
+
+IMPORTANT: Generate a VARIABLE number of questions per subtopic based on content depth:
+- Simple subtopic with limited content: 3-5 questions
+- Moderate subtopic with decent coverage: 6-10 questions
+- Complex subtopic with extensive material: 10-20 questions
+- Generate questions for ALL listed subtopics below
+- The goal is to create AS MANY quality questions as the content supports
+
+Study Material:
+{extracted_text[:400000]}
+
+SUBTOPICS TO COVER:
+{subtopics_list}
+
+Requirements:
+1. Generate as many questions as appropriate for EACH subtopic (3-20 questions based on content depth)
+2. Prioritize quality over quantity - each question should test real understanding
+3. Each question must have exactly 4 options
+4. Questions should test understanding of the material
+5. Provide clear explanations
+6. For EACH question, include the source text from the study material with FULL CONTEXT
+7. Source text should include the complete sentence(s) or paragraph that contains the answer
+8. Include enough surrounding context so students can easily locate it in their document
+9. Aim for 2-4 sentences of context (not just a fragment)
+10. Return ONLY valid JSON
+
+Return in this EXACT format (use subtopic keys like "topic-123", "topic-456" etc):
+{{
+  "subtopics": {{
+    "topic-123": {{
+      "questions": [
+        {{
+          "question": "Question text?",
+          "options": ["Option A", "Option B", "Option C", "Option D"],
+          "correctAnswer": 0,
+          "explanation": "Why this answer is correct",
+          "sourceText": "The complete sentence or paragraph from the study material with context."
+        }}
+      ]
+    }},
+    "topic-456": {{
+      "questions": [...]
+    }}
+  }}
+}}"""
+
+    # Make API call
+    logger.info(f"📊 Prompt length: {len(batch_prompt):,} characters")
+
+    try:
+        if use_claude:
+            batch_response = anthropic_client.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=8192,
+                temperature=0.7,
+                messages=[{"role": "user", "content": batch_prompt}]
+            )
+            batch_text = batch_response.content[0].text
+        else:
+            batch_response = deepseek_client.chat.completions.create(
+                model="deepseek-chat",
+                max_tokens=16000,
+                temperature=0.7,
+                messages=[{"role": "user", "content": batch_prompt}]
+            )
+            batch_text = batch_response.choices[0].message.content
+    except Exception as api_error:
+        logger.error(f"❌ AI API call failed: {type(api_error).__name__}: {str(api_error)}")
+        raise HTTPException(status_code=500, detail=f"AI API error: {str(api_error)}")
+
+    # Parse response
+    logger.info(f"📨 Received AI response, length: {len(batch_text)} characters")
+
+    try:
+        start_idx = batch_text.find('{')
+        end_idx = batch_text.rfind('}') + 1
+
+        if start_idx == -1 or end_idx == 0:
+            logger.error(f"❌ No JSON found in AI response")
+            raise HTTPException(status_code=500, detail="Failed to parse AI response")
+
+        json_str = batch_text[start_idx:end_idx]
+        batch_json = json.loads(json_str)
+        subtopics_questions = batch_json.get("subtopics", {})
+
+        logger.info(f"✅ Parsed {len(subtopics_questions)} subtopics from AI response")
+        for key in subtopics_questions.keys():
+            q_count = len(subtopics_questions[key].get("questions", []))
+            logger.info(f"  - Subtopic {key}: {q_count} questions")
+
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        logger.error(f"❌ Failed to parse questions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+
+    # Save questions to database
+    total_questions_generated = 0
+
+    for key, topic in subtopic_map.items():
+        questions_data = subtopics_questions.get(key, {}).get("questions", [])
+
+        if not questions_data:
+            logger.warning(f"⚠️ No questions generated for subtopic '{key}' ('{topic.title}')")
+            continue
+
+        logger.info(f"✅ Saving {len(questions_data)} questions for subtopic '{topic.title}'")
+
+        for q_idx, q_data in enumerate(questions_data):
+            # Ensure options is a list
+            options = q_data.get("options", ["A", "B", "C", "D"])
+            if isinstance(options, str):
+                try:
+                    options = json.loads(options)
+                except json.JSONDecodeError:
+                    options = ["Option A", "Option B", "Option C", "Option D"]
+
+            question = Question(
+                topic_id=topic.id,
+                question=q_data.get("question", f"Question {q_idx+1}"),
+                options=options,
+                correct_answer=q_data.get("correctAnswer", 0),
+                explanation=q_data.get("explanation", ""),
+                source_text=q_data.get("sourceText"),
+                order_index=q_idx
+            )
+            db.add(question)
+            total_questions_generated += 1
+
+    # Commit to database
+    try:
+        db.commit()
+        logger.info(f"✅ Successfully saved {total_questions_generated} questions to database")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Failed to save questions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save questions: {str(e)}")
+
+    # Count remaining subtopics without questions
+    remaining_count = len(subtopics_without_questions) - len(next_batch)
+
+    logger.info(f"✅ Generated {total_questions_generated} questions for {len(next_batch)} subtopics")
+    logger.info(f"📊 Remaining subtopics without questions: {remaining_count}")
+
+    return {
+        "message": f"Successfully generated questions for {len(next_batch)} subtopics",
+        "generated": len(next_batch),
+        "totalQuestions": total_questions_generated,
+        "remaining": remaining_count,
+        "hasMore": remaining_count > 0
+    }
 
 
 @router.delete("/{session_id}")
