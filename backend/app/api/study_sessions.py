@@ -902,16 +902,16 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
                 # Build prompt for this chunk and subtopic batch
                 batch_prompt = f"""Generate TRICKY and CHALLENGING multiple-choice questions for EACH of the following topics from the study material.
 
-CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
-- Extract EVERY testable concept, fact, principle, detail, definition, example, and implication from the material
-- DO NOT impose any limits on the number of questions - generate as many as the content supports (aim for 15-30+ questions per topic)
-- Break down EVERY concept into multiple questions from different angles
+CRITICAL: Generate high-quality, comprehensive questions:
+- Extract the MOST IMPORTANT testable concepts, facts, principles, definitions, and examples from the material
+- Aim for 15-20 high-quality questions per topic (quality over quantity)
+- Break down key concepts into multiple questions from different angles
 - Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
-- Create questions for every sentence that contains testable information
+- Create questions for the most important content in the study material
 - Generate questions for ALL listed topics below - if the material is light on a topic, use the topic title and description to create questions
 - Even if a topic is only mentioned briefly, create comprehensive questions based on what IS mentioned
 - For topics not directly covered in the chunk, create questions based on the topic title/description and related content
-- Continue generating until you have exhausted ALL testable content
+- Focus on core concepts and ensure complete coverage across all topics
 
 QUESTION TYPES BASED ON TOPIC TYPE:
 1. For CATEGORY topics (overview/synthesis questions):
@@ -962,13 +962,13 @@ Requirements:
 13. For PDF documents, estimate the page number where this content appears (if this is chunk {chunk_idx} of {len(document_chunks)}, estimate accordingly)
 14. Return ONLY valid JSON
 
-GOAL: Create the MAXIMUM number of questions possible per topic (15-30+ each). Include example-based questions for EVERY concept. More questions = better learning coverage!
+GOAL: Create 15-20 comprehensive questions per topic. Focus on QUALITY and coverage of core concepts. Include example-based questions for key concepts.
 
 CRITICAL REQUIREMENTS:
 - You MUST generate questions for EVERY SINGLE topic key listed above - NO EXCEPTIONS
 - If a topic is listed, it MUST appear in your JSON response with questions
 - Missing even ONE topic key will result in incomplete learning coverage
-- Each topic MUST have at least 10-15 questions minimum
+- Each topic MUST have 15-20 questions (aim for 20 when possible)
 
 Return in this EXACT format (use topic keys EXACTLY as shown above - EVERY topic listed must be in the response):
 {{
@@ -1505,8 +1505,8 @@ TOPICS TO COVER ({len(next_batch)} topics in this batch):
 {subtopics_list}
 
 Requirements:
-1. Generate UNLIMITED questions for EACH topic - aim for 15-30+ questions per topic minimum
-2. Extract EVERY piece of testable information from the study material
+1. Generate 15-20 high-quality questions for EACH topic (total ~30-40 questions for this batch)
+2. Extract the MOST IMPORTANT testable information from the study material
 3. NO DUPLICATES - each question must test a unique concept or angle
 4. For EACH topic, include multiple EXAMPLE-BASED questions (e.g., "Which scenario is an example of...?")
 5. Each question must have exactly 4 PLAUSIBLE options (all should seem correct to someone who doesn't understand deeply)
@@ -1520,13 +1520,13 @@ Requirements:
 13. For PDF documents, estimate which section/page the content appears in
 14. Return ONLY valid JSON
 
-GOAL: Create the MAXIMUM number of questions possible per topic (15-30+ each). Include example-based questions for EVERY concept. More questions = better learning coverage!
+GOAL: Create 15-20 comprehensive questions per topic. Focus on QUALITY and coverage of core concepts. Include example-based questions for key concepts.
 
 CRITICAL REQUIREMENTS:
 - You MUST generate questions for EVERY SINGLE topic key listed above - NO EXCEPTIONS
 - If a topic is listed, it MUST appear in your JSON response with questions
 - Missing even ONE topic key will result in incomplete learning coverage
-- Each topic MUST have at least 10-15 questions minimum
+- Each topic MUST have 15-20 questions (aim for 20 when possible)
 
 Return in this EXACT format (use topic keys EXACTLY as shown above - EVERY topic listed must be in the response):
 {{
@@ -1563,7 +1563,7 @@ REMINDER: The response MUST include questions for ALL {len(next_batch)} topics l
         if use_claude:
             batch_response = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=16384,  # Increased for maximum question generation (2 topics × 30 questions)
+                max_tokens=8192,  # Maximum for Haiku (2 topics × ~20 questions each fits in 8k)
                 temperature=0.7,
                 messages=[{"role": "user", "content": batch_prompt}]
             )
