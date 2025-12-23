@@ -863,8 +863,8 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
         logger.info(f"  Subtopics: {all_subtopic_keys}")
 
         # BATCH SUBTOPICS: Process in groups to avoid AI refusing due to response size
-        # With 3 subtopics per batch, max ~90 questions per request (3 * 30) - very safe for AI
-        SUBTOPICS_PER_BATCH = 3  # Reduced from 6 to prevent "chunk too large" errors
+        # With 2 subtopics per batch, max ~60 questions per request (2 * 30) - ensures ALL topics get questions
+        SUBTOPICS_PER_BATCH = 2  # Reduced to ensure AI generates questions for ALL topics
         subtopic_batches = []
 
         # Split subtopics into batches
@@ -908,7 +908,9 @@ CRITICAL: Generate the ABSOLUTE MAXIMUM number of questions possible:
 - Break down EVERY concept into multiple questions from different angles
 - Test each concept in multiple ways: definition, application, comparison, analysis, synthesis, evaluation
 - Create questions for every sentence that contains testable information
-- Generate questions for ALL listed topics below
+- Generate questions for ALL listed topics below - if the material is light on a topic, use the topic title and description to create questions
+- Even if a topic is only mentioned briefly, create comprehensive questions based on what IS mentioned
+- For topics not directly covered in the chunk, create questions based on the topic title/description and related content
 - Continue generating until you have exhausted ALL testable content
 
 QUESTION TYPES BASED ON TOPIC TYPE:
@@ -962,7 +964,13 @@ Requirements:
 
 GOAL: Create the MAXIMUM number of questions possible per topic (15-30+ each). Include example-based questions for EVERY concept. More questions = better learning coverage!
 
-Return in this EXACT format (use topic keys EXACTLY as shown above - can be any depth like "0", "0-1", "0-1-2", "0-1-2-3-4", etc):
+CRITICAL REQUIREMENTS:
+- You MUST generate questions for EVERY SINGLE topic key listed above - NO EXCEPTIONS
+- If a topic is listed, it MUST appear in your JSON response with questions
+- Missing even ONE topic key will result in incomplete learning coverage
+- Each topic MUST have at least 10-15 questions minimum
+
+Return in this EXACT format (use topic keys EXACTLY as shown above - EVERY topic listed must be in the response):
 {{
   "subtopics": {{
     "0": {{
@@ -974,14 +982,21 @@ Return in this EXACT format (use topic keys EXACTLY as shown above - can be any 
           "explanation": "Why this answer is correct",
           "sourceText": "The complete sentence or paragraph from the study material with context.",
           "sourcePage": null
-        }}
+        }},
+        ... (10-30+ questions for topic "0")
       ]
     }},
-    "0-1-2": {{
-      "questions": [...]
-    }}
+    "0-1": {{
+      "questions": [
+        {{question object}},
+        ... (10-30+ questions for topic "0-1")
+      ]
+    }},
+    ... (MUST include ALL topic keys from the list above)
   }}
-}}"""
+}}
+
+REMINDER: The response MUST include questions for ALL {len(batch_keys)} topics listed above. Double-check that every topic key appears in your JSON response."""
 
                 # Make API call for this batch
                 prompt_tokens = len(batch_prompt) // 4  # Rough estimate
@@ -1057,6 +1072,14 @@ Return in this EXACT format (use topic keys EXACTLY as shown above - can be any 
                             q_count = len(chunk_questions[key].get("questions", []))
                             if q_count > 0:
                                 logger.info(f"      - Subtopic {key}: {q_count} questions")
+
+                        # Validate that ALL topics in this batch got questions
+                        missing_topics = [key for key in batch_keys if key not in chunk_questions or not chunk_questions[key].get("questions")]
+                        if missing_topics:
+                            logger.warning(f"    ⚠️ Batch {batch_num} - AI did NOT generate questions for {len(missing_topics)} topics: {missing_topics}")
+                            logger.warning(f"    ⚠️ This may result in incomplete coverage. Topics requested: {batch_keys}")
+                        else:
+                            logger.info(f"    ✅ Batch {batch_num} - ALL {len(batch_keys)} topics have questions")
 
                 except (json.JSONDecodeError, KeyError, ValueError) as e:
                     logger.error(f"❌ Chunk {chunk_idx} Batch {batch_num} - Failed to parse questions: {e}")
