@@ -544,9 +544,9 @@ async def create_study_session_with_ai(
 
         # Claude 3.5 Haiku has 200k token context window
         # Use chunking for documents that would exceed safe limits
-        # Reduced from 100k to account for prompt overhead (instructions, subtopics list, etc.)
-        CHUNK_SIZE_TOKENS = 60000  # 60k tokens per chunk (~240k chars) - leaves room for 90k prompt overhead
-        OVERLAP_TOKENS = 5000  # 5k token overlap between chunks for context preservation
+        # Reduced significantly to account for prompt overhead (instructions, subtopics list, output, etc.)
+        CHUNK_SIZE_TOKENS = 30000  # 30k tokens per chunk (~120k chars) - leaves room for 120k prompt overhead
+        OVERLAP_TOKENS = 3000  # 3k token overlap between chunks for context preservation
 
         chunk_size_chars = CHUNK_SIZE_TOKENS * 4
         overlap_chars = OVERLAP_TOKENS * 4
@@ -894,8 +894,9 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                 prompt_tokens = len(batch_prompt) // 4  # Rough estimate
                 logger.info(f"    📊 Batch {batch_num} prompt length: {len(batch_prompt):,} characters (~{prompt_tokens:,} tokens)")
 
-                # Claude 3.5 Haiku has 200k context window, but we should stay well under that
-                MAX_PROMPT_TOKENS = 150000
+                # Claude 3.5 Haiku has 200k context window
+                # Account for output tokens (16k) + safety margin
+                MAX_PROMPT_TOKENS = 100000  # Reduced from 150k to be more conservative
                 if prompt_tokens > MAX_PROMPT_TOKENS:
                     logger.error(f"❌ Chunk {chunk_idx} Batch {batch_num} prompt too large: {prompt_tokens:,} tokens (max: {MAX_PROMPT_TOKENS:,})")
                     raise HTTPException(
