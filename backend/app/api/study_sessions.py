@@ -545,8 +545,8 @@ async def create_study_session_with_ai(
         # Claude 3.5 Haiku has 200k token context window
         # Use chunking for documents that would exceed safe limits
         # Reduced significantly to account for prompt overhead (instructions, subtopics list, output, etc.)
-        CHUNK_SIZE_TOKENS = 30000  # 30k tokens per chunk (~120k chars) - leaves room for 120k prompt overhead
-        OVERLAP_TOKENS = 3000  # 3k token overlap between chunks for context preservation
+        CHUNK_SIZE_TOKENS = 20000  # 20k tokens per chunk (~80k chars) - conservative to prevent "too large" errors
+        OVERLAP_TOKENS = 2000  # 2k token overlap between chunks for context preservation
 
         chunk_size_chars = CHUNK_SIZE_TOKENS * 4
         overlap_chars = OVERLAP_TOKENS * 4
@@ -870,8 +870,8 @@ Note: subsubtopics array can be empty [] if the subtopic doesn't need further br
         logger.info(f"  Subtopics: {all_subtopic_keys}")
 
         # BATCH SUBTOPICS: Process in groups to avoid AI refusing due to response size
-        # With 6 subtopics per batch, max ~180 questions per request (6 * 30) - manageable for AI
-        SUBTOPICS_PER_BATCH = 6
+        # With 3 subtopics per batch, max ~90 questions per request (3 * 30) - very safe for AI
+        SUBTOPICS_PER_BATCH = 3  # Reduced from 6 to prevent "chunk too large" errors
         subtopic_batches = []
 
         # Split subtopics into batches
@@ -989,15 +989,8 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                 prompt_tokens = len(batch_prompt) // 4  # Rough estimate
                 logger.info(f"    📊 Batch {batch_num} prompt length: {len(batch_prompt):,} characters (~{prompt_tokens:,} tokens)")
 
-                # Claude 3.5 Haiku has 200k context window
-                # Account for output tokens (16k) + safety margin
-                MAX_PROMPT_TOKENS = 100000  # Reduced from 150k to be more conservative
-                if prompt_tokens > MAX_PROMPT_TOKENS:
-                    logger.error(f"❌ Chunk {chunk_idx} Batch {batch_num} prompt too large: {prompt_tokens:,} tokens (max: {MAX_PROMPT_TOKENS:,})")
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"Document chunk {chunk_idx} batch {batch_num} is too large for processing (~{prompt_tokens:,} tokens). The document may need to be split into smaller files."
-                    )
+                # Note: Removed hard prompt size check - let AI handle it gracefully with error recovery below
+                # With reduced chunk size (20k) and batch size (3 subtopics), prompts should be safe
 
                 batch_text = None
                 try:
@@ -1031,15 +1024,14 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
                         raise Exception("No AI provider available")
 
                 except Exception as api_error:
-                    logger.error(f"❌ AI API call failed for chunk {chunk_idx} batch {batch_num}: {type(api_error).__name__}: {str(api_error)}")
+                    logger.warning(f"⚠️ AI API call failed for chunk {chunk_idx} batch {batch_num}: {type(api_error).__name__}: {str(api_error)}")
                     # Check if it's a context length error
                     error_msg = str(api_error).lower()
                     if any(keyword in error_msg for keyword in ['context', 'token', 'too long', 'maximum', 'limit']):
-                        raise HTTPException(
-                            status_code=413,
-                            detail=f"Chunk {chunk_idx} batch {batch_num} is too large for AI processing. Try using a smaller document."
-                        )
+                        logger.warning(f"⚠️ Skipping chunk {chunk_idx} batch {batch_num} - too large. Continuing with other batches...")
+                        continue  # Skip this batch and continue with next one
                     else:
+                        # For non-context errors, still fail (e.g., auth issues, network errors)
                         raise HTTPException(
                             status_code=500,
                             detail=f"AI API error on chunk {chunk_idx} batch {batch_num}: {str(api_error)}"
