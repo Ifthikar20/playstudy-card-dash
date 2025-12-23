@@ -1026,16 +1026,26 @@ Return in this EXACT format (use subtopic keys like "0-0", "0-1", "1-0" etc):
             subtopic_schema.questions = questions_list
             category_schema.subtopics.append(subtopic_schema)
 
-        # Validate that at least some questions were generated
+        # Validate that questions were generated for a reasonable number of subtopics
+        subtopics_with_questions = len([k for k, v in subtopics_questions.items() if v.get("questions")])
+        total_subtopics = len(subtopic_map)
+
         if question_counter == 0:
             logger.error("❌ FATAL: No questions were generated for any subtopic! AI generation completely failed.")
             db.rollback()
             raise HTTPException(
                 status_code=500,
-                detail="Failed to generate questions. The AI did not return any valid questions. Please try again or use a different document."
+                detail="Failed to generate questions. The AI did not return any valid questions. This may be due to document format or content issues. Please try:\n1. A different document\n2. Splitting the document into smaller files\n3. Converting to PDF format if using Word/PowerPoint"
             )
 
-        logger.info(f"✅ Successfully generated {question_counter} total questions across all subtopics")
+        # Warn if very few questions generated
+        if question_counter < 10:
+            logger.warning(f"⚠️ Only {question_counter} questions generated - this may not be enough for a good study session")
+
+        # Log coverage statistics
+        coverage_percent = (subtopics_with_questions / total_subtopics * 100) if total_subtopics > 0 else 0
+        logger.info(f"📊 Question generation coverage: {subtopics_with_questions}/{total_subtopics} subtopics ({coverage_percent:.1f}%)")
+        logger.info(f"✅ Successfully generated {question_counter} total questions across {subtopics_with_questions} subtopics")
 
         # Commit all changes
         db.commit()
