@@ -570,6 +570,15 @@ export default function FullStudyPage() {
     }
   }, [selectedTopic, localQuestionIndex, selectedTopicId, sessionIdRef, moveToNextQuestion]);
 
+  const handleMoveToPreviousForSelected = useCallback(() => {
+    if (!selectedTopic || localQuestionIndex === 0) return;
+
+    const prevIndex = localQuestionIndex - 1;
+    console.log(`⬅️ Moving from question ${localQuestionIndex + 1} to ${prevIndex + 1} of ${selectedTopic.questions.length}`);
+
+    setLocalQuestionIndex(prevIndex);
+  }, [selectedTopic, localQuestionIndex]);
+
   const handleCompleteForSelected = useCallback(() => {
     if (!selectedTopicId || !sessionIdRef) return;
 
@@ -711,6 +720,7 @@ export default function FullStudyPage() {
                         currentQuestionIndex={localQuestionIndex}
                         onAnswer={handleAnswerForSelected}
                         onMoveToNext={handleMoveToNextForSelected}
+                        onMoveToPrevious={handleMoveToPreviousForSelected}
                         onComplete={handleCompleteForSelected}
                         onSkipToNext={handleSkipToNextTopic}
                         score={selectedTopic.score}

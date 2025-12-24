@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, XCircle, Trophy, SkipForward } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, SkipForward, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Question {
@@ -19,6 +19,7 @@ interface TopicQuizCardProps {
   currentQuestionIndex: number;
   onAnswer: (answerIndex: number) => { correct: boolean; explanation: string };
   onMoveToNext: () => void;  // Move to next question
+  onMoveToPrevious?: () => void;  // Move to previous question
   onComplete: () => void;
   onSkipToNext?: () => void;  // Skip to next topic
   score: number | null;
@@ -31,6 +32,7 @@ export function TopicQuizCard({
   currentQuestionIndex,
   onAnswer,
   onMoveToNext,
+  onMoveToPrevious,
   onComplete,
   onSkipToNext,
   score,
@@ -42,6 +44,7 @@ export function TopicQuizCard({
 
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex >= questions.length - 1;
+  const isFirstQuestion = currentQuestionIndex === 0;
 
   // Reset state when question changes
   useEffect(() => {
@@ -63,16 +66,24 @@ export function TopicQuizCard({
     setShowResult(true);
     console.log('✅ Answer result:', answerResult.correct ? 'Correct' : 'Wrong');
 
-    // Auto-advance after 2 seconds
-    setTimeout(() => {
-      if (isLastQuestion) {
-        console.log('🏁 Last question - completing topic');
-        onComplete();
-      } else {
-        console.log('🔄 Auto-advancing to next question');
-        onMoveToNext();
-      }
-    }, 2000); // 2 second delay to show feedback
+    // REMOVED: Auto-advance logic - user must click Next button manually
+  };
+
+  const handleNext = () => {
+    if (isLastQuestion) {
+      console.log('🏁 Last question - completing topic');
+      onComplete();
+    } else {
+      console.log('➡️ Moving to next question');
+      onMoveToNext();
+    }
+  };
+
+  const handlePrevious = () => {
+    if (!isFirstQuestion && onMoveToPrevious) {
+      console.log('⬅️ Moving to previous question');
+      onMoveToPrevious();
+    }
   };
 
   if (isCompleted) {
@@ -203,8 +214,25 @@ export function TopicQuizCard({
               <p className="break-words">{result.explanation}</p>
             </div>
 
-            <div className="text-center text-sm text-muted-foreground">
-              {isLastQuestion ? "Completing topic..." : "Loading next question..."}
+            {/* Navigation buttons - only show after answering */}
+            <div className="flex justify-between gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={handlePrevious}
+                disabled={isFirstQuestion}
+                className="gap-2"
+              >
+                <ChevronLeft size={16} />
+                Previous
+              </Button>
+
+              <Button
+                onClick={handleNext}
+                className="gap-2"
+              >
+                {isLastQuestion ? "Complete Topic" : "Next Question"}
+                {!isLastQuestion && <ChevronRight size={16} />}
+              </Button>
             </div>
           </div>
         )}
