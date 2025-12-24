@@ -35,7 +35,7 @@ const LandingPage = () => {
       {/* Hero Section */}
       <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 lg:pt-28">
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white max-w-4xl leading-tight">
-          <img src="/canva-new.png" alt="Play" className="inline-block h-[2em] align-baseline mr-2" /> smarter.
+          <img src="/canva-new.png" alt="Play" className="inline-block h-12 md:h-16 lg:h-[4.5rem] align-baseline mr-2" /> smarter.
           <span className="block text-primary mt-1 overflow-hidden whitespace-nowrap border-r-4 border-primary animate-typewriter">
             Play harder.
           </span>
