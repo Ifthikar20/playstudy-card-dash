@@ -478,9 +478,8 @@ export default function Index() {
                         draggedSession === session.id ? 'opacity-50' : ''
                       }`}
                       style={{
-                        WebkitUserDrag: 'element',
                         userSelect: 'none',
-                      }}
+                      } as React.CSSProperties}
                       title="Drag to folder or click title to open"
                     >
                       <div className="flex items-center gap-2">
