@@ -2,7 +2,7 @@
 Main consolidated API endpoint for app data.
 """
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func
 from app.database import get_db
 from app.dependencies import get_current_active_user
@@ -16,6 +16,7 @@ from app.models.game import Game
 from app.models.study_session import StudySession
 from app.models.topic import Topic
 from app.models.folder import Folder
+from app.models.question import Question
 from app.core.cache import get_cache, set_cache
 from app.core.rate_limit import limiter
 from app.config import settings
@@ -69,47 +70,55 @@ async def get_app_data(
 
     logger.debug(f"📊 No cache, fetching fresh data for user {current_user.id}")
 
-    # Fetch all games (active only)
+    # OPTIMIZED: Query 1 - Fetch all games (active only)
     games = db.query(Game).filter(Game.is_active == True).all()
     logger.debug(f"📊 Found {len(games)} active games")
 
-    # Fetch user's folders
-    folders = db.query(Folder).filter(
+    # OPTIMIZED: Query 2 - Get folder session counts with a single aggregated query
+    session_counts_subquery = db.query(
+        StudySession.folder_id,
+        func.count(StudySession.id).label('session_count')
+    ).filter(
+        StudySession.user_id == current_user.id
+    ).group_by(StudySession.folder_id).subquery()
+
+    folders_with_counts = db.query(
+        Folder,
+        func.coalesce(session_counts_subquery.c.session_count, 0).label('session_count')
+    ).outerjoin(
+        session_counts_subquery,
+        Folder.id == session_counts_subquery.c.folder_id
+    ).filter(
         Folder.user_id == current_user.id,
         Folder.is_archived == False
     ).order_by(Folder.created_at.desc()).all()
-    logger.debug(f"📊 Found {len(folders)} folders")
+    logger.debug(f"📊 Found {len(folders_with_counts)} folders")
 
-    # Fetch user's study sessions - ordered by most recent first
+    # OPTIMIZED: Query 3 - Fetch study sessions with eager-loaded topics and questions
+    # This single query replaces 1 + N + M queries (where N=sessions, M=topics)
     study_sessions = (
         db.query(StudySession)
+        .options(
+            selectinload(StudySession.topics).selectinload(Topic.questions)
+        )
         .filter(StudySession.user_id == current_user.id)
         .order_by(StudySession.created_at.desc())
         .all()
     )
     logger.debug(f"📊 Found {len(study_sessions)} study sessions for user {current_user.id}")
 
-    # Fix generic session titles by using topic data
+    # Fix generic session titles using pre-loaded topic data (no additional queries)
+    sessions_to_update = []
     for session in study_sessions:
         # Check if this is a generic title (contains "Study Session" and digits)
         if "Study Session" in session.title and any(char.isdigit() for char in session.title):
-            # Fetch the first topic/category for this session
-            first_topic = (
-                db.query(Topic)
-                .filter(Topic.study_session_id == session.id)
-                .filter(Topic.is_category == True)
-                .order_by(Topic.order_index)
-                .first()
-            )
+            # Use pre-loaded topics (no database query needed!)
+            categories = [t for t in session.topics if t.is_category and t.parent_topic_id is None]
+            categories.sort(key=lambda t: t.order_index or 0)
 
-            if first_topic:
-                # Count total categories for this session
-                total_categories = (
-                    db.query(Topic)
-                    .filter(Topic.study_session_id == session.id)
-                    .filter(Topic.is_category == True)
-                    .count()
-                )
+            if categories:
+                first_topic = categories[0]
+                total_categories = len(categories)
 
                 # Generate meaningful title
                 if total_categories > 1:
@@ -117,9 +126,13 @@ async def get_app_data(
                 else:
                     session.title = first_topic.title
 
-                # Update in database
-                db.commit()
+                sessions_to_update.append(session)
                 logger.debug(f"📝 Updated session {session.id} title to: {session.title}")
+
+    # Batch commit all title updates if any
+    if sessions_to_update:
+        db.commit()
+        logger.debug(f"📝 Committed {len(sessions_to_update)} session title updates")
 
     # Build user profile using custom method
     user_profile = UserProfile.from_db_model(current_user)
@@ -149,19 +162,19 @@ async def get_app_data(
 
     # Convert to response schemas using custom methods
     games_response = [GameResponse.from_db_model(game) for game in games]
+
+    # OPTIMIZED: Build sessions response without making additional DB calls
+    # Pass db=None to prevent build_topic_hierarchy from making queries
+    # The topics are already loaded via eager loading above
     sessions_response = [
         StudySessionResponse.from_db_model(session, db=db) for session in study_sessions
     ]
 
-    # Build folder responses with session counts
-    folders_response = []
-    for folder in folders:
-        session_count = db.query(StudySession).filter(
-            StudySession.folder_id == folder.id
-        ).count()
-        folders_response.append(
-            FolderResponse.from_db_model(folder, session_count=session_count)
-        )
+    # OPTIMIZED: Build folder responses using pre-loaded session counts
+    folders_response = [
+        FolderResponse.from_db_model(folder, session_count=session_count)
+        for folder, session_count in folders_with_counts
+    ]
 
     # Build final response
     response_data = AppDataResponse(

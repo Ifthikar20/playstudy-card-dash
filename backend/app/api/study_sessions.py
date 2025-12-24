@@ -32,9 +32,10 @@ router = APIRouter()
 def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchema]:
     """
     Build hierarchical topic structure with questions for a study session.
+    OPTIMIZED: Uses pre-loaded relationships when available to avoid N+1 queries.
 
     Args:
-        session: StudySession database model
+        session: StudySession database model (may have eager-loaded topics)
         db: Database session
 
     Returns:
@@ -42,10 +43,18 @@ def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchem
     """
     from app.models.question import Question
 
-    # Fetch all topics for this session
-    all_topics = db.query(Topic).filter(
-        Topic.study_session_id == session.id
-    ).order_by(Topic.order_index).all()
+    # OPTIMIZED: Check if topics are already loaded (from eager loading)
+    # If session.topics is already populated, use it instead of querying
+    if hasattr(session, 'topics') and session.topics:
+        all_topics = sorted(session.topics, key=lambda t: t.order_index or 0)
+    else:
+        # Fallback: Query with eager loading for questions
+        from sqlalchemy.orm import selectinload
+        all_topics = db.query(Topic).options(
+            selectinload(Topic.questions)
+        ).filter(
+            Topic.study_session_id == session.id
+        ).order_by(Topic.order_index).all()
 
     # Build hierarchical structure
     categories = [t for t in all_topics if t.is_category and t.parent_topic_id is None]
@@ -68,10 +77,14 @@ def build_topic_hierarchy(session: StudySession, db: Session) -> List[TopicSchem
         )
 
         for sub_idx, subtopic in enumerate(subtopics):
-            # Fetch questions for this subtopic
-            questions = db.query(Question).filter(
-                Question.topic_id == subtopic.id
-            ).order_by(Question.order_index).all()
+            # OPTIMIZED: Use pre-loaded questions if available
+            if hasattr(subtopic, 'questions') and subtopic.questions:
+                questions = sorted(subtopic.questions, key=lambda q: q.order_index or 0)
+            else:
+                # Fallback: Query if not pre-loaded
+                questions = db.query(Question).filter(
+                    Question.topic_id == subtopic.id
+                ).order_by(Question.order_index).all()
 
             questions_list = [
                 QuestionSchema(
@@ -1407,18 +1420,28 @@ async def generate_more_questions(
     if not session:
         raise HTTPException(status_code=404, detail="Study session not found")
 
-    # Get all topics for this session
-    all_topics = db.query(Topic).filter(
+    # OPTIMIZED: Get all topics with question counts in a single aggregated query
+    # Subquery to count questions per topic
+    question_counts_subquery = db.query(
+        Question.topic_id,
+        func.count(Question.id).label('question_count')
+    ).group_by(Question.topic_id).subquery()
+
+    # Get topics with their question counts
+    topics_with_counts = db.query(
+        Topic,
+        func.coalesce(question_counts_subquery.c.question_count, 0).label('question_count')
+    ).outerjoin(
+        question_counts_subquery,
+        Topic.id == question_counts_subquery.c.topic_id
+    ).filter(
         Topic.study_session_id == uuid_obj
     ).order_by(Topic.order_index).all()
 
-    # Find ALL topics without questions (including categories for overview questions)
-    subtopics_without_questions = []
-    for topic in all_topics:
-        # Check ALL topics (both categories and leaf nodes) for questions
-        question_count = db.query(Question).filter(Question.topic_id == topic.id).count()
-        if question_count == 0:
-            subtopics_without_questions.append(topic)
+    # Find topics without questions using pre-loaded counts
+    subtopics_without_questions = [
+        topic for topic, count in topics_with_counts if count == 0
+    ]
 
     if not subtopics_without_questions:
         logger.info(f"✅ All subtopics already have questions for session {session_id}")

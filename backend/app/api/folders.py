@@ -35,22 +35,30 @@ async def get_folders(
     """
     logger.info(f"📁 Getting folders for user {current_user.id}")
 
-    # Get all folders for user
-    folders = db.query(Folder).filter(
+    # Get all folders for user with session counts in a single optimized query
+    # Query 1: Get folder IDs and session counts using aggregate
+    session_counts_subquery = db.query(
+        StudySession.folder_id,
+        func.count(StudySession.id).label('session_count')
+    ).group_by(StudySession.folder_id).subquery()
+
+    # Query 2: Get folders with their session counts
+    folders_with_counts = db.query(
+        Folder,
+        func.coalesce(session_counts_subquery.c.session_count, 0).label('session_count')
+    ).outerjoin(
+        session_counts_subquery,
+        Folder.id == session_counts_subquery.c.folder_id
+    ).filter(
         Folder.user_id == current_user.id,
         Folder.is_archived == False
     ).order_by(Folder.created_at.desc()).all()
 
-    # Get session counts for each folder
-    folder_responses = []
-    for folder in folders:
-        session_count = db.query(StudySession).filter(
-            StudySession.folder_id == folder.id
-        ).count()
-
-        folder_responses.append(
-            FolderResponse.from_db_model(folder, session_count=session_count)
-        )
+    # Build response objects
+    folder_responses = [
+        FolderResponse.from_db_model(folder, session_count=session_count)
+        for folder, session_count in folders_with_counts
+    ]
 
     logger.info(f"📁 Found {len(folder_responses)} folders")
     return folder_responses
@@ -153,9 +161,10 @@ async def update_folder(
     db.commit()
     db.refresh(folder)
 
-    session_count = db.query(StudySession).filter(
+    # Get session count efficiently (reuse the same pattern as get_folders)
+    session_count = db.query(func.count(StudySession.id)).filter(
         StudySession.folder_id == folder.id
-    ).count()
+    ).scalar() or 0
 
     logger.info(f"📁 Updated folder {folder_id}")
     return FolderResponse.from_db_model(folder, session_count=session_count)
