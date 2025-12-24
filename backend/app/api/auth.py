@@ -1,13 +1,15 @@
 """
 Authentication API endpoints for user registration and login.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from typing import Optional
 from app.database import get_db
 from app.schemas.user import UserCreate, UserLogin, Token
 from app.models.user import User
 from app.core.security import get_password_hash, verify_password, create_access_token
+from app.core.recaptcha import verify_recaptcha, is_human
 from app.config import settings
 import logging
 
@@ -18,20 +20,62 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register_user(
+    user_data: UserCreate,
+    recaptcha_token: Optional[str] = Body(None, alias="recaptchaToken"),
+    db: Session = Depends(get_db)
+):
     """
-    Register a new user account.
+    Register a new user account with reCAPTCHA v3 bot protection.
 
     Args:
         user_data: User registration data (email, name, password)
+        recaptcha_token: reCAPTCHA v3 token from frontend
         db: Database session
 
     Returns:
         JWT access token for the new user
 
     Raises:
-        HTTPException: If email already exists
+        HTTPException: If email already exists or bot detection fails
     """
+    # Verify reCAPTCHA (Layer 1: Bot Detection)
+    if settings.RECAPTCHA_ENABLED and recaptcha_token:
+        try:
+            recaptcha_result = await verify_recaptcha(recaptcha_token, expected_action="register")
+
+            if not recaptcha_result.success:
+                logger.warning(f"🤖 Registration blocked - reCAPTCHA verification failed: {recaptcha_result.error_codes}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Failed bot detection. Please try again.",
+                )
+
+            if not is_human(recaptcha_result.score):
+                logger.warning(
+                    f"🤖 Registration blocked - Low reCAPTCHA score: {recaptcha_result.score:.2f} "
+                    f"(threshold: {settings.RECAPTCHA_MIN_SCORE})"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Failed bot detection. Please try again.",
+                )
+
+            logger.info(f"✅ reCAPTCHA passed for registration - Score: {recaptcha_result.score:.2f}")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ reCAPTCHA verification error: {str(e)}")
+            # Allow registration to proceed if reCAPTCHA service is down
+            logger.warning("⚠️ Proceeding with registration despite reCAPTCHA error")
+    elif settings.RECAPTCHA_ENABLED and not recaptcha_token:
+        logger.warning("⚠️ Registration attempt without reCAPTCHA token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bot detection token required",
+        )
+
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
@@ -70,21 +114,63 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
+async def login_user(
+    login_data: UserLogin,
+    recaptcha_token: Optional[str] = Body(None, alias="recaptchaToken"),
+    db: Session = Depends(get_db)
+):
     """
-    Authenticate a user and return JWT token.
+    Authenticate a user and return JWT token with reCAPTCHA v3 bot protection.
 
     Args:
         login_data: User login credentials (email, password)
+        recaptcha_token: reCAPTCHA v3 token from frontend
         db: Database session
 
     Returns:
         JWT access token
 
     Raises:
-        HTTPException: If credentials are invalid
+        HTTPException: If credentials are invalid or bot detection fails
     """
     logger.info(f"🔑 Login attempt for email: {login_data.email}")
+
+    # Verify reCAPTCHA (Layer 1: Bot Detection)
+    if settings.RECAPTCHA_ENABLED and recaptcha_token:
+        try:
+            recaptcha_result = await verify_recaptcha(recaptcha_token, expected_action="login")
+
+            if not recaptcha_result.success:
+                logger.warning(f"🤖 Login blocked - reCAPTCHA verification failed: {recaptcha_result.error_codes}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Failed bot detection. Please try again.",
+                )
+
+            if not is_human(recaptcha_result.score):
+                logger.warning(
+                    f"🤖 Login blocked - Low reCAPTCHA score: {recaptcha_result.score:.2f} "
+                    f"(threshold: {settings.RECAPTCHA_MIN_SCORE})"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Failed bot detection. Please try again.",
+                )
+
+            logger.info(f"✅ reCAPTCHA passed for login - Score: {recaptcha_result.score:.2f}")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ reCAPTCHA verification error: {str(e)}")
+            # Allow login to proceed if reCAPTCHA service is down
+            logger.warning("⚠️ Proceeding with login despite reCAPTCHA error")
+    elif settings.RECAPTCHA_ENABLED and not recaptcha_token:
+        logger.warning("⚠️ Login attempt without reCAPTCHA token")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bot detection token required",
+        )
 
     # Get user by email
     user = db.query(User).filter(User.email == login_data.email).first()

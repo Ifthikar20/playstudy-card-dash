@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Mail, Zap } from 'lucide-react';
 import ShootingStars from '@/components/ShootingStars';
+import { generateRecaptchaToken } from '@/services/recaptchaService';
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -25,7 +26,10 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      const result = await authLogin(email, password);
+      // Generate reCAPTCHA token
+      const recaptchaToken = await generateRecaptchaToken('login');
+
+      const result = await authLogin(email, password, recaptchaToken || undefined);
       if (result.success) {
         navigate('/dashboard');
       } else {
@@ -44,7 +48,10 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      const result = await authRegister(email, name, password);
+      // Generate reCAPTCHA token
+      const recaptchaToken = await generateRecaptchaToken('register');
+
+      const result = await authRegister(email, name, password, recaptchaToken || undefined);
       if (result.success) {
         navigate('/dashboard');
       } else {

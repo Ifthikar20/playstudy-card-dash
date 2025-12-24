@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # reCAPTCHA v3
+    RECAPTCHA_SECRET_KEY: Optional[str] = None
+    RECAPTCHA_ENABLED: bool = True
+    RECAPTCHA_MIN_SCORE: float = 0.5
+
     # Encryption at Rest
     FIELD_ENCRYPTION_KEY: Optional[str] = None
 

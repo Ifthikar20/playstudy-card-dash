@@ -17,12 +17,14 @@ const TOKEN_EXPIRY_KEY = 'token_expiry';
 export interface LoginCredentials {
   email: string;
   password: string;
+  recaptchaToken?: string;
 }
 
 export interface RegisterCredentials {
   email: string;
   name: string;
   password: string;
+  recaptchaToken?: string;
 }
 
 export interface AuthResponse {
@@ -154,7 +156,11 @@ class AuthService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({
+          email: credentials.email,
+          password: credentials.password,
+          recaptchaToken: credentials.recaptchaToken,
+        }),
       });
 
       if (!response.ok) {
@@ -201,7 +207,12 @@ class AuthService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({
+          email: credentials.email,
+          name: credentials.name,
+          password: credentials.password,
+          recaptchaToken: credentials.recaptchaToken,
+        }),
       });
 
       if (!response.ok) {

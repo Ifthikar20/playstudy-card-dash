@@ -114,11 +114,83 @@ All routes under `/dashboard/*` are wrapped in `<ProtectedRoute>`:
 ✅ **JWT Authentication:** Secure token-based authentication in place
 ✅ **Rate Limiting:** Applied to sensitive endpoints (e.g., `create-with-ai`)
 ✅ **CORS Configuration:** Properly configured to allow only authorized origins
+✅ **Bot Protection (reCAPTCHA v3):** Google reCAPTCHA v3 implemented on authentication endpoints
+
+---
+
+## Bot Protection - reCAPTCHA v3 Implementation
+
+### Overview
+Google reCAPTCHA v3 has been implemented to protect authentication endpoints from automated bot attacks. This is an invisible, behavior-based bot detection system that scores user interactions.
+
+### Implementation Details
+
+#### Backend (`backend/app/api/auth.py`)
+- **Register Endpoint:** Lines 22-113
+  - Accepts optional `recaptchaToken` parameter
+  - Verifies token with Google's API before processing registration
+  - Blocks requests with low scores (< 0.5 by default)
+  - Gracefully allows registration if reCAPTCHA service is unavailable
+
+- **Login Endpoint:** Lines 116-225
+  - Accepts optional `recaptchaToken` parameter
+  - Verifies token with Google's API before authenticating
+  - Blocks requests with low scores (< 0.5 by default)
+  - Gracefully allows login if reCAPTCHA service is unavailable
+
+#### Backend Verification (`backend/app/core/recaptcha.py`)
+- **verify_recaptcha():** Async function that:
+  - Calls Google's reCAPTCHA API with the token
+  - Validates the response success status
+  - Checks the score against minimum threshold (0.5)
+  - Verifies the action matches expected value
+  - Returns detailed verification results with logging
+
+- **is_human():** Helper function that checks if score meets threshold
+
+#### Frontend Integration
+- **Script Loading:** `index.html` includes Google reCAPTCHA v3 script
+- **Token Generation:** `src/services/recaptchaService.ts` handles:
+  - Waiting for reCAPTCHA to load
+  - Generating tokens for specific actions (login/register)
+  - Graceful fallback if reCAPTCHA is not configured
+
+- **Auth Flow:** `src/pages/AuthPage.tsx` generates tokens before submission
+  - Login: Generates token with action="login"
+  - Register: Generates token with action="register"
+  - Passes tokens through AuthContext → authService → backend
+
+### Configuration
+**Backend (.env):**
+```
+RECAPTCHA_SECRET_KEY=your-recaptcha-secret-key-here
+RECAPTCHA_ENABLED=True
+RECAPTCHA_MIN_SCORE=0.5
+```
+
+**Frontend (.env):**
+```
+VITE_RECAPTCHA_SITE_KEY=your-recaptcha-site-key-here
+```
+
+### Security Benefits
+1. **Bot Detection:** Scores user behavior from 0.0 (bot) to 1.0 (human)
+2. **Invisible to Users:** No CAPTCHAs to solve, seamless experience
+3. **Action-Based:** Different scores for different actions (login/register)
+4. **Configurable Threshold:** Minimum score can be adjusted based on abuse patterns
+5. **Graceful Degradation:** Service continues if reCAPTCHA API is unavailable
+
+### Monitoring
+All reCAPTCHA verifications are logged with:
+- ✅ Success: Score, action, hostname
+- ⚠️ Warning: Low scores, action mismatches
+- ❌ Error: API failures, network issues
 
 ---
 
 ## Audit Date
-December 23, 2025
+December 24, 2025
 
 ## Status
 🟢 **PASS** - All routes properly secured except intentionally public endpoints
+🟢 **ENHANCED** - Bot protection implemented on authentication endpoints
