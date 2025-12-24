@@ -298,9 +298,9 @@ const LandingPage = () => {
 const FeatureCard = ({ icon, step, title, description, animationType }: { icon: React.ReactNode; step: string; title: string; description: string; animationType: 'upload' | 'game' | 'progress' }) => (
   <div className="group p-8 md:p-10 rounded-3xl bg-[#1a1a2e]/90 border border-white/10 hover:border-primary/40 transition-all duration-300 backdrop-blur-sm shadow-xl">
     {/* Animated SVG Placeholder */}
-    <div className="w-full h-64 md:h-72 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-white/10 mb-8 flex items-center justify-center overflow-hidden">
+    <div className="w-full h-80 md:h-96 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-white/10 mb-8 flex items-center justify-center overflow-hidden">
       {animationType === 'upload' && (
-        <svg viewBox="0 0 200 150" className="w-48 h-36 md:w-64 md:h-48">
+        <svg viewBox="0 0 200 150" className="w-64 h-48 md:w-80 md:h-60">
           {/* Document */}
           <rect x="60" y="30" width="80" height="100" rx="6" fill="hsl(var(--primary))" opacity="0.2" className="animate-pulse" />
           <rect x="70" y="50" width="40" height="4" rx="2" fill="hsl(var(--primary))" opacity="0.5" />
@@ -314,7 +314,7 @@ const FeatureCard = ({ icon, step, title, description, animationType }: { icon: 
         </svg>
       )}
       {animationType === 'game' && (
-        <svg viewBox="0 0 200 150" className="w-48 h-36 md:w-64 md:h-48">
+        <svg viewBox="0 0 200 150" className="w-64 h-48 md:w-80 md:h-60">
           {/* Game Controller */}
           <rect x="40" y="50" width="120" height="60" rx="30" fill="hsl(var(--primary))" opacity="0.2" className="animate-pulse" />
           {/* D-pad */}
@@ -328,7 +328,7 @@ const FeatureCard = ({ icon, step, title, description, animationType }: { icon: 
         </svg>
       )}
       {animationType === 'progress' && (
-        <svg viewBox="0 0 200 150" className="w-48 h-36 md:w-64 md:h-48">
+        <svg viewBox="0 0 200 150" className="w-64 h-48 md:w-80 md:h-60">
           {/* Chart bars */}
           <rect x="40" y="100" width="25" height="30" rx="4" fill="hsl(var(--primary))" opacity="0.3">
             <animate attributeName="height" values="30;45;30" dur="2s" repeatCount="indefinite" />
