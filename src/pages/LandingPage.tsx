@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ShootingStars from "@/components/ShootingStars";
-import { Brain, ArrowRight, Upload, Gamepad2, TrendingUp, Zap, Users, Clock } from "lucide-react";
+import { ArrowRight, Upload, Gamepad2, TrendingUp, Users, Clock } from "lucide-react";
 
 const LandingPage = () => {
   return (
@@ -34,30 +34,22 @@ const LandingPage = () => {
 
       {/* Hero Section */}
       <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 lg:pt-28">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-6">
-          <Zap className="w-4 h-4 text-primary" />
-          <span className="text-sm text-white/60">AI-Powered Learning</span>
-        </div>
-        
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white max-w-4xl leading-tight">
-          Study smarter.
-          <span className="block text-primary mt-1">Play harder.</span>
+        <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white max-w-4xl leading-tight">
+          <span className="inline-block animate-[pulse_2s_ease-in-out_infinite]">Study smarter.</span>
+          <span className="block text-primary mt-1 animate-[pulse_2s_ease-in-out_infinite_0.5s]">Play harder.</span>
         </h1>
         
-        <p className="mt-6 text-base md:text-lg text-white/50 max-w-xl">
+        <p className="mt-6 text-lg md:text-xl text-white/50 max-w-xl">
           Transform your notes into interactive games. Upload anything and start learning in seconds.
         </p>
         
-        <div className="mt-8 flex flex-col sm:flex-row gap-3">
+        <div className="mt-8">
           <Link to="/auth">
             <Button size="lg" className="bg-primary hover:bg-primary/90 px-8 py-6 gap-2">
               Start Free
               <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
-          <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 px-8 py-6">
-            Watch Demo
-          </Button>
         </div>
 
         {/* Social Proof */}
