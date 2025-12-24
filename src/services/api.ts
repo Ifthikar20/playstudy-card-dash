@@ -125,6 +125,7 @@ export interface Topic {
   completed: boolean;
   score: number | null;
   currentQuestionIndex: number;
+  subtopics?: Topic[];
 }
 
 export interface StudySession {
@@ -814,6 +815,7 @@ export const archiveStudySession = async (sessionId: string): Promise<void> => {
  */
 const getMockAppData = (): AppData => {
   return {
+    folders: [],
     userProfile: {
       id: 'user-1',
       name: 'Student User',

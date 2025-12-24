@@ -18,6 +18,9 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				'handwritten': ['Patrick Hand', 'cursive'],
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
@@ -89,11 +92,20 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'typewriter': {
+					'0%': { width: '0' },
+					'100%': { width: '100%' }
+				},
+				'blink': {
+					'0%, 100%': { borderColor: 'transparent' },
+					'50%': { borderColor: 'hsl(var(--primary))' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'typewriter': 'typewriter 1.5s steps(12) 0.5s forwards, blink 0.7s step-end infinite'
 			}
 		}
 	},
