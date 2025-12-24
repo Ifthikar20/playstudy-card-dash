@@ -218,11 +218,11 @@ const LandingPage = () => {
       <section className="relative z-10 px-6 py-24 lg:px-12">
         <div className="max-w-4xl mx-auto">
           <div className="p-10 md:p-16 rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10">
-            <p className="font-handwritten text-primary text-xl md:text-2xl mb-6">Our Manifesto</p>
-            <h2 className="font-handwritten text-3xl md:text-4xl lg:text-5xl text-white mb-8 leading-tight">
+            <p className="font-handwritten text-primary text-sm md:text-base mb-6">Our Manifesto</p>
+            <h2 className="font-handwritten text-2xl md:text-3xl lg:text-4xl text-white mb-8 leading-tight">
               Learning shouldn't feel like a chore.
             </h2>
-            <div className="space-y-6 font-handwritten text-lg md:text-xl text-white/70 leading-relaxed">
+            <div className="space-y-6 font-handwritten text-base md:text-lg text-white/70 leading-relaxed">
               <p>
                 We believe the best learning happens when you're having fun. When curiosity takes over and studying feels like playing your favorite game.
               </p>
@@ -239,7 +239,7 @@ const LandingPage = () => {
             
             {/* Signature */}
             <div className="mt-12 pt-8 border-t border-white/10">
-              <p className="font-handwritten text-3xl md:text-4xl text-primary italic">
+              <p className="font-handwritten text-xl md:text-2xl text-primary italic">
                 — The PlayStudy Team
               </p>
             </div>
