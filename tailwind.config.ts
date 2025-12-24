@@ -19,7 +19,7 @@ export default {
 		},
 		extend: {
 			fontFamily: {
-				'handwritten': ['Caveat', 'cursive'],
+				'handwritten': ['Patrick Hand', 'cursive'],
 			},
 			colors: {
 				border: 'hsl(var(--border))',
