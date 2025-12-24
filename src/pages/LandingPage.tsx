@@ -35,8 +35,10 @@ const LandingPage = () => {
       {/* Hero Section */}
       <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 lg:pt-28">
         <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white max-w-4xl leading-tight">
-          <span className="inline-block animate-[pulse_2s_ease-in-out_infinite]">Study smarter.</span>
-          <span className="block text-primary mt-1 animate-[pulse_2s_ease-in-out_infinite_0.5s]">Play harder.</span>
+          Study smarter.
+          <span className="block text-primary mt-1 overflow-hidden whitespace-nowrap border-r-4 border-primary animate-typewriter">
+            Play harder.
+          </span>
         </h1>
         
         <p className="mt-6 text-lg md:text-xl text-white/50 max-w-xl">
