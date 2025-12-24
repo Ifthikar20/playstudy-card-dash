@@ -296,7 +296,7 @@ const LandingPage = () => {
 };
 
 const FeatureCard = ({ icon, step, title, description, animationType }: { icon: React.ReactNode; step: string; title: string; description: string; animationType: 'upload' | 'game' | 'progress' }) => (
-  <div className="group p-4 md:p-6 rounded-3xl bg-[#1a1a2e]/90 border border-white/10 hover:border-primary/40 transition-all duration-300 backdrop-blur-sm shadow-xl">
+  <div className="group p-4 md:p-6 rounded-3xl bg-[#1a1a1a]/90 border border-white/10 hover:border-white/30 transition-all duration-300 backdrop-blur-sm shadow-xl">
     {/* Animated SVG Placeholder */}
     <div className="w-full h-80 md:h-96 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-white/10 mb-4 flex items-center justify-center overflow-hidden">
       {animationType === 'upload' && (
