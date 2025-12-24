@@ -12,6 +12,10 @@ import json
 import io
 import uuid
 import logging
+import base64
+import tempfile
+import subprocess
+import os
 from docx import Document
 from PyPDF2 import PdfReader
 from pptx import Presentation
@@ -387,6 +391,78 @@ def extract_text_from_content(content: str) -> str:
     return content
 
 
+def convert_pptx_to_pdf(pptx_base64: str) -> Optional[str]:
+    """
+    Convert PowerPoint (PPTX) file to PDF using LibreOffice.
+
+    Args:
+        pptx_base64: Base64-encoded PPTX file content
+
+    Returns:
+        Base64-encoded PDF file content, or None if conversion fails
+    """
+    temp_dir = None
+    try:
+        # Create temporary directory for conversion
+        temp_dir = tempfile.mkdtemp()
+        pptx_path = os.path.join(temp_dir, "presentation.pptx")
+        pdf_path = os.path.join(temp_dir, "presentation.pdf")
+
+        # Decode and write PPTX file
+        pptx_bytes = base64.b64decode(pptx_base64)
+        with open(pptx_path, 'wb') as f:
+            f.write(pptx_bytes)
+
+        # Convert using LibreOffice
+        # --headless: Run without GUI
+        # --convert-to pdf: Convert to PDF format
+        # --outdir: Output directory
+        try:
+            result = subprocess.run(
+                ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', temp_dir, pptx_path],
+                capture_output=True,
+                text=True,
+                timeout=30  # 30 second timeout
+            )
+
+            # Check if conversion succeeded
+            if result.returncode != 0:
+                logger.warning(f"LibreOffice conversion failed: {result.stderr}")
+                return None
+
+            # Check if PDF file was created
+            if not os.path.exists(pdf_path):
+                logger.warning("LibreOffice conversion completed but PDF file not found")
+                return None
+
+            # Read and encode PDF
+            with open(pdf_path, 'rb') as f:
+                pdf_bytes = f.read()
+
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            logger.info(f"Successfully converted PPTX to PDF ({len(pdf_bytes)} bytes)")
+            return pdf_base64
+
+        except subprocess.TimeoutExpired:
+            logger.warning("LibreOffice conversion timed out after 30 seconds")
+            return None
+        except FileNotFoundError:
+            logger.warning("LibreOffice not found - PPTX to PDF conversion unavailable")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error converting PPTX to PDF: {e}")
+        return None
+    finally:
+        # Clean up temporary files
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                import shutil
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp directory: {e}")
+
+
 class QuestionSchema(BaseModel):
     """Schema for a quiz question."""
     id: str
@@ -447,6 +523,7 @@ class CreateStudySessionResponse(BaseModel):
     studyContent: str
     fileContent: Optional[str] = None  # Original file (base64)
     fileType: Optional[str] = None  # File type: pdf, pptx, docx, txt
+    pdfContent: Optional[str] = None  # Converted PDF for PPTX files (base64)
     extractedTopics: List[TopicSchema]
     progress: int
     topics: int
@@ -554,6 +631,16 @@ async def create_study_session_with_ai(
                 status_code=400,
                 detail="Content is too short or empty. Please provide substantial study material (at least 50 characters)."
             )
+
+        # Convert PPTX to PDF for better rendering in Speed Run mode
+        pdf_content = None
+        if file_type == 'pptx':
+            logger.info("🔄 Converting PowerPoint to PDF for enhanced rendering...")
+            pdf_content = convert_pptx_to_pdf(file_content)
+            if pdf_content:
+                logger.info("✅ PowerPoint successfully converted to PDF")
+            else:
+                logger.warning("⚠️  PowerPoint to PDF conversion failed - will use extracted text fallback")
 
         # Check document size and use chunking for large documents
         estimated_tokens = len(extracted_text) // 4  # Rough estimate: 1 token ≈ 4 characters
@@ -756,6 +843,7 @@ Note: An EMPTY subtopics array [] means this is a LEAF NODE that will have quest
             study_content=extracted_text,  # Store the extracted text
             file_content=file_content,  # Store original file (base64)
             file_type=file_type,  # Store file type (pdf, pptx, docx, txt)
+            pdf_content=pdf_content,  # Store converted PDF for PPTX files (base64)
             topics_count=total_subtopics,
             has_full_study=True,
             has_speed_run=True,
@@ -1254,6 +1342,7 @@ REMINDER: The response MUST include questions for ALL {len(batch_keys)} topics l
             studyContent=study_session.study_content,
             fileContent=study_session.file_content,
             fileType=study_session.file_type,
+            pdfContent=study_session.pdf_content,  # Converted PDF for PPTX files
             extractedTopics=all_topics,
             progress=0,
             topics=len(all_topics),
@@ -1382,6 +1471,7 @@ async def get_study_session(
         studyContent=session.study_content or "",
         fileContent=session.file_content,
         fileType=session.file_type,
+        pdfContent=session.pdf_content,  # Converted PDF for PPTX files
         extractedTopics=result_topics,
         progress=progress,
         topics=total_subtopics,

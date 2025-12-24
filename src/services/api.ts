@@ -138,6 +138,9 @@ export interface StudySession {
   hasSpeedRun: boolean;
   hasQuiz: boolean;
   studyContent?: string;
+  fileContent?: string;  // Original file (base64)
+  fileType?: string;  // File type: pdf, pptx, docx, txt
+  pdfContent?: string;  // Converted PDF for PPTX files (base64)
   extractedTopics?: Topic[];
 }
 
@@ -511,6 +514,7 @@ export const createStudySessionWithAI = async (
       studyContent: data.studyContent,
       fileContent: data.fileContent,
       fileType: data.fileType,
+      pdfContent: data.pdfContent,  // Converted PDF for PPTX files
       extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
   } catch (error) {
@@ -581,6 +585,9 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       hasSpeedRun: data.hasSpeedRun,
       hasQuiz: false,
       studyContent: data.studyContent,
+      fileContent: data.fileContent,  // Original file (base64)
+      fileType: data.fileType,  // File type: pdf, pptx, docx, txt
+      pdfContent: data.pdfContent,  // Converted PDF for PPTX files (base64)
       extractedTopics: normalizeTopics(data.extractedTopics || []),
     };
 

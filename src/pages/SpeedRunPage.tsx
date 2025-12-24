@@ -75,6 +75,7 @@ export default function SpeedRunPage() {
   // Get file info
   const fileContent = currentSession?.fileContent;
   const fileType = currentSession?.fileType;
+  const pdfContent = currentSession?.pdfContent;  // Converted PDF for PPTX files
 
   // Helper function to recursively get all topics with questions (including sub-subtopics)
   const getAllTopicsWithQuestions = (topics: any[]): any[] => {
@@ -638,16 +639,65 @@ export default function SpeedRunPage() {
                       )}
                     </div>
                   ) : fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) ? (
-                    // For PowerPoint, show extracted content (TODO: Add slide-by-slide rendering)
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 rounded text-sm text-orange-800 dark:text-orange-200">
-                        <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
-                        <p className="text-xs opacity-80">Showing extracted content. Slide-by-slide view coming soon!</p>
+                    // For PowerPoint, use converted PDF if available, otherwise show extracted content
+                    pdfContent ? (
+                      // Render as PDF (converted from PPTX)
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="mb-4 p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded text-sm text-green-800 dark:text-green-200 w-full">
+                          <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
+                          <p className="text-xs opacity-80">Showing slides with original formatting and images</p>
+                        </div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPdfScale(Math.max(0.5, pdfScale - 0.1))}
+                          >
+                            <ChevronLeft size={16} />
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            {Math.round(pdfScale * 100)}%
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPdfScale(Math.min(2.0, pdfScale + 0.1))}
+                          >
+                            <ChevronRight size={16} />
+                          </Button>
+                        </div>
+                        <Document
+                          file={`data:application/pdf;base64,${pdfContent}`}
+                          onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                          onLoadError={(error) => console.error('Error loading PDF:', error)}
+                        >
+                          {Array.from(
+                            { length: Math.min(numPages - visiblePagesStart + 1, PAGES_PER_BATCH) },
+                            (_, index) => visiblePagesStart + index
+                          ).map((pageNumber) => (
+                            <div key={`page_${pageNumber}`} className="mb-4 shadow-md">
+                              <Page
+                                pageNumber={pageNumber}
+                                scale={pdfScale}
+                                renderTextLayer={true}
+                                renderAnnotationLayer={true}
+                              />
+                            </div>
+                          ))}
+                        </Document>
                       </div>
-                      <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
-                        {getHighlightedContent()}
+                    ) : (
+                      // Fallback to extracted content if PDF conversion not available
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 rounded text-sm text-orange-800 dark:text-orange-200">
+                          <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
+                          <p className="text-xs opacity-80">Showing extracted text. PDF rendering unavailable.</p>
+                        </div>
+                        <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
+                          {getHighlightedContent()}
+                        </div>
                       </div>
-                    </div>
+                    )
                   ) : (
                     // For other text files, show extracted content with highlighting
                     <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -660,7 +710,7 @@ export default function SpeedRunPage() {
               </Card>
 
               {/* Page progress bar */}
-              {fileType === 'pdf' && numPages > 0 && (
+              {(fileType === 'pdf' || (fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) && pdfContent)) && numPages > 0 && (
                 <div className="mt-4">
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div
