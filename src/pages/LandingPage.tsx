@@ -70,45 +70,85 @@ const LandingPage = () => {
 
       {/* How It Works */}
       <section className="relative z-10 px-6 py-24 lg:px-12">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-4">How It Works</p>
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-16">
             Three steps to smarter studying
           </h2>
-          <div className="flex flex-col gap-0">
-            <FeatureCard
-              icon={<Upload className="w-6 h-6" />}
-              step="01"
-              title="Upload Content"
-              description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
-              placeholder="/placeholder.svg"
-            />
-            
-            {/* Dotted Line Connector */}
-            <div className="flex justify-center py-4">
-              <div className="w-0.5 h-16 border-l-2 border-dashed border-primary/40" />
+          
+          <div className="relative">
+            {/* SVG Curved Path */}
+            <svg 
+              className="absolute left-0 top-0 w-full h-full pointer-events-none hidden md:block"
+              viewBox="0 0 800 1000"
+              fill="none"
+              preserveAspectRatio="xMidYMid slice"
+            >
+              {/* Curved path from Step 1 to Step 2 */}
+              <path
+                d="M 400 140 Q 400 220, 200 280 Q 50 340, 150 420"
+                stroke="hsl(var(--primary))"
+                strokeWidth="3"
+                strokeDasharray="10 8"
+                strokeLinecap="round"
+                fill="none"
+                opacity="0.4"
+              />
+              {/* Curved path from Step 2 to Step 3 */}
+              <path
+                d="M 280 540 Q 400 600, 500 660 Q 700 740, 650 820"
+                stroke="hsl(var(--primary))"
+                strokeWidth="3"
+                strokeDasharray="10 8"
+                strokeLinecap="round"
+                fill="none"
+                opacity="0.4"
+              />
+            </svg>
+
+            {/* Mobile dotted line */}
+            <div className="md:hidden absolute left-8 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-primary/30" />
+
+            <div className="flex flex-col gap-16 relative z-10">
+              {/* Step 1 - Center */}
+              <div className="flex justify-center">
+                <div className="w-full max-w-lg">
+                  <FeatureCard
+                    icon={<Upload className="w-6 h-6" />}
+                    step="01"
+                    title="Upload Content"
+                    description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
+                    placeholder="/placeholder.svg"
+                  />
+                </div>
+              </div>
+              
+              {/* Step 2 - Left */}
+              <div className="flex justify-center md:justify-start">
+                <div className="w-full max-w-lg">
+                  <FeatureCard
+                    icon={<Gamepad2 className="w-6 h-6" />}
+                    step="02"
+                    title="Choose Your Game"
+                    description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
+                    placeholder="/placeholder.svg"
+                  />
+                </div>
+              </div>
+              
+              {/* Step 3 - Right */}
+              <div className="flex justify-center md:justify-end">
+                <div className="w-full max-w-lg">
+                  <FeatureCard
+                    icon={<TrendingUp className="w-6 h-6" />}
+                    step="03"
+                    title="Track Progress"
+                    description="Watch your knowledge grow. Earn XP, unlock achievements, and master every topic."
+                    placeholder="/placeholder.svg"
+                  />
+                </div>
+              </div>
             </div>
-            
-            <FeatureCard
-              icon={<Gamepad2 className="w-6 h-6" />}
-              step="02"
-              title="Choose Your Game"
-              description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
-              placeholder="/placeholder.svg"
-            />
-            
-            {/* Dotted Line Connector */}
-            <div className="flex justify-center py-4">
-              <div className="w-0.5 h-16 border-l-2 border-dashed border-primary/40" />
-            </div>
-            
-            <FeatureCard
-              icon={<TrendingUp className="w-6 h-6" />}
-              step="03"
-              title="Track Progress"
-              description="Watch your knowledge grow. Earn XP, unlock achievements, and master every topic."
-              placeholder="/placeholder.svg"
-            />
           </div>
         </div>
       </section>
