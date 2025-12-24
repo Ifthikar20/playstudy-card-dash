@@ -131,7 +131,7 @@ class CryptoService {
     const ciphertext = await window.crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv: iv,
+        iv: new Uint8Array(iv).buffer,
         tagLength: 128  // 128-bit authentication tag
       },
       aesKey,
@@ -162,11 +162,11 @@ class CryptoService {
     const plaintext = await window.crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
-        iv: iv,
+        iv: new Uint8Array(iv).buffer,
         tagLength: 128
       },
       aesKey,
-      combined
+      new Uint8Array(combined).buffer
     );
 
     const decoder = new TextDecoder();
@@ -265,7 +265,7 @@ class CryptoService {
       // 7. Convert to base64 for transport
       const encryptedDataBase64 = this.arrayBufferToBase64(ciphertext);
       const encryptedKeyBase64 = this.arrayBufferToBase64(encryptedKey);
-      const ivBase64 = this.arrayBufferToBase64(iv);
+      const ivBase64 = this.arrayBufferToBase64(new Uint8Array(iv).buffer as ArrayBuffer);
       const authTagBase64 = this.arrayBufferToBase64(authTag);
 
       // 8. Sign the request

@@ -17,7 +17,6 @@ mermaid.initialize({
   theme: 'default',
   securityLevel: 'loose',
   fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-  suppressErrors: true, // Suppress internal errors, we'll handle them
 });
 
 /**

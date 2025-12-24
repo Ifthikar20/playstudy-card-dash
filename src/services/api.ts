@@ -125,6 +125,7 @@ export interface Topic {
   completed: boolean;
   score: number | null;
   currentQuestionIndex: number;
+  subtopics?: Topic[];
 }
 
 export interface StudySession {
@@ -138,6 +139,8 @@ export interface StudySession {
   hasSpeedRun: boolean;
   hasQuiz: boolean;
   studyContent?: string;
+  fileContent?: string; // Original file (base64)
+  fileType?: string; // File type: pdf, pptx, docx, txt
   extractedTopics?: Topic[];
 }
 
@@ -807,6 +810,7 @@ export const archiveStudySession = async (sessionId: string): Promise<void> => {
  */
 const getMockAppData = (): AppData => {
   return {
+    folders: [],
     userProfile: {
       id: 'user-1',
       name: 'Student User',

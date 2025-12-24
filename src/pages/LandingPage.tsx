@@ -163,14 +163,14 @@ const LandingPage = () => {
       </section>
 
       {/* Manifesto Section */}
-      <section className="relative z-10 px-6 py-20 lg:px-12">
-        <div className="max-w-3xl mx-auto">
-          <div className="p-8 md:p-12 rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10">
-            <p className="text-primary text-sm uppercase tracking-wider mb-4">Our Manifesto</p>
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-6 leading-relaxed">
+      <section className="relative z-10 px-6 py-24 lg:px-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="p-10 md:p-16 rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10">
+            <p className="font-handwritten text-primary text-2xl md:text-3xl mb-6">Our Manifesto</p>
+            <h2 className="font-handwritten text-4xl md:text-5xl lg:text-6xl text-white mb-8 leading-tight">
               Learning shouldn't feel like a chore.
             </h2>
-            <div className="space-y-4 text-white/60 leading-relaxed">
+            <div className="space-y-6 font-handwritten text-2xl md:text-3xl text-white/70 leading-relaxed">
               <p>
                 We believe the best learning happens when you're having fun. When curiosity takes over and studying feels like playing your favorite game.
               </p>
@@ -180,8 +180,15 @@ const LandingPage = () => {
               <p>
                 So we built PlayStudy — a place where your notes become quizzes, your slides become flashcards, and your textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning becomes something you actually want to do.
               </p>
-              <p className="text-white font-medium pt-2">
+              <p className="text-white pt-4">
                 This is studying, reimagined. This is PlayStudy.
+              </p>
+            </div>
+            
+            {/* Signature */}
+            <div className="mt-12 pt-8 border-t border-white/10">
+              <p className="font-handwritten text-4xl md:text-5xl text-primary italic">
+                — The PlayStudy Team
               </p>
             </div>
           </div>

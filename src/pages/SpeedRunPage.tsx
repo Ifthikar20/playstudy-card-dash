@@ -326,7 +326,7 @@ export default function SpeedRunPage() {
     }
 
     if (currentSession) {
-      answerQuestion(currentSession.id, currentQuestion.id, isCorrect);
+      answerQuestion(currentSession.id, currentQuestion.id, answerIndex);
     }
   };
 
