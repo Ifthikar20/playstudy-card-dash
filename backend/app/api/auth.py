@@ -21,16 +21,14 @@ router = APIRouter()
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register_user(
-    user_data: UserCreate,
-    recaptcha_token: Optional[str] = Body(None, alias="recaptchaToken"),
+    body: dict = Body(...),
     db: Session = Depends(get_db)
 ):
     """
     Register a new user account with reCAPTCHA v3 bot protection.
 
     Args:
-        user_data: User registration data (email, name, password)
-        recaptcha_token: reCAPTCHA v3 token from frontend
+        body: Request body containing email, name, password, and optional recaptchaToken
         db: Database session
 
     Returns:
@@ -39,6 +37,18 @@ async def register_user(
     Raises:
         HTTPException: If email already exists or bot detection fails
     """
+    # Parse request body
+    email = body.get("email")
+    name = body.get("name")
+    password = body.get("password")
+    recaptcha_token = body.get("recaptchaToken")
+
+    if not email or not name or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email, name, and password are required"
+        )
+
     # Verify reCAPTCHA (Layer 1: Bot Detection)
     if settings.RECAPTCHA_ENABLED and recaptcha_token:
         try:
@@ -77,7 +87,7 @@ async def register_user(
         )
 
     # Check if email already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -85,10 +95,10 @@ async def register_user(
         )
 
     # Create new user
-    hashed_password = get_password_hash(user_data.password)
+    hashed_password = get_password_hash(password)
     new_user = User(
-        email=user_data.email,
-        name=user_data.name,
+        email=email,
+        name=name,
         hashed_password=hashed_password,
         xp=0,
         level=1,
@@ -115,16 +125,14 @@ async def register_user(
 
 @router.post("/login", response_model=Token)
 async def login_user(
-    login_data: UserLogin,
-    recaptcha_token: Optional[str] = Body(None, alias="recaptchaToken"),
+    body: dict = Body(...),
     db: Session = Depends(get_db)
 ):
     """
     Authenticate a user and return JWT token with reCAPTCHA v3 bot protection.
 
     Args:
-        login_data: User login credentials (email, password)
-        recaptcha_token: reCAPTCHA v3 token from frontend
+        body: Request body containing email, password, and optional recaptchaToken
         db: Database session
 
     Returns:
@@ -133,7 +141,18 @@ async def login_user(
     Raises:
         HTTPException: If credentials are invalid or bot detection fails
     """
-    logger.info(f"🔑 Login attempt for email: {login_data.email}")
+    # Parse request body
+    email = body.get("email")
+    password = body.get("password")
+    recaptcha_token = body.get("recaptchaToken")
+
+    if not email or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email and password are required"
+        )
+
+    logger.info(f"🔑 Login attempt for email: {email}")
 
     # Verify reCAPTCHA (Layer 1: Bot Detection)
     if settings.RECAPTCHA_ENABLED and recaptcha_token:
@@ -173,10 +192,10 @@ async def login_user(
         )
 
     # Get user by email
-    user = db.query(User).filter(User.email == login_data.email).first()
+    user = db.query(User).filter(User.email == email).first()
 
     if not user:
-        logger.warning(f"🔑 Login failed: User not found for email {login_data.email}")
+        logger.warning(f"🔑 Login failed: User not found for email {email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -187,21 +206,21 @@ async def login_user(
     logger.debug(f"🔑 Stored hash (first 20 chars): {user.hashed_password[:20]}...")
 
     # Verify password
-    password_valid = verify_password(login_data.password, user.hashed_password)
+    password_valid = verify_password(password, user.hashed_password)
 
     if not password_valid:
-        logger.warning(f"🔑 Login failed: Invalid password for {login_data.email}")
+        logger.warning(f"🔑 Login failed: Invalid password for {email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    logger.info(f"🔑 Password verified successfully for {login_data.email}")
+    logger.info(f"🔑 Password verified successfully for {email}")
 
     # Check if user is active
     if not user.is_active:
-        logger.warning(f"🔑 Login failed: Account inactive for {login_data.email}")
+        logger.warning(f"🔑 Login failed: Account inactive for {email}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is inactive",
@@ -216,7 +235,7 @@ async def login_user(
         expires_delta=access_token_expires,
     )
 
-    logger.info(f"🔑 Login successful for {login_data.email}")
+    logger.info(f"🔑 Login successful for {email}")
 
     return {
         "access_token": access_token,

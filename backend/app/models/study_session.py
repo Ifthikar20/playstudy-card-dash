@@ -59,6 +59,7 @@ class StudySession(Base):
     study_content = Column(Text, nullable=True)  # Extracted text content
     file_content = Column(Text, nullable=True)  # Original uploaded file (base64)
     file_type = Column(String, nullable=True)  # File type: pdf, pptx, docx, txt
+    pdf_content = Column(Text, nullable=True)  # Converted PDF for PPTX files (base64)
     duration = Column(Integer, nullable=False, default=0)  # in seconds
     progress = Column(Integer, default=0)  # percentage 0-100
     topics_count = Column(Integer, default=0)  # Number of topics in session

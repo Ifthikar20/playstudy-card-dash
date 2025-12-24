@@ -75,6 +75,7 @@ export default function SpeedRunPage() {
   // Get file info
   const fileContent = currentSession?.fileContent;
   const fileType = currentSession?.fileType;
+  const pdfContent = currentSession?.pdfContent;  // Converted PDF for PPTX files
 
   // Helper function to recursively get all topics with questions (including sub-subtopics)
   const getAllTopicsWithQuestions = (topics: any[]): any[] => {
@@ -244,24 +245,50 @@ export default function SpeedRunPage() {
     if (hasAnswered && currentQuestion?.sourceText) {
       setHighlightedText(currentQuestion.sourceText);
 
-      // Auto-scroll to the page where the answer is found
-      if (currentQuestion.sourcePage && fileType === 'pdf') {
+      // Auto-scroll to the page where the answer is found (for PDF and PPTX-converted PDFs)
+      const isPdfDocument = fileType === 'pdf';
+      const isPptxWithPdf = fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) && pdfContent;
+
+      if (currentQuestion.sourcePage && (isPdfDocument || isPptxWithPdf)) {
         setCurrentPageNumber(currentQuestion.sourcePage);
         // Also update visible pages to ensure the page is loaded
         setVisiblePagesStart(Math.max(1, currentQuestion.sourcePage - 2));
 
-        // Smooth scroll to top of document viewer after a brief delay
+        // Smooth scroll to the highlighted page after a brief delay
         setTimeout(() => {
-          const documentViewer = document.querySelector('.h-full.overflow-y-auto.p-6.bg-muted\\/20');
-          if (documentViewer) {
-            documentViewer.scrollTo({ top: 0, behavior: 'smooth' });
+          // Find the specific page element
+          const pageElement = document.querySelector(`[data-page-number="${currentQuestion.sourcePage}"]`);
+          if (pageElement) {
+            pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            // Fallback: scroll to top of document viewer
+            const documentViewer = document.querySelector('.h-full.overflow-y-auto.p-6.bg-muted\\/20');
+            if (documentViewer) {
+              documentViewer.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }
-        }, 100);
+        }, 300);
+      } else if (fileType && ['docx', 'doc'].includes(fileType.toLowerCase())) {
+        // For DOCX files, scroll to the highlighted text after a brief delay
+        setTimeout(() => {
+          const highlightedMark = document.querySelector('mark');
+          if (highlightedMark) {
+            highlightedMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 300);
+      } else {
+        // For text and other content, scroll to the highlighted element
+        setTimeout(() => {
+          const highlightedMark = document.querySelector('mark');
+          if (highlightedMark) {
+            highlightedMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 300);
       }
     } else {
       setHighlightedText(null);
     }
-  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText, currentQuestion?.sourcePage, fileType]);
+  }, [currentQuestionIndex, hasAnswered, currentQuestion?.sourceText, currentQuestion?.sourcePage, fileType, pdfContent]);
 
   // Render Word documents when loaded
   useEffect(() => {
@@ -560,9 +587,18 @@ export default function SpeedRunPage() {
                             const pageNum = visiblePagesStart + index;
                             if (pageNum > numPages) return null;
                             return (
-                              <div key={pageNum} className="flex flex-col items-center border-b pb-4 last:border-b-0">
+                              <div
+                                key={pageNum}
+                                data-page-number={pageNum}
+                                className="flex flex-col items-center border-b pb-4 last:border-b-0"
+                              >
                                 <div className="text-sm text-muted-foreground mb-2 font-medium">
                                   Page {pageNum} of {numPages}
+                                  {hasAnswered && currentQuestion?.sourcePage === pageNum && (
+                                    <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400 font-semibold animate-pulse">
+                                      📍 Answer found here
+                                    </span>
+                                  )}
                                 </div>
                                 <Page
                                   pageNumber={pageNum}
@@ -638,16 +674,101 @@ export default function SpeedRunPage() {
                       )}
                     </div>
                   ) : fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) ? (
-                    // For PowerPoint, show extracted content (TODO: Add slide-by-slide rendering)
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
-                      <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 rounded text-sm text-orange-800 dark:text-orange-200">
-                        <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
-                        <p className="text-xs opacity-80">Showing extracted content. Slide-by-slide view coming soon!</p>
+                    // For PowerPoint, use converted PDF if available, otherwise show extracted content
+                    pdfContent ? (
+                      // Render as PDF (converted from PPTX)
+                      <div className="flex flex-col items-center gap-4">
+                        {/* Add custom CSS for PPTX PDF text highlighting */}
+                        {highlightedText && (
+                          <style>{`
+                            .react-pdf__Page__textContent mark {
+                              background-color: #fde047 !important;
+                              color: #713f12 !important;
+                              padding: 4px 8px;
+                              border-radius: 4px;
+                              font-weight: 600;
+                              animation: highlight-pulse 2s ease-in-out 3;
+                            }
+                            @keyframes highlight-pulse {
+                              0%, 100% { background-color: #fde047; }
+                              50% { background-color: #fbbf24; }
+                            }
+                          `}</style>
+                        )}
+                        <div className="mb-4 p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded text-sm text-green-800 dark:text-green-200 w-full">
+                          <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
+                          <p className="text-xs opacity-80">Showing slides with original formatting and images</p>
+                        </div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPdfScale(Math.max(0.5, pdfScale - 0.1))}
+                          >
+                            <ChevronLeft size={16} />
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            {Math.round(pdfScale * 100)}%
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPdfScale(Math.min(2.0, pdfScale + 0.1))}
+                          >
+                            <ChevronRight size={16} />
+                          </Button>
+                        </div>
+                        <Document
+                          file={`data:application/pdf;base64,${pdfContent}`}
+                          onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                          onLoadError={(error) => console.error('Error loading PDF:', error)}
+                        >
+                          {Array.from(
+                            { length: Math.min(numPages - visiblePagesStart + 1, PAGES_PER_BATCH) },
+                            (_, index) => visiblePagesStart + index
+                          ).map((pageNumber) => (
+                            <div
+                              key={`page_${pageNumber}`}
+                              data-page-number={pageNumber}
+                              className="mb-4 shadow-md"
+                            >
+                              <div className="text-sm text-muted-foreground mb-2 font-medium text-center">
+                                Slide {pageNumber} of {numPages}
+                                {hasAnswered && currentQuestion?.sourcePage === pageNumber && (
+                                  <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400 font-semibold animate-pulse">
+                                    📍 Answer found here
+                                  </span>
+                                )}
+                              </div>
+                              <Page
+                                pageNumber={pageNumber}
+                                scale={pdfScale}
+                                renderTextLayer={true}
+                                renderAnnotationLayer={true}
+                                customTextRenderer={(textItem) => {
+                                  // Highlight matching text in PPTX PDF
+                                  if (highlightedText && textItem.str.includes(highlightedText)) {
+                                    return `<mark>${textItem.str}</mark>`;
+                                  }
+                                  return textItem.str;
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </Document>
                       </div>
-                      <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
-                        {getHighlightedContent()}
+                    ) : (
+                      // Fallback to extracted content if PDF conversion not available
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-950/20 border-l-4 border-orange-500 rounded text-sm text-orange-800 dark:text-orange-200">
+                          <p className="font-medium mb-1">📊 PowerPoint Presentation</p>
+                          <p className="text-xs opacity-80">Showing extracted text. PDF rendering unavailable.</p>
+                        </div>
+                        <div className="font-mono text-sm" style={{ whiteSpace: 'pre-wrap', tabSize: 4, wordBreak: 'break-word' }}>
+                          {getHighlightedContent()}
+                        </div>
                       </div>
-                    </div>
+                    )
                   ) : (
                     // For other text files, show extracted content with highlighting
                     <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -660,7 +781,7 @@ export default function SpeedRunPage() {
               </Card>
 
               {/* Page progress bar */}
-              {fileType === 'pdf' && numPages > 0 && (
+              {(fileType === 'pdf' || (fileType && ['pptx', 'ppt'].includes(fileType.toLowerCase()) && pdfContent)) && numPages > 0 && (
                 <div className="mt-4">
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div
