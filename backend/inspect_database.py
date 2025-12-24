@@ -71,7 +71,8 @@ def main():
             print(f"  {'-'*12} {'-'*35} {'-'*20} {'-'*4} {'-'*6}")
             for session in sessions:
                 user = db.query(User).filter(User.id == session.user_id).first()
-                q_count = db.query(Question).filter(Question.study_session_id == session.id).count()
+                # Questions are linked via topics
+                q_count = db.query(Question).join(Topic).filter(Topic.study_session_id == session.id).count()
                 t_count = db.query(Topic).filter(Topic.study_session_id == session.id).count()
                 title = session.title[:35] if session.title else "Untitled"
                 user_name = user.name[:20] if user else "Unknown"
@@ -84,12 +85,10 @@ def main():
         result = db.execute(text("""
             SELECT
                 s.title,
-                COUNT(q.id) as question_count,
-                SUM(CASE WHEN q.difficulty = 'easy' THEN 1 ELSE 0 END) as easy,
-                SUM(CASE WHEN q.difficulty = 'medium' THEN 1 ELSE 0 END) as medium,
-                SUM(CASE WHEN q.difficulty = 'hard' THEN 1 ELSE 0 END) as hard
+                COUNT(q.id) as question_count
             FROM study_sessions s
-            LEFT JOIN questions q ON q.study_session_id = s.id
+            LEFT JOIN topics t ON t.study_session_id = s.id
+            LEFT JOIN questions q ON q.topic_id = t.id
             GROUP BY s.id, s.title
             HAVING COUNT(q.id) > 0
             ORDER BY COUNT(q.id) DESC
@@ -98,11 +97,11 @@ def main():
 
         rows = result.fetchall()
         if rows:
-            print(f"  {'Session Title':<40} {'Total':<7} {'Easy':<6} {'Med':<6} {'Hard':<6}")
-            print(f"  {'-'*40} {'-'*7} {'-'*6} {'-'*6} {'-'*6}")
+            print(f"  {'Session Title':<50} {'Total Questions':<15}")
+            print(f"  {'-'*50} {'-'*15}")
             for row in rows:
-                title = (row[0][:40] if row[0] else "Untitled")
-                print(f"  {title:<40} {row[1]:<7} {row[2]:<6} {row[3]:<6} {row[4]:<6}")
+                title = (row[0][:50] if row[0] else "Untitled")
+                print(f"  {title:<50} {row[1]:<15}")
         else:
             print("  No questions found")
 
