@@ -216,7 +216,7 @@ const LandingPage = () => {
 
       {/* Manifesto Section */}
       <section className="relative z-10 px-6 py-24 lg:px-12">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-2xl mx-auto">
           <div className="p-10 md:p-16 rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10">
             <p className="font-handwritten text-primary text-xs md:text-sm mb-4">Our Manifesto</p>
             <h2 className="font-handwritten text-xl md:text-2xl lg:text-3xl text-white mb-6 leading-tight">
