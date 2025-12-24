@@ -235,7 +235,7 @@ async def login_user(
         expires_delta=access_token_expires,
     )
 
-    logger.info(f"🔑 Login successful for {login_data.email}")
+    logger.info(f"🔑 Login successful for {email}")
 
     return {
         "access_token": access_token,
