@@ -67,27 +67,33 @@ const LandingPage = () => {
       </section>
 
       {/* How It Works */}
-      <section className="relative z-10 px-6 py-16 lg:px-12">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-10">How It Works</p>
-          <div className="grid md:grid-cols-3 gap-6">
+      <section className="relative z-10 px-6 py-24 lg:px-12">
+        <div className="max-w-6xl mx-auto">
+          <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-4">How It Works</p>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-16">
+            Three steps to smarter studying
+          </h2>
+          <div className="grid md:grid-cols-3 gap-8">
             <FeatureCard
-              icon={<Upload className="w-5 h-5" />}
+              icon={<Upload className="w-6 h-6" />}
               step="01"
               title="Upload Content"
               description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
+              placeholder="/placeholder.svg"
             />
             <FeatureCard
-              icon={<Gamepad2 className="w-5 h-5" />}
+              icon={<Gamepad2 className="w-6 h-6" />}
               step="02"
               title="Choose Your Game"
               description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
+              placeholder="/placeholder.svg"
             />
             <FeatureCard
-              icon={<TrendingUp className="w-5 h-5" />}
+              icon={<TrendingUp className="w-6 h-6" />}
               step="03"
               title="Track Progress"
               description="Watch your knowledge grow. Earn XP, unlock achievements, and master every topic."
+              placeholder="/placeholder.svg"
             />
           </div>
         </div>
@@ -235,16 +241,21 @@ const LandingPage = () => {
   );
 };
 
-const FeatureCard = ({ icon, step, title, description }: { icon: React.ReactNode; step: string; title: string; description: string }) => (
-  <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors">
-    <div className="flex items-center gap-3 mb-4">
-      <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+const FeatureCard = ({ icon, step, title, description, placeholder }: { icon: React.ReactNode; step: string; title: string; description: string; placeholder: string }) => (
+  <div className="group p-8 rounded-3xl bg-white/[0.03] border border-white/10 hover:bg-white/[0.06] transition-all duration-300 hover:border-primary/30">
+    {/* Placeholder Image Area */}
+    <div className="w-full h-48 rounded-2xl bg-white/[0.05] border border-white/10 mb-6 flex items-center justify-center overflow-hidden">
+      <img src={placeholder} alt={title} className="w-20 h-20 opacity-30" />
+    </div>
+    
+    <div className="flex items-center gap-4 mb-4">
+      <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary/30 transition-colors">
         {icon}
       </div>
-      <span className="text-white/30 text-sm font-mono">{step}</span>
+      <span className="text-primary text-3xl font-bold font-mono">{step}</span>
     </div>
-    <h3 className="text-white font-semibold mb-2">{title}</h3>
-    <p className="text-white/50 text-sm leading-relaxed">{description}</p>
+    <h3 className="text-white text-xl font-semibold mb-3">{title}</h3>
+    <p className="text-white/50 text-base leading-relaxed">{description}</p>
   </div>
 );
 
