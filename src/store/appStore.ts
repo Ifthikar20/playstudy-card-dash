@@ -60,6 +60,7 @@ export interface StudySession {
   studyContent?: string;
   fileContent?: string; // Original file (base64)
   fileType?: string; // File type: pdf, pptx, docx, txt
+  pdfContent?: string; // Converted PDF for PPTX files
   extractedTopics?: Topic[];
   folderId?: number | null;
 }
