@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +25,7 @@ import { useAppStore } from "@/store/appStore";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicQuizCard } from "@/components/TopicQuizCard";
 import { TopicSummary } from "@/components/TopicSummary";
-import { getStudySession } from "@/services/api";
+import { getStudySession, generateAllRemainingQuestions } from "@/services/api";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 // Modern node styles with gradients and shadows - compact sizing
@@ -208,6 +208,9 @@ export default function FullStudyPage() {
   const [isLoadingSession, setIsLoadingSession] = useState(false);
 
   // Load session data based on URL parameter
+  // Track if we've started background question generation
+  const questionGenerationStarted = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const loadSession = async () => {
       // If sessionId is in URL, load that session
@@ -236,6 +239,29 @@ export default function FullStudyPage() {
 
             // Update the current session with the full data
             setCurrentSession(fullSession);
+
+            // Start background question generation if not already started for this session
+            if (!questionGenerationStarted.current.has(sessionId)) {
+              questionGenerationStarted.current.add(sessionId);
+              console.log('🚀 Starting background question generation for session:', sessionId);
+
+              // Start generating remaining questions in the background
+              generateAllRemainingQuestions(sessionId, (generated, remaining) => {
+                console.log(`📊 Progress: Generated ${generated} topics, ${remaining} remaining`);
+
+                // Refresh session data periodically to show new questions
+                if (generated > 0) {
+                  getStudySession(sessionId).then(updated => {
+                    console.log('🔄 Refreshed session with new questions');
+                    setCurrentSession(updated);
+                  }).catch(err => {
+                    console.error('❌ Failed to refresh session:', err);
+                  });
+                }
+              }).catch(err => {
+                console.error('❌ Background question generation failed:', err);
+              });
+            }
           } catch (error: any) {
             console.error('❌ Failed to load session:', error);
             // If loading fails, stay on the current screen (will show upload)

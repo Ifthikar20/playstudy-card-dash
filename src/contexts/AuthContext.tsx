@@ -12,8 +12,8 @@ interface AuthContextType {
   user: TokenPayload | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<AuthResponse>;
-  register: (email: string, name: string, password: string) => Promise<AuthResponse>;
+  login: (email: string, password: string, recaptchaToken?: string) => Promise<AuthResponse>;
+  register: (email: string, name: string, password: string, recaptchaToken?: string) => Promise<AuthResponse>;
   logout: () => void;
   refreshAuth: () => void;
 }
@@ -75,10 +75,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   /**
    * Login user
    */
-  const login = async (email: string, password: string): Promise<AuthResponse> => {
+  const login = async (
+    email: string,
+    password: string,
+    recaptchaToken?: string
+  ): Promise<AuthResponse> => {
     setIsLoading(true);
     try {
-      const result = await authService.login({ email, password });
+      const result = await authService.login({ email, password, recaptchaToken });
 
       if (result.success) {
         const currentUser = authService.getCurrentUser();
@@ -104,11 +108,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (
     email: string,
     name: string,
-    password: string
+    password: string,
+    recaptchaToken?: string
   ): Promise<AuthResponse> => {
     setIsLoading(true);
     try {
-      const result = await authService.register({ email, name, password });
+      const result = await authService.register({ email, name, password, recaptchaToken });
 
       if (result.success) {
         const currentUser = authService.getCurrentUser();
