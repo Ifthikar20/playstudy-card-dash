@@ -96,7 +96,7 @@ const LandingPage = () => {
               />
               {/* Curved path from Step 2 to Step 3 */}
               <path
-                d="M 350 1000 Q 200 1080, 300 1150 Q 450 1250, 650 1200"
+                d="M 250 850 Q 100 950, 200 1050 Q 350 1150, 500 1100 Q 700 1050, 750 1150"
                 stroke="hsl(var(--primary))"
                 strokeWidth="3"
                 strokeDasharray="12 10"
