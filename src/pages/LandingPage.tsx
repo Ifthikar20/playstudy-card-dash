@@ -70,12 +70,12 @@ const LandingPage = () => {
 
       {/* How It Works */}
       <section className="relative z-10 px-6 py-24 lg:px-12">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-4">How It Works</p>
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-16">
             Three steps to smarter studying
           </h2>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="flex flex-col gap-0">
             <FeatureCard
               icon={<Upload className="w-6 h-6" />}
               step="01"
@@ -83,6 +83,12 @@ const LandingPage = () => {
               description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
               placeholder="/placeholder.svg"
             />
+            
+            {/* Dotted Line Connector */}
+            <div className="flex justify-center py-4">
+              <div className="w-0.5 h-16 border-l-2 border-dashed border-primary/40" />
+            </div>
+            
             <FeatureCard
               icon={<Gamepad2 className="w-6 h-6" />}
               step="02"
@@ -90,6 +96,12 @@ const LandingPage = () => {
               description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
               placeholder="/placeholder.svg"
             />
+            
+            {/* Dotted Line Connector */}
+            <div className="flex justify-center py-4">
+              <div className="w-0.5 h-16 border-l-2 border-dashed border-primary/40" />
+            </div>
+            
             <FeatureCard
               icon={<TrendingUp className="w-6 h-6" />}
               step="03"
