@@ -51,13 +51,13 @@ echo ""
 # Get Security Group IDs
 print_step "Retrieving security group IDs..."
 RDS_SG_ID=$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=${PROJECT_NAME}-rds-sg" \
+    --filters "Name=group-name,Values=${PROJECT_NAME}-rds" \
     --query 'SecurityGroups[0].GroupId' \
     --output text \
     --region $AWS_REGION)
 
 REDIS_SG_ID=$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=${PROJECT_NAME}-redis-sg" \
+    --filters "Name=group-name,Values=${PROJECT_NAME}-redis" \
     --query 'SecurityGroups[0].GroupId' \
     --output text \
     --region $AWS_REGION)
