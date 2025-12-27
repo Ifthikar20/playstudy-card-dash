@@ -36,6 +36,7 @@ See [Backend Implementation Guide](./BACKEND_IMPLEMENTATION.md) for detailed set
 - **[Backend Implementation](./BACKEND_IMPLEMENTATION.md)** - Complete Python FastAPI backend with security features
 - **[Security Checklist](./SECURITY_CHECKLIST.md)** - Comprehensive security implementation checklist
 - **[Flashcard/Workflow Feature](./FLASHCARD_WORKFLOW_FEATURE.md)** - 🆕 Skill-tree study mode with spaced repetition
+  - [⚡ Quick Add: Flashcard Node](./ADDING_FLASHCARD_NODE.md) - Add to existing React Flow (2-3 hours)
   - [Backend Implementation](./FLASHCARD_BACKEND_IMPLEMENTATION.md) - Database models, API endpoints, SM-2 algorithm
   - [Frontend Implementation](./FLASHCARD_FRONTEND_IMPLEMENTATION.md) - React components, workflow visualization, UI
 - **[WebSocket Implementation](./WEBSOCKET_IMPLEMENTATION.md)** - Real-time features with WebSockets
