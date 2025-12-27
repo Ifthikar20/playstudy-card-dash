@@ -35,15 +35,33 @@ See [Backend Implementation Guide](./BACKEND_IMPLEMENTATION.md) for detailed set
 - **[API Integration Guide](./API_INTEGRATION.md)** - How the consolidated API architecture works
 - **[Backend Implementation](./BACKEND_IMPLEMENTATION.md)** - Complete Python FastAPI backend with security features
 - **[Security Checklist](./SECURITY_CHECKLIST.md)** - Comprehensive security implementation checklist
+- **[Flashcard/Workflow Feature](./FLASHCARD_WORKFLOW_FEATURE.md)** - 🆕 Skill-tree study mode with spaced repetition
+  - [Backend Implementation](./FLASHCARD_BACKEND_IMPLEMENTATION.md) - Database models, API endpoints, SM-2 algorithm
+  - [Frontend Implementation](./FLASHCARD_FRONTEND_IMPLEMENTATION.md) - React components, workflow visualization, UI
+- **[WebSocket Implementation](./WEBSOCKET_IMPLEMENTATION.md)** - Real-time features with WebSockets
 
 ### Key Features
 
-✅ **AI-Powered Mentor Mode** 🎙️ NEW!
+✅ **Skill-Tree Workflow with Spaced Repetition** 🎯 NEW!
+- Visual skill-tree/workflow study mode with prerequisite tracking
+- AI-generated flashcards (3-5 per topic) with spaced repetition (SM-2 algorithm)
+- Interactive workflow visualization showing learning progression
+- Separate quiz and flashcard review nodes
+- Adaptive review scheduling based on performance
+- See [Flashcard/Workflow Feature Guide](./FLASHCARD_WORKFLOW_FEATURE.md) for details
+
+✅ **AI-Powered Mentor Mode** 🎙️
 - Multi-provider Text-to-Speech support (OpenAI TTS, Google Cloud TTS, Browser TTS)
 - AI-narrated teaching experience with interactive voice
 - Switch between providers and voices in real-time
 - Cost-effective options for production deployment
 - See [TTS Integration Guide](./TTS_INTEGRATION.md) for setup details
+
+✅ **Real-Time Features with WebSockets** 🔌
+- Real-time study session sync across devices
+- Multiplayer game states and live leaderboards
+- Collaborative learning with instant updates
+- See [WebSocket Implementation Guide](./WEBSOCKET_IMPLEMENTATION.md) for details
 
 ✅ **Single API Call Architecture**
 - Consolidated `/api/app-data` endpoint returns all data in ONE request
