@@ -138,12 +138,66 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
+## 🚀 How can I deploy this project?
 
-You can deploy this project using any modern hosting platform that supports Vite/React applications, such as:
-- Vercel
-- Netlify
-- AWS Amplify
-- Cloudflare Pages
+### Quick Deploy to AWS Amplify (Recommended - 5 Minutes)
 
-Build the production bundle with `npm run build` and deploy the `dist` folder.
+**Frontend Deployment (Easiest):**
+- 📖 [Quick Start Guide](./QUICK_START_AMPLIFY.md) - Deploy in 5 minutes
+- 📚 [Complete Amplify Guide](./AWS_AMPLIFY_COMPLETE_DEPLOYMENT.md) - Full deployment with backend integration
+- 💰 Cost: $4-6/month (free tier available)
+
+### Full-Stack Deployment Options
+
+**Option 1: AWS ECS (Production-Ready)**
+- 📖 [AWS ECS Deployment Guide](./AWS_ECS_DEPLOYMENT_GUIDE.md) - Complete infrastructure setup
+- 💰 Cost: $100-136/month (includes backend, database, Redis)
+- ✅ Best for: Production applications with high traffic
+
+**Option 2: Hybrid Approach (Recommended for Most)**
+- Frontend: AWS Amplify ($4-6/month)
+- Backend: AWS ECS or EC2 ($30-60/month)
+- Total: ~$40-70/month
+
+### Deployment Guides
+
+| Guide | What It Deploys | Estimated Time | Monthly Cost |
+|-------|----------------|----------------|--------------|
+| [Quick Start Amplify](./QUICK_START_AMPLIFY.md) | Frontend only | 5 minutes | $4-6 (+ free tier) |
+| [Complete Amplify](./AWS_AMPLIFY_COMPLETE_DEPLOYMENT.md) | Frontend + Backend connection | 30 minutes | $4-6 (frontend) |
+| [AWS ECS Guide](./AWS_ECS_DEPLOYMENT_GUIDE.md) | Full stack (all services) | 2-3 hours | $100-136 |
+| [Cost Analysis](./COST_ANALYSIS.md) | Pricing breakdown | - | - |
+
+### Other Deployment Options
+
+You can also deploy using:
+- **Vercel** - Frontend only, automatic deployments
+- **Netlify** - Frontend only, similar to Amplify
+- **Cloudflare Pages** - Frontend with edge functions
+- **Traditional Hosting** - Build with `npm run build` and deploy the `dist` folder
+
+### Prerequisites for AWS Deployment
+
+- AWS account ([Sign up](https://aws.amazon.com))
+- GitHub repository (already set up)
+- AWS CLI installed (for ECS deployment)
+- Docker (for backend deployment)
+
+### Quick Start Commands
+
+```bash
+# Build for production
+npm run build
+
+# Deploy to Amplify (using helper script)
+./deploy-amplify.sh
+
+# Or follow the Quick Start Guide
+# See: QUICK_START_AMPLIFY.md
+```
+
+### Need Help?
+
+- 💬 [Create an Issue](https://github.com/Ifthikar20/playstudy-card-dash/issues)
+- 📚 [AWS Amplify Docs](https://docs.amplify.aws)
+- 🔧 [AWS ECS Docs](https://docs.aws.amazon.com/ecs/)
