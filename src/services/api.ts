@@ -603,8 +603,93 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 };
 
 /**
+ * Stream question generation using Server-Sent Events (SSE)
+ * Provides real-time updates as questions are generated in the background
+ */
+export const streamQuestionGeneration = (
+  sessionId: string,
+  onProgress: (progress: {
+    batchNumber: number;
+    generated: number;
+    remaining: number;
+    totalQuestions: number;
+    totalFlashcards: number;
+    cumulativeQuestions: number;
+    cumulativeFlashcards: number;
+    hasMore: boolean;
+  }) => void,
+  onComplete: (data: {
+    totalQuestions: number;
+    totalFlashcards: number;
+    batchesCompleted: number;
+  }) => void,
+  onError: (error: string) => void
+): (() => void) => {
+  const token = getAuthToken();
+
+  if (!token) {
+    onError('Authentication required');
+    return () => {};
+  }
+
+  // Create EventSource connection (token passed via query param since EventSource doesn't support headers)
+  const eventSource = new EventSource(
+    `${API_URL}/study-sessions/${sessionId}/generate-more-questions-stream?token=${token}`,
+    { withCredentials: true }
+  );
+
+  console.log(`🔌 SSE: Connected to question generation stream for session ${sessionId}`);
+
+  // Handle 'start' event
+  eventSource.addEventListener('start', (event) => {
+    const data = JSON.parse(event.data);
+    console.log(`🚀 SSE: Generation started - ${data.totalRemaining} topics remaining`);
+  });
+
+  // Handle 'batch_start' event
+  eventSource.addEventListener('batch_start', (event) => {
+    const data = JSON.parse(event.data);
+    console.log(`⏳ SSE: Batch ${data.batchNumber} starting - ${data.topicsInBatch} topics in this batch`);
+  });
+
+  // Handle 'progress' event (MAIN EVENT - triggers UI update)
+  eventSource.addEventListener('progress', (event) => {
+    const data = JSON.parse(event.data);
+    console.log(`📊 SSE: Batch ${data.batchNumber} complete - Generated ${data.generated} topics (${data.totalQuestions}Q, ${data.totalFlashcards}F). Remaining: ${data.remaining}`);
+
+    // Call the progress callback with the data
+    onProgress(data);
+
+    console.log('🔄 UI refreshed with new questions from SSE');
+  });
+
+  // Handle 'complete' event
+  eventSource.addEventListener('complete', (event) => {
+    const data = JSON.parse(event.data);
+    console.log(`🎉 SSE: Generation complete! Total: ${data.totalQuestions}Q, ${data.totalFlashcards}F in ${data.batchesCompleted} batches`);
+
+    eventSource.close();
+    onComplete(data);
+  });
+
+  // Handle 'error' event
+  eventSource.addEventListener('error', (event) => {
+    console.error('❌ SSE: Stream connection failed', event);
+    eventSource.close();
+    onError('Stream connection failed');
+  });
+
+  // Return cleanup function
+  return () => {
+    console.log('🔌 SSE: Closing connection');
+    eventSource.close();
+  };
+};
+
+/**
  * Generate more questions for remaining subtopics (automatic progressive loading)
  * This should be called automatically after session creation to load all remaining questions
+ * @deprecated Use streamQuestionGeneration instead for real-time updates
  */
 export const generateAllRemainingQuestions = async (
   sessionId: string,

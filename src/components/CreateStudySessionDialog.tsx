@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
-import { createStudySessionWithAI, analyzeContent, ContentAnalysis, generateAllRemainingQuestions } from "@/services/api";
+import { createStudySessionWithAI, analyzeContent, ContentAnalysis, streamQuestionGeneration } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
@@ -57,6 +57,12 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [createdSession, setCreatedSession] = useState<any>(null);
   const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState({
+    generated: 0,
+    remaining: 0,
+    totalQuestions: 0,
+    inProgress: false
+  });
 
   // Sarcastic/playful loading messages
   const loadingMessages = [
@@ -190,21 +196,48 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
       setIsProcessing(false);
       setStep("select-mode");
 
-      // Start loading remaining questions automatically in background
-      generateAllRemainingQuestions(newSession.id, (generated, remaining) => {
-        console.log(`📊 Progress: Generated ${generated} more subtopics, ${remaining} remaining`);
+      // Start SSE stream for background question generation
+      streamQuestionGeneration(
+        newSession.id,
+        (progress) => {
+          console.log(`📊 SSE Progress - Batch ${progress.batchNumber}`);
 
-        // Show toast when all done
-        if (remaining === 0) {
+          // Update progress state (no need to refetch - SSE pushes updates)
+          setGenerationProgress({
+            generated: progress.generated,
+            remaining: progress.remaining,
+            totalQuestions: progress.cumulativeQuestions,
+            inProgress: progress.hasMore
+          });
+        },
+        (completionData) => {
           toast({
             title: "All Questions Ready!",
-            description: "All questions have been generated for this session.",
+            description: `Session complete with ${completionData.totalQuestions} questions and ${completionData.totalFlashcards} flashcards.`,
+          });
+
+          setGenerationProgress({
+            generated: 0,
+            remaining: 0,
+            totalQuestions: 0,
+            inProgress: false
+          });
+        },
+        (error) => {
+          toast({
+            title: "Generation Error",
+            description: error,
+            variant: "destructive",
+          });
+
+          setGenerationProgress({
+            generated: 0,
+            remaining: 0,
+            totalQuestions: 0,
+            inProgress: false
           });
         }
-      }).catch((error) => {
-        console.error('Failed to generate remaining questions:', error);
-        // Don't show error toast - initial questions are already available
-      });
+      );
     } catch (error: any) {
       setIsProcessing(false);
       toast({

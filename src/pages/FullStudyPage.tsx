@@ -25,8 +25,9 @@ import { useAppStore } from "@/store/appStore";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicQuizCard } from "@/components/TopicQuizCard";
 import { TopicSummary } from "@/components/TopicSummary";
-import { getStudySession, generateAllRemainingQuestions } from "@/services/api";
+import { getStudySession, streamQuestionGeneration } from "@/services/api";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { useToast } from "@/hooks/use-toast";
 
 // Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
@@ -189,6 +190,7 @@ const TopicTreeItem: React.FC<TopicTreeItemProps> = ({
 export default function FullStudyPage() {
   // Get sessionId from URL params
   const { sessionId } = useParams<{ sessionId?: string }>();
+  const { toast } = useToast();
 
   // Use explicit selector to ensure re-renders on currentSession changes
   const currentSession = useAppStore(state => state.currentSession);
@@ -245,22 +247,44 @@ export default function FullStudyPage() {
               questionGenerationStarted.current.add(sessionId);
               console.log('🚀 Starting background question generation for session:', sessionId);
 
-              // Start generating remaining questions in the background
-              generateAllRemainingQuestions(sessionId, (generated, remaining) => {
-                console.log(`📊 Progress: Generated ${generated} topics, ${remaining} remaining`);
+              // Start SSE stream for real-time question generation
+              const cleanup = streamQuestionGeneration(
+                sessionId,
+                (progress) => {
+                  console.log(`📊 SSE Progress - Batch ${progress.batchNumber}`);
 
-                // Refresh session data periodically to show new questions
-                if (generated > 0) {
+                  // Refresh session to show new questions
                   getStudySession(sessionId).then(updated => {
                     console.log('🔄 Refreshed session with new questions');
                     setCurrentSession(updated);
                   }).catch(err => {
                     console.error('❌ Failed to refresh session:', err);
                   });
+                },
+                (completionData) => {
+                  // Final refresh and toast notification
+                  getStudySession(sessionId).then(updated => {
+                    setCurrentSession(updated);
+                  });
+
+                  toast({
+                    title: "All Questions Ready!",
+                    description: `Generated ${completionData.totalQuestions} questions and ${completionData.totalFlashcards} flashcards across ${completionData.batchesCompleted} batches.`,
+                  });
+                },
+                (error) => {
+                  toast({
+                    title: "Generation Error",
+                    description: error,
+                    variant: "destructive",
+                  });
                 }
-              }).catch(err => {
-                console.error('❌ Background question generation failed:', err);
-              });
+              );
+
+              // Store cleanup function to be called on unmount
+              return () => {
+                cleanup();
+              };
             }
           } catch (error: any) {
             console.error('❌ Failed to load session:', error);
