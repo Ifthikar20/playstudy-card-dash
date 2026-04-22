@@ -17,6 +17,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { getStudySession } from "@/services/api";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import * as mammoth from "mammoth";
+import { sanitizeHTML } from "@/utils/sanitize";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -418,22 +419,25 @@ export default function SpeedRunPage() {
     });
   };
 
-  // Function to highlight text in HTML content
+  // Function to highlight text in HTML content (with XSS sanitization)
   const getHighlightedHTML = (html: string) => {
-    if (!highlightedText) return html;
+    // Sanitize HTML first to prevent XSS from uploaded documents
+    const cleanHTML = sanitizeHTML(html);
+
+    if (!highlightedText) return cleanHTML;
 
     const searchText = highlightedText.trim();
     const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
 
-    return html.replace(regex, '<mark style="background-color: #fde047; color: #713f12; padding: 4px 8px; border-radius: 4px; font-weight: 600; animation: highlight-pulse 2s ease-in-out 3;">$1</mark>');
+    return cleanHTML.replace(regex, '<mark style="background-color: #fde047; color: #713f12; padding: 4px 8px; border-radius: 4px; font-weight: 600;">$1</mark>');
   };
 
   // Show loading state while fetching session
   if (isLoadingSession) {
     return (
-      <div className="flex h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
+        <div className="airbnb-container flex items-center justify-center py-20">
           <LoadingSpinner message="Loading speedrun session..." size="lg" />
         </div>
       </div>
@@ -442,9 +446,9 @@ export default function SpeedRunPage() {
 
   if (!currentSession) {
     return (
-      <div className="flex h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
+        <div className="airbnb-container flex items-center justify-center py-20">
           <p className="text-muted-foreground">Session not found</p>
         </div>
       </div>
@@ -453,9 +457,9 @@ export default function SpeedRunPage() {
 
   if (!fileContent) {
     return (
-      <div className="flex h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
+        <div className="airbnb-container flex items-center justify-center py-20">
           <div className="text-center space-y-4">
             <FileText className="mx-auto h-12 w-12 text-muted-foreground" />
             <p className="text-muted-foreground">No document uploaded for this session</p>
@@ -466,9 +470,9 @@ export default function SpeedRunPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-hidden">
+      <main className="overflow-hidden" style={{ height: 'calc(100vh - 80px)' }}>
         <ResizablePanelGroup direction="horizontal" className="h-full">
           {/* Left Panel - Document Viewer */}
           <ResizablePanel defaultSize={50} minSize={30} maxSize={70}>

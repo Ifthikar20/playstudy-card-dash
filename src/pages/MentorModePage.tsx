@@ -622,10 +622,10 @@ export default function MentorModePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col h-screen">
+      <div className="flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
         {/* Header */}
         <div className="px-4 py-2 md:px-6 md:py-3 border-b">
           <Button
@@ -854,7 +854,7 @@ export default function MentorModePage() {
                       }
                       // Quote or example blocks
                       else if (line.match(/^["'"]/)) {
-                        return <p key={index} className="mt-4 mb-4 pl-6 leading-[1.8] italic text-foreground/80 border-l-3 border-primary/40">{highlightedText}</p>;
+                        return <p key={index} className="mt-4 mb-4 pl-6 leading-[1.8] italic text-foreground/80 border-l-[3px] border-primary/40">{highlightedText}</p>;
                       }
                       // Code blocks
                       else if (line.match(/^```/) || line.match(/^`/)) {

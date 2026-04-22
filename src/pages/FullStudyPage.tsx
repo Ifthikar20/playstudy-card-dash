@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BookOpen, CheckCircle2, Circle, PlusCircle, Lock } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle, PlusCircle, Lock, PanelLeftClose, Map, Brain, FileText, Zap, Clock } from "lucide-react";
 import {
   ReactFlow,
   MiniMap,
@@ -27,6 +27,8 @@ import { TopicQuizCard } from "@/components/TopicQuizCard";
 import { TopicSummary } from "@/components/TopicSummary";
 import { getStudySession, generateAllRemainingQuestions } from "@/services/api";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { LearningMap, generateLearningPath, LearningStep } from "@/components/LearningMap";
+import { FlipCard, DropdownQuestion, DragDropMatch, SectionIntro, ContentSummary } from "@/components/StudyInteractives";
 
 // Modern node styles with gradients and shadows - compact sizing
 const nodeStyles = {
@@ -206,6 +208,13 @@ export default function FullStudyPage() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [localQuestionIndex, setLocalQuestionIndex] = useState(0);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [showLearningMap, setShowLearningMap] = useState(true);
+  const [learningMapSteps, setLearningMapSteps] = useState<LearningStep[]>([]);
+  const [currentMapStep, setCurrentMapStep] = useState(0);
+  const [mapCollapsed, setMapCollapsed] = useState(false);
+  const [activeStudyMode, setActiveStudyMode] = useState<'intro' | 'cards' | 'quiz' | 'dropdown' | 'dragdrop' | 'summary' | null>(null);
+  const [flipCardResults, setFlipCardResults] = useState<boolean[]>([]);
+  const [currentFlipIndex, setCurrentFlipIndex] = useState(0);
 
   // Load session data based on URL parameter
   // Track if we've started background question generation
@@ -281,6 +290,15 @@ export default function FullStudyPage() {
     setLocalQuestionIndex(0);
     setShowSummary(false);
   }, [selectedTopicId]);
+
+  // Generate learning path when topics change
+  useEffect(() => {
+    const topics = currentSession?.extractedTopics || [];
+    if (topics.length > 0 && learningMapSteps.length === 0) {
+      const path = generateLearningPath(topics, currentSession?.title || "Study Session");
+      setLearningMapSteps(path);
+    }
+  }, [currentSession?.extractedTopics, currentSession?.title]);
 
   // Sync pending progress when component unmounts or user navigates away
   const syncPendingProgress = useAppStore(state => state.syncPendingProgress);
@@ -592,9 +610,9 @@ export default function FullStudyPage() {
   // No session selected - show create new option
   if (!currentSession) {
     return (
-      <div className="flex min-h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center pt-24">
+        <main className="airbnb-container flex items-center justify-center py-20">
           <div className="text-center p-8 max-w-md">
             <BookOpen size={64} className="mx-auto text-primary mb-4" />
             <h2 className="text-2xl font-bold text-foreground mb-2">Start Full Study</h2>
@@ -625,9 +643,9 @@ export default function FullStudyPage() {
     // Show loading state while fetching session data
     if (isLoadingSession) {
       return (
-        <div className="flex min-h-screen bg-background">
+        <div className="min-h-screen bg-background">
           <Sidebar />
-          <main className="flex-1 flex items-center justify-center p-6">
+          <main className="airbnb-container flex items-center justify-center py-20">
             <LoadingSpinner message="Loading your study session..." size="lg" />
           </main>
         </div>
@@ -636,9 +654,9 @@ export default function FullStudyPage() {
 
     // Show upload screen if no topics after loading
     return (
-      <div className="flex min-h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex items-center justify-center p-6">
+        <main className="airbnb-container flex items-center justify-center py-20">
           <StudyContentUpload
             onContentSubmit={handleContentSubmit}
             isProcessing={isProcessing}
@@ -649,46 +667,73 @@ export default function FullStudyPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
       
-      <main className="flex-1 flex flex-col lg:flex-row min-h-0">
+      <main className="flex-1 flex flex-col lg:flex-row" style={{ height: 'calc(100vh - 80px)' }}>
         <ResizablePanelGroup direction="horizontal" className="flex-1">
-          {/* Left Side - Topic List & Quiz */}
-          <ResizablePanel defaultSize={40} minSize={30} maxSize={70}>
+          {/* Left Side - Learning Map / Topic List & Quiz */}
+          <ResizablePanel defaultSize={mapCollapsed ? 95 : 65} minSize={50} maxSize={95}>
             <div className="h-full overflow-y-auto overflow-x-hidden p-4 border-r border-border">
               <div className="space-y-4 w-full">
+                {/* Header with view toggle */}
                 <div>
                   <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                     <BookOpen size={24} />
                     {currentSession.title}
                   </h2>
-                  <div className="flex items-center gap-2 mt-1 text-sm">
-                    <p className="font-medium text-primary">
-                      {(() => {
-                        const categories = currentSession?.extractedTopics || [];
-                        if (categories.length === 0) return 'No topics';
-                        if (categories.length === 1) return categories[0].title;
-                        return `${categories[0].title} + ${categories.length - 1} more`;
-                      })()}
-                    </p>
-                    <span className="text-muted-foreground">•</span>
-                    <p className="text-muted-foreground">
-                      {currentSession.fileType?.toUpperCase() || 'Unknown'} Document
-                    </p>
-                  </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     {leafTopics.filter(t => t.completed).length} of {leafTopics.length} subtopics completed
-                    {selectedTopicId && !showSummary && (
-                      <span className="text-primary font-medium"> • Currently studying</span>
-                    )}
                   </p>
+
+                  {/* View toggle pills */}
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => { setShowLearningMap(true); setSelectedTopicId(null); }}
+                      className={`airbnb-pill text-xs ${showLearningMap && !selectedTopicId ? 'airbnb-pill-active' : ''}`}
+                    >
+                      🗺️ Learning Map
+                    </button>
+                    <button
+                      onClick={() => { setShowLearningMap(false); setSelectedTopicId(null); }}
+                      className={`airbnb-pill text-xs ${!showLearningMap && !selectedTopicId ? 'airbnb-pill-active' : ''}`}
+                    >
+                      📋 Topics
+                    </button>
+                  </div>
                 </div>
 
+                {/* Learning Map View */}
+                {showLearningMap && !selectedTopicId && (
+                  <LearningMap
+                    steps={learningMapSteps}
+                    currentStepIndex={currentMapStep}
+                    onStepClick={(index) => {
+                      setCurrentMapStep(index);
+                      // When clicking a quiz or cards step, open the first available topic
+                      const step = learningMapSteps[index];
+                      if (step && !step.locked) {
+                        const firstLeaf = leafTopics.find(t => !t.completed) || leafTopics[0];
+                        if (firstLeaf && (step.type === 'quiz' || step.type === 'cards' || step.type === 'timed-quiz')) {
+                          setSelectedTopicId(firstLeaf.id);
+                        }
+                        // Mark step as started (unlock next)
+                        const updatedSteps = [...learningMapSteps];
+                        if (index + 1 < updatedSteps.length) {
+                          updatedSteps[index + 1] = { ...updatedSteps[index + 1], locked: false };
+                        }
+                        setLearningMapSteps(updatedSteps);
+                      }
+                    }}
+                    sessionTitle={currentSession.title}
+                    overallProgress={leafTopics.length > 0 ? (leafTopics.filter(t => t.completed).length / leafTopics.length) * 100 : 0}
+                  />
+                )}
+
                 {/* Hierarchical Topic List */}
-                {!selectedTopicId && (
+                {!showLearningMap && !selectedTopicId && (
                   <div className="space-y-3">
-                    {topics.map((category, catIndex) => (
+                    {topics.map((category) => (
                       <TopicTreeItem
                         key={category.id}
                         topic={category}
@@ -749,79 +794,100 @@ export default function FullStudyPage() {
 
           <ResizableHandle withHandle />
 
-          {/* Right Side - Topic Tree View */}
-          <ResizablePanel defaultSize={60} minSize={30}>
-            <div className="h-full flex flex-col">
-              <div className="px-4 py-2 border-b border-border">
-                <h2 className="text-sm font-semibold text-foreground">Learning Progress Tree</h2>
-                <p className="text-xs text-muted-foreground">
-                  Click any subtopic to start • Navigate freely between topics
-                </p>
-              </div>
-
-              <div className="flex-1 bg-gradient-to-br from-background via-background to-muted/30">
-                <ReactFlow
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={onNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  onConnect={onConnect}
-                  onNodeClick={(_, node) => {
-                    // Find the topic in the flattened list
-                    const topic = flattenedTopics.find(t => t.id === node.id);
-                    if (topic && !topic.isCategory) {
-                      // Allow clicking on any subtopic (not categories)
-                      setSelectedTopicId(node.id);
-                      setShowSummary(false);
-                    }
-                  }}
-                  fitView
-                  minZoom={0.5}
-                  maxZoom={1.5}
-                  defaultViewport={{ x: 0, y: 0, zoom: 0.85 }}
-                  proOptions={{ hideAttribution: true }}
-                  className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105 [&_.react-flow__node]:cursor-pointer"
+          {/* Right Side — Progress Map (1/3 width, collapsible) */}
+          <ResizablePanel defaultSize={mapCollapsed ? 5 : 35} minSize={5} maxSize={50} collapsible>
+            <div className="h-full flex flex-col bg-card/50">
+              {/* Collapse toggle header */}
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+                {!mapCollapsed && (
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                      <Map size={14} /> Progress Map
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {leafTopics.filter(t => t.completed).length}/{leafTopics.length} completed
+                    </p>
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setMapCollapsed(!mapCollapsed)}
                 >
-                  <Controls 
-                    className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent"
-                  />
-                  <MiniMap 
-                    className="bg-card/80 backdrop-blur-sm border border-border rounded-lg shadow-lg"
-                    nodeColor={(node) => {
-                      const bg = node.style?.background as string || "";
-                      if (bg.includes("10b981") || bg.includes("059669")) return "#10b981";
-                      if (bg.includes("f59e0b") || bg.includes("d97706")) return "#f59e0b";
-                      if (bg.includes("primary")) return "hsl(var(--primary))";
-                      return "hsl(var(--muted))";
-                    }}
-                    maskColor="hsl(var(--background) / 0.8)"
-                  />
-                  <Background 
-                    variant={BackgroundVariant.Dots} 
-                    gap={20} 
-                    size={1.5} 
-                    color="hsl(var(--muted-foreground) / 0.3)"
-                  />
-                </ReactFlow>
+                  <PanelLeftClose size={14} className={`transition-transform ${mapCollapsed ? 'rotate-180' : ''}`} />
+                </Button>
               </div>
 
-              {/* Modern Legend */}
-              <div className="px-4 py-2 border-t border-border bg-card/50 backdrop-blur-sm">
-                <div className="flex flex-wrap gap-4 text-xs justify-center">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-sm shadow-emerald-500/30"></div>
-                    <span className="text-muted-foreground">Completed</span>
+              {!mapCollapsed && (
+                <div className="flex-1 overflow-y-auto">
+                  {/* ReactFlow tree */}
+                  <div className="h-[50%] bg-gradient-to-br from-background via-background to-muted/30">
+                    <ReactFlow
+                      nodes={nodes}
+                      edges={edges}
+                      onNodesChange={onNodesChange}
+                      onEdgesChange={onEdgesChange}
+                      onConnect={onConnect}
+                      onNodeClick={(_, node) => {
+                        const topic = flattenedTopics.find(t => t.id === node.id);
+                        if (topic && !topic.isCategory) {
+                          setSelectedTopicId(node.id);
+                          setShowSummary(false);
+                        }
+                      }}
+                      fitView
+                      minZoom={0.3}
+                      maxZoom={1.2}
+                      defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+                      proOptions={{ hideAttribution: true }}
+                      className="[&_.react-flow__node]:transition-transform [&_.react-flow__node]:duration-200 [&_.react-flow__node:hover]:scale-105 [&_.react-flow__node]:cursor-pointer"
+                    >
+                      <Controls className="bg-card border border-border rounded-lg shadow-lg [&_button]:bg-card [&_button]:border-border [&_button]:text-foreground [&_button:hover]:bg-accent" />
+                      <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(var(--muted-foreground) / 0.2)" />
+                    </ReactFlow>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-gradient-to-br from-primary to-purple-600 shadow-sm shadow-primary/30"></div>
-                    <span className="text-muted-foreground">Subtopics</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded bg-gradient-to-br from-amber-600 to-orange-600 shadow-sm shadow-amber-500/30"></div>
-                    <span className="text-muted-foreground">Main Topics</span>
+
+                  {/* Completed topics list */}
+                  <div className="p-3 border-t border-border space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Completed Topics</p>
+                    {leafTopics.filter(t => t.completed).length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">No topics completed yet</p>
+                    ) : (
+                      leafTopics.filter(t => t.completed).map(topic => (
+                        <div
+                          key={topic.id}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 cursor-pointer hover:shadow-sm transition-all"
+                          onClick={() => { setSelectedTopicId(topic.id); setShowSummary(false); }}
+                        >
+                          <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                          <span className="text-xs font-medium text-foreground truncate">{topic.title}</span>
+                          {topic.score != null && (
+                            <span className="text-xs text-emerald-600 ml-auto flex-shrink-0">{topic.score}%</span>
+                          )}
+                        </div>
+                      ))
+                    )}
+
+                    {/* Remaining topics */}
+                    {leafTopics.filter(t => !t.completed).length > 0 && (
+                      <>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-3">Remaining</p>
+                        {leafTopics.filter(t => !t.completed).map(topic => (
+                          <div
+                            key={topic.id}
+                            className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border cursor-pointer hover:shadow-sm transition-all"
+                            onClick={() => { setSelectedTopicId(topic.id); setShowSummary(false); }}
+                          >
+                            <Circle size={14} className="text-muted-foreground flex-shrink-0" />
+                            <span className="text-xs text-muted-foreground truncate">{topic.title}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

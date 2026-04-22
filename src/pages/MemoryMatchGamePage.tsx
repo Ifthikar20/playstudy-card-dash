@@ -329,33 +329,35 @@ export default function MemoryMatchGamePage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col">
+      <div className="airbnb-container py-8">
         {/* Header */}
-        <div className="p-4 border-b border-border">
+        <div className="mb-6">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate("/dashboard/browse-games")}
-            className="gap-2"
+            className="gap-2 rounded-lg mb-4"
           >
             <ArrowLeft size={16} />
             Back to Games
           </Button>
+          <h1 className="font-heading text-2xl font-bold text-foreground">Memory Match</h1>
+          <p className="text-sm text-muted-foreground">Match words with their definitions</p>
         </div>
 
         {/* Game Canvas */}
-        <div className="flex-1 flex items-center justify-center p-4 bg-muted/20">
+        <div className="flex items-center justify-center">
           <div className="relative">
             <canvas
               ref={canvasRef}
-              className="rounded-lg shadow-2xl border-2 border-border"
+              className="rounded-xl shadow-airbnb-hover border-2 border-border"
             />
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

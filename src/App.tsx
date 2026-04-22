@@ -119,9 +119,9 @@ const AuthenticatedApp = () => {
   if (isError) {
     console.log('[AuthenticatedApp] Showing error state...');
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Connection Error</h2>
+          <h2 className="font-heading text-2xl font-bold text-foreground mb-2">Connection Error</h2>
           <p className="text-muted-foreground mb-4">
             Unable to connect to the server. Using offline mode with sample data.
           </p>

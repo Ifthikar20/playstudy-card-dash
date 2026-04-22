@@ -19,22 +19,20 @@ export function AnimatedXP() {
     if (xp > previousXPRef.current) {
       const gained = xp - previousXPRef.current;
 
-      // Create flying particles
       const newParticles: Particle[] = [];
-      const particleCount = Math.min(Math.floor(gained / 2), 10); // Max 10 particles
+      const particleCount = Math.min(Math.floor(gained / 2), 10);
 
       for (let i = 0; i < particleCount; i++) {
         newParticles.push({
           id: Date.now() + i,
-          x: Math.random() * 100 - 50, // Random position around center
-          y: Math.random() * 100 + 50, // Start from bottom
+          x: Math.random() * 100 - 50,
+          y: Math.random() * 100 + 50,
         });
       }
 
       setParticles(newParticles);
       setIsAnimating(true);
 
-      // Animate XP counter
       setTimeout(() => {
         const duration = 1000;
         const startValue = displayXP;
@@ -55,9 +53,8 @@ export function AnimatedXP() {
         };
 
         requestAnimationFrame(updateCounter);
-      }, 600); // Delay to let particles fly first
+      }, 600);
 
-      // Clean up particles
       setTimeout(() => {
         setParticles([]);
         setIsAnimating(false);
@@ -68,7 +65,7 @@ export function AnimatedXP() {
   }, [xp, displayXP]);
 
   return (
-    <div ref={containerRef} className="relative mt-3">
+    <div ref={containerRef} className="relative hidden md:block">
       {/* Flying particles */}
       {particles.map((particle) => (
         <div
@@ -80,37 +77,22 @@ export function AnimatedXP() {
             animation: 'flyToXP 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards',
           }}
         >
-          <div className="flex items-center gap-1 text-[#97E35C] font-bold text-sm animate-pulse">
+          <div className="flex items-center gap-1 text-primary font-bold text-xs">
             <span>+{Math.floor(10 / particles.length)}</span>
-            <img
-              src="/ps-logo.png"
-              alt="XP"
-              className="h-3 w-3 object-contain"
-            />
           </div>
         </div>
       ))}
 
-      {/* XP Display */}
+      {/* XP Display — Airbnb pill style */}
       <span
-        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm font-bold text-primary relative ${
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-xs font-semibold text-primary relative ${
           isAnimating ? 'animate-bounce' : ''
         }`}
       >
-        {displayXP.toLocaleString()}
-        <img
-          src="/ps-logo.png"
-          alt="XP"
-          className="h-4 w-4 object-contain"
-        />
+        {displayXP.toLocaleString()} XP
 
-        {/* Celebration sparkles when gaining XP */}
         {isAnimating && (
-          <>
-            <span className="absolute -top-1 -right-1 text-[#97E35C] animate-ping">✨</span>
-            <span className="absolute -top-2 left-1/4 text-[#97E35C] animate-pulse">⭐</span>
-            <span className="absolute -bottom-1 -left-1 text-[#97E35C] animate-ping">💫</span>
-          </>
+          <span className="absolute -top-1 -right-1 text-primary text-xs animate-ping">✨</span>
         )}
       </span>
 

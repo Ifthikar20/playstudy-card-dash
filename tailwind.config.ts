@@ -1,4 +1,6 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
+import typography from "@tailwindcss/typography";
 
 export default {
 	darkMode: ["class"],
@@ -19,6 +21,8 @@ export default {
 		},
 		extend: {
 			fontFamily: {
+				'sans': ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+				'heading': ['"Plus Jakarta Sans"', '"Inter"', '-apple-system', 'sans-serif'],
 				'handwritten': ['Patrick Hand', 'cursive'],
 			},
 			colors: {
@@ -27,10 +31,12 @@ export default {
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
-				lime: {
-					DEFAULT: '#97E35C',
-					bright: '#97E35C',
-					dark: '#7BC850'
+				/* Brand palette — #F04848 Red */
+				brand: {
+					DEFAULT: '#F04848',
+					light: '#F56565',
+					dark: '#D63C3C',
+					deep: '#B83232',
 				},
 				primary: {
 					DEFAULT: 'hsl(var(--primary))',
@@ -74,7 +80,16 @@ export default {
 			borderRadius: {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
-				sm: 'calc(var(--radius) - 4px)'
+				sm: 'calc(var(--radius) - 4px)',
+				'card': '12px',
+				'card-lg': '16px',
+				'card-xl': '24px',
+			},
+			boxShadow: {
+				'soft': '0 1px 2px rgba(0,0,0,0.06)',
+				'soft-hover': '0 6px 20px rgba(0,0,0,0.1)',
+				'soft-card': '0 1px 2px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)',
+				'soft-nav': '0 1px 0 rgba(0,0,0,0.08)',
 			},
 			keyframes: {
 				'accordion-down': {
@@ -99,7 +114,7 @@ export default {
 				},
 				'blink': {
 					'0%, 100%': { borderColor: 'transparent' },
-					'50%': { borderColor: 'hsl(var(--primary))' }
+					'50%': { borderColor: '#F04848' }
 				}
 			},
 			animation: {
@@ -109,5 +124,5 @@ export default {
 			}
 		}
 	},
-	plugins: [require("tailwindcss-animate")],
+	plugins: [tailwindcssAnimate, typography],
 } satisfies Config;

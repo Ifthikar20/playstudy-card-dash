@@ -3,20 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>playstudy-card-dash</title>
-    <meta name="description" content="PlayStudy - Transform your study materials into engaging, competitive quizzes" />
+
+    <!-- Security Headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="Content-Security-Policy" 
+      content="default-src 'self'; 
+        script-src 'self' https://www.google.com https://www.gstatic.com https://unpkg.com 'unsafe-inline'; 
+        style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; 
+        font-src 'self' https://fonts.gstatic.com; 
+        img-src 'self' data: blob: https:; 
+        worker-src 'self' blob: https://unpkg.com;
+        connect-src 'self' http://localhost:* ws://localhost:* https://*.playstudy.ai https://www.google.com https://unpkg.com;
+        frame-src https://www.google.com;" />
+
+    <title>PlayStudy — Learn by Playing</title>
+    <meta name="description" content="PlayStudy - Transform your study materials into engaging, competitive quizzes. AI-powered learning made fun." />
     <meta name="author" content="PlayStudy" />
 
-    <meta property="og:title" content="PlayStudy - AI-Powered Study Platform" />
+    <meta property="og:title" content="PlayStudy — Learn by Playing" />
     <meta property="og:description" content="Transform your study materials into engaging, competitive quizzes" />
     <meta property="og:type" content="website" />
 
     <meta name="twitter:card" content="summary_large_image" />
 
-    <!-- Google Fonts - Handwritten -->
+    <!-- Google Fonts — Airbnb-inspired clean typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Patrick+Hand&display=swap" rel="stylesheet">
     
     <!-- Google reCAPTCHA v3 -->
     <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>

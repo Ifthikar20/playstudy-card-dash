@@ -2,129 +2,151 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * PlayStudy Design System
+ * 
+ * Theme: Black, White & #F04848 red accent
+ * Layout: Airbnb-inspired structure (generous whitespace, clean cards)
+ * Fonts: Inter for UI, Plus Jakarta Sans for headings
+ */
+
 @layer base {
   :root {
+    /* Light Theme — Clean white with red accent */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 0 0% 9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 9%;
 
-    --primary: 262 83% 58%;
+    /* #F04848 Primary */
+    --primary: 0 85% 61%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 0 0% 9%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 0 0% 44%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 210 20% 96%;
+    --accent-foreground: 0 0% 9%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 0 85% 61%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Navigation / Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 9%;
+    --sidebar-primary: 0 85% 61%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 20% 96%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 220 13% 92%;
+    --sidebar-ring: 0 85% 61%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Brand tokens */
+    --brand: #F04848;
+    --brand-dark: #D63C3C;
+    --brand-light: #F56565;
+    --text-primary: #111111;
+    --text-secondary: #6B7280;
+    --surface: #F9FAFB;
+    --success: #10B981;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 220 15% 6%;
+    --foreground: 0 0% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 15% 9%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 220 15% 9%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 262 83% 68%;
+    --primary: 0 85% 64%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 220 15% 14%;
+    --secondary-foreground: 0 0% 95%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 220 15% 14%;
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 220 15% 14%;
+    --accent-foreground: 0 0% 95%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 0 85% 64%;
+
+    --sidebar-background: 220 15% 6%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 0 85% 64%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 220 15% 14%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 0 85% 64%;
+
+    --brand: #F56565;
+    --brand-dark: #F04848;
+    --brand-light: #FC8181;
+    --text-primary: #F3F4F6;
+    --text-secondary: #9CA3AF;
+    --surface: #111827;
   }
 
   .dark-grey {
-    --background: 0 0% 10%;
-    --foreground: 0 0% 98%;
+    --background: 220 10% 10%;
+    --foreground: 0 0% 95%;
 
-    --card: 0 0% 15%;
-    --card-foreground: 0 0% 98%;
+    --card: 220 10% 13%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 15%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 220 10% 13%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 262 83% 68%;
+    --primary: 0 85% 64%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 20%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 220 10% 18%;
+    --secondary-foreground: 0 0% 95%;
 
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 75%;
+    --muted: 220 10% 18%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 0 0% 20%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 220 10% 18%;
+    --accent-foreground: 0 0% 95%;
 
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 25%;
-    --input: 0 0% 25%;
-    --ring: 0 0% 80%;
-    --sidebar-background: 0 0% 8%;
+    --border: 220 10% 22%;
+    --input: 220 10% 22%;
+    --ring: 0 85% 64%;
+
+    --sidebar-background: 220 10% 8%;
     --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 262 83% 68%;
+    --sidebar-primary: 0 85% 64%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 18%;
+    --sidebar-accent: 220 10% 16%;
     --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 18%;
-    --sidebar-ring: 262 83% 68%;
+    --sidebar-border: 220 10% 16%;
+    --sidebar-ring: 0 85% 64%;
   }
 }
 
@@ -134,42 +156,179 @@
   }
 
   html {
-    font-size: 14px;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
-/* New Session Badge Animations */
+/* ========================================
+   Airbnb-layout Utility Classes
+   ======================================== */
+
+@layer components {
+  /* Card Hover */
+  .airbnb-card {
+    @apply bg-card rounded-xl transition-all duration-200;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  .airbnb-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  /* Pill Button */
+  .airbnb-pill {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium border border-border transition-all duration-200;
+  }
+
+  .airbnb-pill:hover {
+    @apply border-foreground shadow-md;
+  }
+
+  .airbnb-pill-active {
+    @apply bg-foreground text-background border-foreground;
+  }
+
+  /* Search Bar */
+  .airbnb-search {
+    @apply flex items-center gap-3 bg-card rounded-full border border-border px-5 py-3 transition-all;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+  }
+
+  .airbnb-search:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 8px 24px rgba(0,0,0,0.08);
+  }
+
+  /* Top Nav */
+  .airbnb-nav {
+    @apply sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border;
+  }
+
+  /* Content container with responsive widths */
+  .airbnb-container {
+    @apply w-full mx-auto px-6 md:px-10 lg:px-20;
+    max-width: 1760px;
+  }
+
+  /* Session/Listing Card */
+  .airbnb-listing {
+    @apply cursor-pointer;
+  }
+
+  .airbnb-listing .airbnb-listing-image {
+    @apply rounded-xl overflow-hidden aspect-square bg-muted;
+  }
+
+  .airbnb-listing .airbnb-listing-image img {
+    @apply w-full h-full object-cover transition-transform duration-300;
+  }
+
+  .airbnb-listing:hover .airbnb-listing-image img {
+    transform: scale(1.04);
+  }
+
+  /* Rounded icon button */
+  .airbnb-icon-btn {
+    @apply p-2.5 rounded-full border border-border bg-card hover:shadow-md transition-all duration-200;
+  }
+
+  .airbnb-icon-btn:hover {
+    @apply border-foreground/30;
+  }
+
+  /* Primary button — #F04848 gradient */
+  .airbnb-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-white transition-all duration-200;
+    background: linear-gradient(to right, #F04848, #E53E3E, #D63C3C);
+  }
+
+  .airbnb-btn-primary:hover {
+    background: linear-gradient(to right, #D63C3C, #C53030, #B83232);
+    box-shadow: 0 2px 8px rgba(240, 72, 72, 0.35);
+  }
+
+  /* Progress bar */
+  .airbnb-progress {
+    @apply h-1 bg-muted rounded-full overflow-hidden;
+  }
+
+  .airbnb-progress-bar {
+    @apply h-full rounded-full transition-all duration-500;
+    background: linear-gradient(to right, #F04848, #D63C3C);
+  }
+
+  /* Learning Map Styles */
+  .learning-map-step {
+    @apply relative pl-12 pb-8;
+  }
+
+  .learning-map-step::before {
+    content: '';
+    @apply absolute left-5 top-10 bottom-0 w-0.5 bg-border;
+  }
+
+  .learning-map-step:last-child::before {
+    display: none;
+  }
+
+  .learning-map-node {
+    @apply absolute left-0 top-1 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300;
+  }
+
+  .learning-map-node-active {
+    @apply bg-primary border-primary text-white shadow-lg;
+    box-shadow: 0 0 0 4px rgba(240, 72, 72, 0.15), 0 2px 8px rgba(240, 72, 72, 0.3);
+  }
+
+  .learning-map-node-completed {
+    @apply bg-emerald-500 border-emerald-500 text-white;
+  }
+
+  .learning-map-node-locked {
+    @apply bg-muted border-border text-muted-foreground;
+  }
+}
+
+/* ========================================
+   Session Badge Animations
+   ======================================== */
+
 @keyframes fire-glow {
   0%, 100% {
-    box-shadow: 0 0 10px rgba(249, 115, 22, 0.5), 0 0 20px rgba(239, 68, 68, 0.3);
+    box-shadow: 0 0 8px rgba(240, 72, 72, 0.4), 0 0 16px rgba(240, 72, 72, 0.2);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.5);
-    transform: scale(1.05);
+    box-shadow: 0 0 16px rgba(240, 72, 72, 0.6), 0 0 24px rgba(240, 72, 72, 0.3);
+    transform: scale(1.03);
   }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 @keyframes slide-in-bounce {
   0% {
-    transform: translateX(-20px);
+    transform: translateX(-16px);
     opacity: 0;
   }
   50% {
-    transform: translateX(5px);
+    transform: translateX(3px);
   }
   100% {
     transform: translateX(0);
@@ -179,24 +338,60 @@
 
 @keyframes new-session-highlight {
   0% {
-    background-color: rgba(249, 115, 22, 0);
+    background-color: rgba(240, 72, 72, 0);
     border-color: inherit;
   }
   20% {
-    background-color: rgba(249, 115, 22, 0.1);
-    border-color: rgba(249, 115, 22, 0.5);
+    background-color: rgba(240, 72, 72, 0.06);
+    border-color: rgba(240, 72, 72, 0.3);
   }
   100% {
-    background-color: rgba(249, 115, 22, 0);
+    background-color: rgba(240, 72, 72, 0);
     border-color: inherit;
   }
 }
 
 .fire-badge {
   animation: fire-glow 2s ease-in-out infinite, pulse-glow 1.5s ease-in-out infinite, slide-in-bounce 0.6s ease-out;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
 .new-session-card {
   animation: new-session-highlight 2s ease-out;
+}
+
+/* ========================================
+   Smooth page transitions
+   ======================================== */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
 }

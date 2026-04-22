@@ -11,9 +11,12 @@ export function ThemeToggle() {
     // Remove all theme classes
     root.classList.remove('dark', 'dark-grey');
 
-    // Add the current theme class (except for light which is default)
-    if (theme !== 'light') {
-      root.classList.add(theme);
+    // Add the current theme class
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else if (theme === 'dark-grey') {
+      // dark-grey needs both 'dark' (for Tailwind dark: variants) and 'dark-grey' (for custom CSS vars)
+      root.classList.add('dark', 'dark-grey');
     }
   }, [theme]);
 
@@ -37,20 +40,20 @@ export function ThemeToggle() {
   const getIcon = () => {
     switch (theme) {
       case 'light':
-        return <Sun size={20} className="text-foreground" />;
+        return <Sun size={16} className="text-foreground" />;
       case 'dark':
-        return <Moon size={20} className="text-foreground" />;
+        return <Moon size={16} className="text-foreground" />;
       case 'dark-grey':
-        return <Laptop size={20} className="text-foreground" />;
+        return <Laptop size={16} className="text-foreground" />;
       default:
-        return <Sun size={20} className="text-foreground" />;
+        return <Sun size={16} className="text-foreground" />;
     }
   };
 
   return (
     <button
       onClick={toggleTheme}
-      className="p-2 rounded-lg hover:bg-accent transition-colors"
+      className="airbnb-icon-btn !p-2"
       aria-label="Toggle theme"
       title={`Current: ${theme === 'dark-grey' ? 'Dark Grey' : theme.charAt(0).toUpperCase() + theme.slice(1)}`}
     >

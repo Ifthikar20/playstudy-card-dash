@@ -1,176 +1,198 @@
-import { useState, useEffect } from "react";
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   BookOpen,
   FolderPlus,
   User,
-  Menu,
-  X,
-  Share2,
+  Search,
   Zap,
   GraduationCap,
-  Settings,
-  Mic
+  Mic,
+  Globe,
+  Menu,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAppStore } from "@/store/appStore";
 import { AnimatedXP } from "@/components/AnimatedXP";
+import UserMenu from "@/components/UserMenu";
 
 import { Gamepad2 } from "lucide-react";
 
 const mainNavigation: Array<{ name: string; href: string; icon: typeof BookOpen }> = [
   { name: "Dashboard", href: "/dashboard", icon: BookOpen },
-  { name: "Study Folders", href: "/dashboard/folders", icon: FolderPlus },
+  { name: "Folders", href: "/dashboard/folders", icon: FolderPlus },
 ];
 
 const sessionNavigation: Array<{ name: string; href: (sessionId: string) => string; icon: typeof BookOpen; gamified?: boolean }> = [
-  { name: "🎮 Game Zone", href: (sessionId) => `/dashboard/browse-games`, icon: Gamepad2, gamified: true },
+  { name: "Game Zone", href: (sessionId) => `/dashboard/browse-games`, icon: Gamepad2, gamified: true },
   { name: "Full Study", href: (sessionId) => `/dashboard/${sessionId}/full-study`, icon: GraduationCap },
   { name: "Speed Run", href: (sessionId) => `/dashboard/${sessionId}/speedrun`, icon: Zap },
-  { name: "Mentor Mode", href: (sessionId) => `/dashboard/${sessionId}/mentor`, icon: Mic },
+  { name: "Mentor", href: (sessionId) => `/dashboard/${sessionId}/mentor`, icon: Mic },
 ];
 
 export function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { currentSession, setCurrentSession } = useAppStore();
-
-  // Auto-collapse after 15 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsCollapsed(true);
-      console.log('[Sidebar] Auto-collapsed after 15 seconds');
-    }, 15000); // 15 seconds
-
-    // Clear timeout if component unmounts
-    return () => clearTimeout(timer);
-  }, []); // Only run once on mount
+  const location = useLocation();
 
   return (
-    <div className={cn(
-      "bg-card border-r border-border transition-all duration-300 flex flex-col h-screen sticky top-0",
-      isCollapsed ? "w-16" : "w-72"
-    )}>
-      <div className="p-4 border-b border-border">
-        <div className={cn(
-          "flex items-center",
-          isCollapsed ? "justify-center" : "justify-between"
-        )}>
-          {!isCollapsed && (
-            <img
-              src="/logo-new.png"
-              alt="PlayStudy"
-              className="h-24 w-auto"
-            />
-          )}
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 rounded-lg hover:bg-accent transition-colors"
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {isCollapsed ? <Menu size={20} className="text-foreground" /> : <X size={20} className="text-foreground" />}
-          </button>
+    <>
+      {/* Airbnb-style Top Navigation */}
+      <header className="airbnb-nav">
+        <div className="airbnb-container">
+          <div className="flex items-center justify-between h-16 md:h-20">
+            {/* Left: Logo */}
+            <NavLink to="/dashboard" onClick={() => setCurrentSession(null)} className="flex items-center gap-2 flex-shrink-0">
+              <img
+                src="/logo-new.png"
+                alt="PlayStudy"
+                className="h-10 md:h-12 w-auto"
+              />
+            </NavLink>
+
+            {/* Center: Navigation Pills (desktop) */}
+            <nav className="hidden md:flex items-center gap-1">
+              {mainNavigation.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  onClick={() => setCurrentSession(null)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200",
+                      isActive && location.pathname === item.href
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )
+                  }
+                >
+                  <item.icon size={16} />
+                  {item.name}
+                </NavLink>
+              ))}
+
+              {/* Session-specific navigation pills */}
+              {currentSession && (
+                <>
+                  <div className="w-px h-5 bg-border mx-1" />
+                  {sessionNavigation.map((item) => (
+                    <NavLink
+                      key={item.name}
+                      to={item.href(currentSession.id)}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200",
+                          isActive
+                            ? "bg-primary text-white"
+                            : item.gamified
+                            ? "text-primary hover:bg-primary/10"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        )
+                      }
+                    >
+                      <item.icon size={16} />
+                      {item.name}
+                    </NavLink>
+                  ))}
+                </>
+              )}
+            </nav>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2">
+              <AnimatedXP />
+              <ThemeToggle />
+              <UserMenu />
+
+              {/* Mobile menu toggle */}
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 rounded-full hover:bg-accent transition-colors"
+              >
+                {isMobileMenuOpen ? (
+                  <X size={20} className="text-foreground" />
+                ) : (
+                  <Menu size={20} className="text-foreground" />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
-        {/* XP Display */}
-        {!isCollapsed && <AnimatedXP />}
-      </div>
 
-      <nav className="p-4 space-y-2">
-        {/* Main Navigation - Always Visible */}
-        {mainNavigation.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            onClick={() => setCurrentSession(null)}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center rounded-lg text-sm font-medium transition-colors",
-                isCollapsed ? "justify-center p-3" : "px-3 py-2",
-                isActive
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-            title={isCollapsed ? item.name : undefined}
-          >
-            <item.icon size={20} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3">{item.name}</span>}
-          </NavLink>
-        ))}
+        {/* Mobile Dropdown Nav */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden border-t border-border bg-background animate-fade-in-up">
+            <div className="airbnb-container py-4 space-y-1">
+              {mainNavigation.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  onClick={() => {
+                    setCurrentSession(null);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+                      isActive && location.pathname === item.href
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground hover:bg-accent"
+                    )
+                  }
+                >
+                  <item.icon size={18} />
+                  {item.name}
+                </NavLink>
+              ))}
 
-        {/* Session Navigation - Only When Session Selected */}
-        {currentSession && (
-          <>
-            {!isCollapsed && (
-              <div className="pt-4 pb-2">
-                <p className="text-xs font-semibold text-muted-foreground px-3">Study Modes</p>
-              </div>
-            )}
-            {sessionNavigation.map((item) => (
+              {currentSession && (
+                <>
+                  <div className="h-px bg-border my-2" />
+                  <p className="text-xs text-muted-foreground px-4 pt-2 pb-1 font-medium">Study Modes</p>
+                  {sessionNavigation.map((item) => (
+                    <NavLink
+                      key={item.name}
+                      to={item.href(currentSession.id)}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+                          isActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-foreground hover:bg-accent"
+                        )
+                      }
+                    >
+                      <item.icon size={18} />
+                      {item.name}
+                    </NavLink>
+                  ))}
+                </>
+              )}
+
+              {/* Profile link in mobile */}
+              <div className="h-px bg-border my-2" />
               <NavLink
-                key={item.name}
-                to={item.href(currentSession!.id)}
+                to="/dashboard/profile"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center rounded-lg text-sm font-medium transition-colors",
-                    isCollapsed ? "justify-center p-3" : "px-3 py-2",
+                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    item.gamified && "bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 hover:from-purple-500/20 hover:via-pink-500/20 hover:to-orange-500/20"
+                      ? "bg-primary/10 text-primary"
+                      : "text-foreground hover:bg-accent"
                   )
                 }
-                title={isCollapsed ? item.name : undefined}
               >
-                <item.icon size={20} className={cn("flex-shrink-0", item.gamified && "text-purple-500")} />
-                {!isCollapsed && (
-                  <span className={cn("ml-3", item.gamified && "bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 bg-clip-text text-transparent font-bold")}>
-                    {item.name}
-                  </span>
-                )}
+                <User size={18} />
+                Profile & Settings
               </NavLink>
-            ))}
-          </>
+            </div>
+          </div>
         )}
-      </nav>
-
-      <div className="p-4 border-t border-border space-y-2 mt-auto">
-        <NavLink
-          to="/dashboard/profile"
-          className={({ isActive }) =>
-            cn(
-              "flex items-center w-full rounded-lg text-sm font-medium transition-colors",
-              isCollapsed ? "justify-center p-3" : "px-3 py-2",
-              isActive
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground"
-            )
-          }
-          title={isCollapsed ? "Profile & Settings" : undefined}
-        >
-          <User size={20} className="flex-shrink-0" />
-          {!isCollapsed && <span className="ml-3">Profile & Settings</span>}
-        </NavLink>
-
-        <div className={cn(
-          "flex items-center",
-          isCollapsed ? "justify-center" : "justify-between"
-        )}>
-          {!isCollapsed && <span className="text-sm text-muted-foreground">Theme</span>}
-          <ThemeToggle />
-        </div>
-
-        <button
-          className={cn(
-            "flex items-center w-full rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors",
-            isCollapsed ? "justify-center p-3" : "px-3 py-2"
-          )}
-          title={isCollapsed ? "Share for Free Credits" : undefined}
-        >
-          <Share2 size={20} className="flex-shrink-0" />
-          {!isCollapsed && <span className="ml-3">Share for Free Credits</span>}
-        </button>
-      </div>
-    </div>
+      </header>
+    </>
   );
 }

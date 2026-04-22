@@ -414,25 +414,26 @@ export default function GameModePage() {
 
   if (!session) {
     return (
-      <div className="flex min-h-screen bg-background">
+      <div className="min-h-screen bg-background">
         <Sidebar />
-        <div className="flex-1 flex items-center justify-center">
+        <div className="airbnb-container py-20 flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-foreground mb-2">No Session Found</h2>
+            <h2 className="font-heading text-2xl font-bold text-foreground mb-2">No Session Found</h2>
             <p className="text-muted-foreground mb-4">Please create a study session first.</p>
-            <Button onClick={() => navigate("/")}>Go to Dashboard</Button>
+            <Button onClick={() => navigate("/")} className="rounded-lg">Go to Dashboard</Button>
           </div>
         </div>
       </div>
     );
   }
 
+  const healthColorClass = gameHealth > 50 ? 'text-green-500' : 'text-red-500';
+
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
 
-      <div className="flex-1 p-6">
-        <div className="max-w-6xl mx-auto">
+      <div className="airbnb-container py-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
@@ -522,7 +523,7 @@ export default function GameModePage() {
             </div>
             <div className="bg-card border border-border rounded-lg p-4 text-center">
               <p className="text-sm text-muted-foreground">Health</p>
-              <p className={`text-2xl font-bold ${gameHealth > 50 ? 'text-green-500' : 'text-red-500'}`}>
+              <p className={`text-2xl font-bold ${healthColorClass}`}>
                 {gameHealth}%
               </p>
             </div>
@@ -535,7 +536,6 @@ export default function GameModePage() {
               <p className="text-2xl font-bold text-orange-500">{askedQuestions.size}</p>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );

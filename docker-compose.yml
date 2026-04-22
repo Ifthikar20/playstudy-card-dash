@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: playstudy_db
       POSTGRES_USER: playstudy_user
-      POSTGRES_PASSWORD: dev_password_change_in_production
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
       - "5432:5432"
     volumes:
@@ -44,14 +44,14 @@ services:
       - "8000:8000"
     environment:
       # Database
-      DATABASE_URL: postgresql+psycopg://playstudy_user:dev_password_change_in_production@postgres:5432/playstudy_db
+      DATABASE_URL: postgresql+psycopg://playstudy_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/playstudy_db
 
       # Redis
       REDIS_URL: redis://redis:6379/0
 
-      # Security (CHANGE THESE IN PRODUCTION!)
-      SECRET_KEY: dev-secret-key-change-in-production-use-secrets-manager
-      FIELD_ENCRYPTION_KEY: dev-encryption-key-change-in-production
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-}
 
       # API Keys (add your keys here)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

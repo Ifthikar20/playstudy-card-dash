@@ -371,11 +371,10 @@ export default function PlatformerGamePage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
 
-      <div className="flex-1 p-6">
-        <div className="max-w-6xl mx-auto">
+      <div className="airbnb-container py-8">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
@@ -383,12 +382,13 @@ export default function PlatformerGamePage() {
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/dashboard/browse-games")}
+                className="rounded-lg"
               >
                 <ArrowLeft size={16} className="mr-2" />
                 Back to Games
               </Button>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">Bean Platformer Adventure</h1>
+                <h1 className="font-heading text-2xl font-bold text-foreground">Bean Platformer Adventure</h1>
                 <p className="text-sm text-muted-foreground">Classic platformer with coins and enemies!</p>
               </div>
             </div>
@@ -396,14 +396,14 @@ export default function PlatformerGamePage() {
 
           {/* Game Canvas */}
           <div className="flex justify-center mb-6">
-            <div className="border-4 border-primary/20 rounded-lg overflow-hidden shadow-2xl">
+            <div className="border-2 border-border rounded-xl overflow-hidden shadow-airbnb-hover">
               <canvas ref={canvasRef} />
             </div>
           </div>
 
           {/* Instructions */}
-          <div className="bg-card border border-border rounded-lg p-6 max-w-2xl mx-auto">
-            <h2 className="text-lg font-bold mb-3">How to Play</h2>
+          <div className="airbnb-card border border-border p-6 max-w-2xl mx-auto">
+            <h2 className="font-heading text-lg font-bold mb-3">How to Play</h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="font-medium mb-1">🎮 Controls:</p>
@@ -422,7 +422,6 @@ export default function PlatformerGamePage() {
               </div>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );

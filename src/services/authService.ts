@@ -188,6 +188,32 @@ class AuthService {
       };
     } catch (error) {
       console.error('[AuthService] Login error:', error);
+
+      // Dev-mode fallback: if backend is unreachable, create a mock session
+      if (import.meta.env.DEV) {
+        console.warn('[AuthService] Backend unreachable — using dev-mode bypass');
+        const mockPayload = {
+          sub: 'dev-user-001',
+          email: credentials.email || 'dev@playstudy.com',
+          exp: Math.floor(Date.now() / 1000) + 86400, // 24h
+          iat: Math.floor(Date.now() / 1000),
+        };
+        // Create a simple mock JWT (header.payload.signature)
+        const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+        const payload = btoa(JSON.stringify(mockPayload));
+        const mockToken = `${header}.${payload}.dev-signature`;
+        this.setToken(mockToken);
+
+        return {
+          success: true,
+          user: {
+            id: mockPayload.sub,
+            email: mockPayload.email,
+            name: mockPayload.email.split('@')[0],
+          },
+        };
+      }
+
       return {
         success: false,
         error: 'Network error. Please check your connection and try again.'

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Play, Users, Star, Gamepad2, Lock } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
@@ -16,12 +15,10 @@ export default function BrowseGamesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { games, currentSession, studySessions } = useAppStore();
 
-  // Find the session if sessionId is provided
   const session = sessionId
     ? studySessions.find(s => s.id === sessionId) || currentSession
     : currentSession;
 
-  // Check if a session has content (extractedTopics)
   const hasSessionContent = session?.extractedTopics && session.extractedTopics.length > 0;
 
   const filteredGames = games.filter((game) => {
@@ -29,152 +26,135 @@ export default function BrowseGamesPage() {
     return matchesCategory;
   });
 
-  // Determine if a game is playable
   const isGamePlayable = (gameId: number) => {
-    // Games 7 and 8 are always playable (platformer and memory match)
     if (gameId === 7 || gameId === 8) return true;
-
-    // Other games require session content
     return hasSessionContent;
   };
 
   const handlePlayGame = (gameId: number) => {
-    // Check if game is playable
     if (!isGamePlayable(gameId)) {
       setDialogOpen(true);
       return;
     }
 
-    // Map game IDs to routes
     if (gameId === 7) {
       navigate("/dashboard/platformer-game");
     } else if (gameId === 8) {
-      // Memory Match game
       navigate("/dashboard/memory-match");
     } else {
-      // Other games need session content - navigate to game mode with sessionId
       if (sessionId) {
         navigate(`/dashboard/${sessionId}/game-mode`);
       } else if (currentSession) {
         navigate(`/dashboard/${currentSession.id}/game-mode`);
       } else {
-        // No session available, show create dialog
         setDialogOpen(true);
       }
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <Sidebar />
-      
-      <main className="flex-1 p-4 md:p-8 overflow-auto">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Gamepad2 className="text-primary" size={28} />
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Game Zone</h1>
-            </div>
-            <p className="text-muted-foreground">Choose from memory games, challenging puzzles, and riddles</p>
-          </div>
 
-          {/* Category Pills */}
-          <div className="mb-6">
-            <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
-                <Badge
-                  key={category}
-                  variant={selectedCategory === category ? "default" : "outline"}
-                  className="cursor-pointer hover:bg-primary/80 transition-colors px-4 py-2 text-sm"
-                  onClick={() => setSelectedCategory(category)}
-                >
-                  {category}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          {/* Games Grid - Retro Style */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredGames.map((game) => {
-              const playable = isGamePlayable(game.id);
-              return (
-                <Card
-                  key={game.id}
-                  className={`group overflow-hidden transition-all border-2 bg-card ${
-                    playable
-                      ? 'cursor-pointer hover:shadow-xl hover:-translate-y-1 hover:border-primary/50'
-                      : 'opacity-60 cursor-not-allowed'
-                  }`}
-                  onClick={() => handlePlayGame(game.id)}
-                >
-                  {/* Game Thumbnail */}
-                  <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
-                    <img
-                      src={game.image}
-                      alt={game.title}
-                      className={`w-full h-full object-cover transition-transform ${
-                        playable ? 'group-hover:scale-110' : 'grayscale'
-                      }`}
-                    />
-
-                    {/* Overlay on Hover */}
-                    {playable ? (
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Play size={32} className="text-white" />
-                      </div>
-                    ) : (
-                      <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
-                        <Lock size={28} className="text-white/80" />
-                        <span className="text-xs text-white/80 font-medium">Create Session</span>
-                      </div>
-                    )}
-
-                  {/* Top Badges */}
-                  <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
-                    <Badge
-                      className="text-xs backdrop-blur-sm"
-                      variant={game.difficulty === "Easy" ? "secondary" : game.difficulty === "Medium" ? "default" : "destructive"}
-                    >
-                      {game.difficulty}
-                    </Badge>
-                    <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                      <Star size={10} className="text-yellow-400 fill-yellow-400" />
-                      <span className="text-xs font-bold text-white">{game.rating}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Game Info */}
-                <div className="p-3 space-y-2">
-                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem]">
-                    {game.title}
-                  </h3>
-
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Users size={12} />
-                      <span>{(game.likes / 1000).toFixed(1)}k</span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {game.category}
-                    </Badge>
-                  </div>
-                </div>
-              </Card>
-              );
-            })}
-          </div>
-
-          {filteredGames.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">No games found matching your criteria</p>
-            </div>
-          )}
+      <main className="airbnb-container py-8 animate-fade-in-up">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="font-heading text-3xl font-bold text-foreground mb-1">
+            Game Zone
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Choose from memory games, challenging puzzles, and riddles
+          </p>
         </div>
+
+        {/* Category Pills — Airbnb filter style */}
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+          {categories.map((category) => (
+            <button
+              key={category}
+              className={`airbnb-pill whitespace-nowrap text-sm ${
+                selectedCategory === category ? 'airbnb-pill-active' : ''
+              }`}
+              onClick={() => setSelectedCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+
+        {/* Games Grid — Airbnb experience cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          {filteredGames.map((game) => {
+            const playable = isGamePlayable(game.id);
+            return (
+              <div
+                key={game.id}
+                className={`airbnb-listing ${!playable ? 'opacity-60' : ''}`}
+                onClick={() => handlePlayGame(game.id)}
+              >
+                {/* Game Image */}
+                <div className="airbnb-listing-image relative">
+                  <img
+                    src={game.image}
+                    alt={game.title}
+                    className={`${!playable ? 'grayscale' : ''}`}
+                  />
+
+                  {/* Play overlay */}
+                  {playable ? (
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+                        <Play size={20} className="text-foreground ml-0.5" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2">
+                      <Lock size={24} className="text-white" />
+                      <span className="text-xs text-white font-medium">Create Session</span>
+                    </div>
+                  )}
+
+                  {/* Difficulty pill */}
+                  <div className="absolute top-3 left-3">
+                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium backdrop-blur-sm ${
+                      game.difficulty === 'Easy'
+                        ? 'bg-green-500/80 text-white'
+                        : game.difficulty === 'Medium'
+                        ? 'bg-yellow-500/80 text-white'
+                        : 'bg-red-500/80 text-white'
+                    }`}>
+                      {game.difficulty}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Game Info — Airbnb listing text style */}
+                <div className="pt-3 pb-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-heading font-semibold text-sm text-foreground line-clamp-1">
+                      {game.title}
+                    </h3>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Star size={12} className="text-foreground fill-foreground" />
+                      <span className="text-sm font-medium">{game.rating}</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-0.5">{game.category}</p>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                    <Users size={12} />
+                    <span>{(game.likes / 1000).toFixed(1)}k plays</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredGames.length === 0 && (
+          <div className="text-center py-20">
+            <p className="text-muted-foreground">No games found matching your criteria</p>
+          </div>
+        )}
       </main>
 
       <CreateStudySessionDialog open={dialogOpen} onOpenChange={setDialogOpen} />

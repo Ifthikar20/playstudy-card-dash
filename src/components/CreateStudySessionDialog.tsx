@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import {
   Upload,
@@ -23,7 +22,8 @@ import {
   Target,
   Mic,
   FileImage,
-  File
+  File,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
@@ -58,55 +58,43 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
-  // Sarcastic/playful loading messages
   const loadingMessages = [
     "Reading your document...",
     "Breaking it down...",
     "Hmm, interesting...",
     "Finding the best way to teach this...",
-    "I see how we can break this down...",
     "Making sense of all this...",
     "Organizing the chaos...",
-    "Brewing some knowledge potions...",
-    "Teaching mode: activated...",
     "Almost got it...",
-    "Just a bit more patience...",
     "Connecting the dots...",
-    "This is pretty neat, actually..."
   ];
 
-  // Rotate loading messages while processing
   useEffect(() => {
     if (isProcessing) {
-      setLoadingMessageIndex(0); // Reset to first message
+      setLoadingMessageIndex(0);
       const interval = setInterval(() => {
-        setLoadingMessageIndex((prev) => (prev + 1) % 13); // 13 messages total
-      }, 2000); // Change message every 2 seconds
-
+        setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+      }, 2000);
       return () => clearInterval(interval);
     }
   }, [isProcessing]);
 
   const handleAnalyzeContent = async (content: string) => {
     if (!content || content.length < 50) return;
-
     setIsAnalyzing(true);
     try {
       const analysis = await analyzeContent(content);
       setContentAnalysis(analysis);
-
-      // Update default values based on recommendations
       setTopicCount([analysis.recommended_topics]);
       setQuestionCount([analysis.recommended_questions]);
-
       toast({
-        title: "Content Analyzed!",
-        description: `${analysis.word_count} words • ${analysis.estimated_reading_time} min read • ${analysis.recommended_topics} topics recommended`,
+        title: "Content analyzed",
+        description: `${analysis.word_count} words · ${analysis.estimated_reading_time} min read · ${analysis.recommended_topics} topics recommended`,
       });
     } catch (error: any) {
       console.error('Analysis failed:', error);
       toast({
-        title: "Analysis Failed",
+        title: "Analysis failed",
         description: "Using default settings. You can still create the session.",
         variant: "destructive",
       });
@@ -118,98 +106,65 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-
-      // Check file size (max 35MB)
       const MAX_FILE_SIZE_MB = 35;
       const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
       if (file.size > MAX_FILE_SIZE_BYTES) {
         toast({
-          title: "File Too Large",
-          description: `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed size of ${MAX_FILE_SIZE_MB}MB. Please compress the file or split it into smaller documents.`,
+          title: "File too large",
+          description: `File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the ${MAX_FILE_SIZE_MB}MB limit.`,
           variant: "destructive",
         });
-        // Clear the file input
         e.target.value = '';
         return;
       }
 
       setSelectedFile(file);
-
-      // Read file content
       const reader = new FileReader();
       reader.onload = async (event) => {
         const result = event.target?.result as string;
-
-        // For binary files (Word docs, PDFs), extract base64
-        // For text files, use as-is
         let content = '';
         if (result.startsWith('data:')) {
-          // Remove the "data:...;base64," prefix
           content = result.split(',')[1];
           setTextContent(content);
         } else {
           content = result;
           setTextContent(result);
         }
-
-        // Automatically analyze content after upload
         await handleAnalyzeContent(content);
       };
-
-      // Use readAsDataURL for proper binary handling
-      // This encodes files as base64, which the backend can decode
       reader.readAsDataURL(file);
     }
   };
 
   const handleProcessContent = async () => {
     setIsProcessing(true);
-
     try {
       const content = textContent.trim();
       const title = sessionTitle.trim() || `Study Session ${new Date().toLocaleDateString()}`;
-
-      // Call backend API to create session with AI
-      const newSession = await createStudySessionWithAI(
-        title,
-        content,
-        topicCount[0],
-        questionCount[0]
-      );
-
+      const newSession = await createStudySessionWithAI(title, content, topicCount[0], questionCount[0]);
       setCreatedSession(newSession);
       setCurrentSession(newSession);
       addSession(newSession);
 
       toast({
-        title: "Session Created!",
-        description: `Initial questions loaded. Generating remaining questions in background...`,
+        title: "Session created!",
+        description: `Generating remaining questions in background...`,
       });
 
       setIsProcessing(false);
       setStep("select-mode");
 
-      // Start loading remaining questions automatically in background
       generateAllRemainingQuestions(newSession.id, (generated, remaining) => {
-        console.log(`📊 Progress: Generated ${generated} more subtopics, ${remaining} remaining`);
-
-        // Show toast when all done
         if (remaining === 0) {
-          toast({
-            title: "All Questions Ready!",
-            description: "All questions have been generated for this session.",
-          });
+          toast({ title: "All questions ready!", description: "All questions have been generated." });
         }
-      }).catch((error) => {
-        console.error('Failed to generate remaining questions:', error);
-        // Don't show error toast - initial questions are already available
-      });
+      }).catch(console.error);
     } catch (error: any) {
       setIsProcessing(false);
       toast({
         title: "Error",
-        description: error.message || "Failed to create study session. Please try again.",
+        description: error.message || "Failed to create study session.",
         variant: "destructive",
       });
     }
@@ -217,8 +172,6 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
   const handleStartSession = () => {
     if (!createdSession) return;
-
-    // Navigate to the selected mode
     if (selectedMode === "full-study") {
       navigate(`/dashboard/${createdSession.id}/full-study`);
     } else if (selectedMode === "speed-run") {
@@ -230,7 +183,6 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
       navigate(`/dashboard/${createdSession.id}/browse-games`);
     }
 
-    // Reset state
     onOpenChange(false);
     setStep("upload");
     setUploadType("text");
@@ -244,354 +196,262 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const canProceed = uploadType === "text" ? textContent.trim().length > 0 : selectedFile !== null;
 
   const getEstimatedTime = () => {
-    if (selectedMode === "full-study") {
-      return `~${topicCount[0] * 5} mins`;
-    } else if (selectedMode === "speed-run") {
-      return `${speedRunDuration[0]} mins`;
-    }
+    if (selectedMode === "full-study") return `~${topicCount[0] * 5} mins`;
+    if (selectedMode === "speed-run") return `${speedRunDuration[0]} mins`;
     return "~5 mins";
   };
 
+  const studyModes: Array<{ id: StudyMode; icon: typeof BookOpen; iconColor: string; title: string; description: string }> = [
+    { id: "full-study", icon: BookOpen, iconColor: "text-primary", title: "Full Study", description: "Complete learning path with progress tracking" },
+    { id: "speed-run", icon: Zap, iconColor: "text-amber-500", title: "Speed Run", description: "Rapid fire flip cards for quick review" },
+    { id: "mentor", icon: Mic, iconColor: "text-blue-500", title: "Mentor Mode", description: "AI narration guides you through content" },
+    { id: "game", icon: Gamepad2, iconColor: "text-violet-500", title: "Game Mode", description: "Battle enemies while answering questions" },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader className="space-y-3 pb-4">
-          <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent">
-            {step === "upload" ? "✨ Create Study Session" : "🎯 Choose Your Study Mode"}
-          </DialogTitle>
+      <DialogContent className="sm:max-w-lg rounded-2xl p-0 overflow-hidden">
+        {/* Header */}
+        <div className="p-6 pb-0">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl font-bold text-foreground">
+              {step === "upload" ? "Create study session" : "Choose your study mode"}
+            </DialogTitle>
+          </DialogHeader>
           {step === "upload" && (
-            <p className="text-sm text-muted-foreground">
-              Upload your study material or paste text to generate personalized learning content
+            <p className="text-sm text-muted-foreground mt-1">
+              Upload your study material or paste text
             </p>
           )}
-        </DialogHeader>
+        </div>
 
-        {step === "upload" && (
-          <div className="space-y-4">
-            {/* Session Title */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Session Name (optional)
-              </label>
-              <Input
-                placeholder="e.g., Biology Chapter 5, Math Final Review..."
-                value={sessionTitle}
-                onChange={(e) => setSessionTitle(e.target.value)}
-              />
-            </div>
-
-            {/* Upload Type Toggle */}
-            <div className="flex rounded-xl border-2 border-border p-1.5 bg-gradient-to-r from-muted/50 to-muted/30 shadow-sm">
-              <button
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all",
-                  uploadType === "text"
-                    ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md shadow-purple-500/30 scale-105"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                )}
-                onClick={() => setUploadType("text")}
-              >
-                <FileText size={18} />
-                Paste Text
-              </button>
-              <button
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all",
-                  uploadType === "file"
-                    ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/30 scale-105"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                )}
-                onClick={() => setUploadType("file")}
-              >
-                <Upload size={18} />
-                Upload File
-              </button>
-            </div>
-
-            {/* Content Area */}
-            {uploadType === "text" ? (
-              <div className="space-y-2">
-                <Textarea
-                  placeholder="Paste your study material here... (notes, textbook content, articles, etc.)"
-                  className="min-h-[200px] resize-none"
-                  value={textContent}
-                  onChange={(e) => setTextContent(e.target.value)}
+        <div className="p-6 pt-4">
+          {step === "upload" && (
+            <div className="space-y-4">
+              {/* Session Title */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Session name <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <Input
+                  placeholder="e.g., Biology Chapter 5"
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  className="h-11 rounded-xl border-2"
                 />
-                {textContent.trim().length >= 50 && !contentAnalysis && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleAnalyzeContent(textContent)}
-                    disabled={isAnalyzing}
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <div className="inline-block h-3.5 w-3.5 mr-2 rounded-full border-2 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin"></div>
-                        <span className="bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent font-semibold">
+              </div>
+
+              {/* Upload Type Toggle — Airbnb segmented control */}
+              <div className="flex rounded-xl border border-border p-1 bg-muted/30">
+                <button
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                    uploadType === "text"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setUploadType("text")}
+                >
+                  <FileText size={16} />
+                  Paste Text
+                </button>
+                <button
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all",
+                    uploadType === "file"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setUploadType("file")}
+                >
+                  <Upload size={16} />
+                  Upload File
+                </button>
+              </div>
+
+              {/* Content Area */}
+              {uploadType === "text" ? (
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Paste your study material here..."
+                    className="min-h-[180px] resize-none rounded-xl border-2"
+                    value={textContent}
+                    onChange={(e) => setTextContent(e.target.value)}
+                  />
+                  {textContent.trim().length >= 50 && !contentAnalysis && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full rounded-lg"
+                      onClick={() => handleAnalyzeContent(textContent)}
+                      disabled={isAnalyzing}
+                    >
+                      {isAnalyzing ? (
+                        <span className="flex items-center gap-2">
+                          <div className="h-3.5 w-3.5 rounded-full border-2 border-transparent border-t-primary animate-spin" />
                           Analyzing...
                         </span>
-                      </>
-                    ) : (
-                      'Analyze Content'
-                    )}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-all hover:bg-primary/5">
-                <Input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  {selectedFile ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-center gap-2 text-primary">
-                        <FileText size={24} />
-                        <p className="text-foreground font-medium">{selectedFile.name}</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Decorative File Icons */}
-                      <div className="flex items-center justify-center gap-3 mb-4">
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center transform -rotate-6 hover:rotate-0 transition-transform shadow-lg">
-                            <FileText className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            W
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
-                            <FileText className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            T
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center transform rotate-6 hover:rotate-0 transition-transform shadow-lg">
-                            <File className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            P
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center transform -rotate-3 hover:rotate-0 transition-transform shadow-lg">
-                            <FileImage className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            P
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Upload Icon */}
-                      <div className="flex items-center justify-center">
-                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Upload className="text-primary" size={24} />
-                        </div>
-                      </div>
-
-                      {/* Text */}
-                      <div>
-                        <p className="text-lg font-semibold text-foreground mb-1">
-                          Drag & drop files to upload
-                        </p>
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Supported types: PDF, Word, PPT, TXT, JPG, JPEG, PNG, HEIC, WebP, MP3, WAV, M4A
-                        </p>
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-primary font-medium text-sm transition-colors">
-                          <Upload size={16} />
-                          Select file
-                        </div>
-                      </div>
-                    </div>
+                      ) : (
+                        'Analyze Content'
+                      )}
+                    </Button>
                   )}
-                </label>
-              </div>
-            )}
-
-            {/* Content Analysis Info */}
-            {contentAnalysis && (
-              <div className="bg-gradient-to-br from-primary/10 via-blue-500/5 to-purple-500/10 border-2 border-primary/30 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">✓</span>
-                  </div>
-                  <h3 className="font-semibold text-foreground">Content Analyzed</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Word Count</span>
-                    <span className="font-bold text-foreground">{contentAnalysis.word_count}</span>
-                  </div>
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Reading Time</span>
-                    <span className="font-bold text-foreground">{contentAnalysis.estimated_reading_time} min</span>
-                  </div>
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Complexity</span>
-                    <span className="font-bold text-foreground">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
-                  </div>
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Recommended</span>
-                    <span className="font-bold text-primary">{contentAnalysis.recommended_topics} topics</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Process Button */}
-            <Button
-              className="w-full gap-2 bg-gradient-to-r from-primary via-blue-500 to-purple-500 hover:from-primary/90 hover:via-blue-500/90 hover:to-purple-500/90 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
-              size="lg"
-              disabled={!canProceed || isProcessing || isAnalyzing}
-              onClick={handleProcessContent}
-            >
-              {isProcessing ? (
-                <div className="flex flex-col items-center gap-1 py-1">
-                  <div className="flex items-center gap-1">
-                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                  </div>
-                  <span className="text-xs text-white/90 animate-pulse">
-                    {loadingMessages[loadingMessageIndex]}
-                  </span>
                 </div>
               ) : (
-                <>
-                  ✨ Process Content
-                  <ArrowRight size={18} />
-                </>
+                <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary/40 transition-all">
+                  <Input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    {selectedFile ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                          <FileText size={20} className="text-primary" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
+                          <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                          <Upload className="text-primary" size={20} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            Drop files to upload
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            PDF, Word, PPT, TXT supported
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </label>
+                </div>
               )}
-            </Button>
-          </div>
-        )}
 
-        {step === "select-mode" && (
-          <div className="space-y-4">
-            {/* Mode Selection */}
-            <div className="grid gap-3">
-              <Card 
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "full-study" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("full-study")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <BookOpen className="text-primary" size={24} />
+              {/* Content Analysis Info */}
+              {contentAnalysis && (
+                <div className="bg-muted/50 border border-border rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-6 h-6 rounded-full bg-airbnb-success flex items-center justify-center">
+                      <Check size={12} className="text-white" />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Full Study Session</h3>
-                      <p className="text-sm text-muted-foreground">Complete learning path with progress tracking</p>
+                    <h3 className="font-medium text-sm text-foreground">Content analyzed</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-background rounded-lg p-2.5">
+                      <span className="text-muted-foreground block text-xs">Words</span>
+                      <span className="font-semibold text-foreground">{contentAnalysis.word_count}</span>
+                    </div>
+                    <div className="bg-background rounded-lg p-2.5">
+                      <span className="text-muted-foreground block text-xs">Reading time</span>
+                      <span className="font-semibold text-foreground">{contentAnalysis.estimated_reading_time} min</span>
+                    </div>
+                    <div className="bg-background rounded-lg p-2.5">
+                      <span className="text-muted-foreground block text-xs">Complexity</span>
+                      <span className="font-semibold text-foreground">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="bg-background rounded-lg p-2.5">
+                      <span className="text-muted-foreground block text-xs">Recommended</span>
+                      <span className="font-semibold text-primary">{contentAnalysis.recommended_topics} topics</span>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              )}
 
-              <Card 
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "speed-run" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("speed-run")}
+              {/* Process Button — Airbnb CTA */}
+              <button
+                className="airbnb-btn-primary w-full h-12 rounded-xl text-sm disabled:opacity-50"
+                disabled={!canProceed || isProcessing || isAnalyzing}
+                onClick={handleProcessContent}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-orange-500/10">
-                      <Zap className="text-orange-500" size={24} />
+                {isProcessing ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="flex items-center gap-1">
+                      <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Speed Run</h3>
-                      <p className="text-sm text-muted-foreground">Rapid fire flip cards for quick review</p>
-                    </div>
+                    <span className="text-xs text-white/90">{loadingMessages[loadingMessageIndex]}</span>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "mentor" && "ring-2 ring-primary"
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Process Content
+                    <ArrowRight size={16} />
+                  </span>
                 )}
-                onClick={() => setSelectedMode("mentor")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <Mic className="text-blue-500" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Mentor Mode</h3>
-                      <p className="text-sm text-muted-foreground">Listen to AI narration like a teacher guiding you through the content</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "game" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("game")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-purple-500/10">
-                      <Gamepad2 className="text-purple-500" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Game Mode</h3>
-                      <p className="text-sm text-muted-foreground">Battle enemies while answering questions to survive!</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              </button>
             </div>
+          )}
 
-            {/* Estimated Time */}
-            {selectedMode && (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
-                <Clock size={16} />
-                Estimated time: <span className="font-medium text-foreground">{getEstimatedTime()}</span>
+          {step === "select-mode" && (
+            <div className="space-y-4">
+              {/* Mode Selection — Airbnb option cards */}
+              <div className="space-y-2">
+                {studyModes.map((mode) => (
+                  <button
+                    key={mode.id}
+                    className={cn(
+                      "w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left",
+                      selectedMode === mode.id
+                        ? "border-foreground bg-accent/50"
+                        : "border-border hover:border-foreground/30"
+                    )}
+                    onClick={() => setSelectedMode(mode.id)}
+                  >
+                    <div className={cn("p-2 rounded-xl bg-muted", mode.iconColor)}>
+                      <mode.icon size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-heading font-semibold text-sm text-foreground">{mode.title}</h3>
+                      <p className="text-xs text-muted-foreground">{mode.description}</p>
+                    </div>
+                    {selectedMode === mode.id && (
+                      <div className="w-6 h-6 rounded-full bg-foreground flex items-center justify-center flex-shrink-0">
+                        <Check size={12} className="text-background" />
+                      </div>
+                    )}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                className="gap-2"
-                onClick={() => setStep("upload")}
-              >
-                <ArrowLeft size={18} />
-                Back
-              </Button>
-              <Button 
-                className="flex-1 gap-2" 
-                size="lg"
-                disabled={!selectedMode}
-                onClick={handleStartSession}
-              >
-                <Target size={18} />
-                Start Session
-              </Button>
+              {/* Estimated Time */}
+              {selectedMode && (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
+                  <Clock size={14} />
+                  Estimated: <span className="font-medium text-foreground">{getEstimatedTime()}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="gap-2 rounded-xl"
+                  onClick={() => setStep("upload")}
+                >
+                  <ArrowLeft size={16} />
+                  Back
+                </Button>
+                <button
+                  className="airbnb-btn-primary flex-1 h-11 rounded-xl text-sm disabled:opacity-50"
+                  disabled={!selectedMode}
+                  onClick={handleStartSession}
+                >
+                  <Target size={16} />
+                  Start Session
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

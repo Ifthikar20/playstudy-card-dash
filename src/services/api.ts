@@ -819,7 +819,7 @@ const getMockAppData = (): AppData => {
     userProfile: {
       id: 'user-1',
       name: 'Student User',
-      email: 'student@playstudy.ai',
+      email: 'user@example.com',
       xp: 2450,
       level: 12,
     },
