@@ -10,25 +10,23 @@ import { useAppStore } from "@/store/appStore";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/apiClient";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { AppShell } from "@/components/AppShell";
+import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
+import { useAuth } from "@/contexts/AuthContext";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import ContactPage from "./pages/ContactPage";
 import Index from "./pages/Index";
 import StudyFolders from "./pages/StudyFolders";
+import CalendarPage from "./pages/CalendarPage";
 import FolderDetailPage from "./pages/FolderDetailPage";
-import QuizPage from "./pages/QuizPage";
-import SpeedRunPage from "./pages/SpeedRunPage";
 import ProfilePage from "./pages/ProfilePage";
 import FullStudyPage from "./pages/FullStudyPage";
-import BrowseGamesPage from "./pages/BrowseGamesPage";
-import GameModePage from "./pages/GameModePage";
-import PlatformerGamePage from "./pages/PlatformerGamePage";
-import MemoryMatchGamePage from "./pages/MemoryMatchGamePage";
-import MentorModePage from "./pages/MentorModePage";
 import NotFound from "./pages/NotFound";
+import DevLoginPage from "./pages/DevLoginPage";
 
 const queryClient = new QueryClient();
 
@@ -44,9 +42,12 @@ const AppContent = () => {
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        {/* Dev-only: scripted sign-in used by scripts/dev-login.mjs (tree-shaken from prod builds) */}
+        {import.meta.env.DEV && <Route path="/dev-login" element={<DevLoginPage />} />}
 
         {/* Protected routes - require authentication */}
         <Route
@@ -59,27 +60,16 @@ const AppContent = () => {
         >
           <Route index element={<Index />} />
           <Route path="folders" element={<StudyFolders />} />
+          <Route path="calendar" element={<CalendarPage />} />
           <Route path="folder/:folderId" element={<FolderDetailPage />} />
-          <Route path="browse-games" element={<BrowseGamesPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
 
-          {/* Session-specific routes */}
+          {/* Study (the only mode: one scrolling note with a quiz per section) */}
           <Route path=":sessionId/full-study" element={<FullStudyPage />} />
-          <Route path=":sessionId/speedrun" element={<SpeedRunPage />} />
-          <Route path=":sessionId/mentor" element={<MentorModePage />} />
-          <Route path=":sessionId/browse-games" element={<BrowseGamesPage />} />
-          <Route path=":sessionId/game-mode" element={<GameModePage />} />
-          <Route path=":sessionId/platformer-game" element={<PlatformerGamePage />} />
-          <Route path=":sessionId/memory-match" element={<MemoryMatchGamePage />} />
 
-          {/* Legacy routes for backward compatibility */}
-          <Route path="quiz/:topic" element={<QuizPage />} />
-          <Route path="speedrun" element={<SpeedRunPage />} />
+          {/* Session-less entry keeps old links working */}
           <Route path="full-study" element={<FullStudyPage />} />
-          <Route path="game-mode" element={<GameModePage />} />
-          <Route path="platformer-game" element={<PlatformerGamePage />} />
-          <Route path="memory-match" element={<MemoryMatchGamePage />} />
         </Route>
 
         {/* 404 */}
@@ -91,51 +81,46 @@ const AppContent = () => {
 
 // Component that loads data only when authenticated
 const AuthenticatedApp = () => {
-  const { data, isLoading, isError } = useAppData();
+  const { data, isError, refetch } = useAppData();
   const { initializeFromAPI, isInitialized } = useAppStore();
+  const { session, sessionLoading } = useAuth();
 
   // Initialize store when data is loaded
   useEffect(() => {
-    console.log('[AuthenticatedApp] Data loaded:', !!data, 'isInitialized:', isInitialized);
     if (data && !isInitialized) {
-      console.log('[AuthenticatedApp] Initializing store with data...');
       initializeFromAPI(data);
     }
   }, [data, isInitialized, initializeFromAPI]);
 
-  console.log('[AuthenticatedApp] State:', { isLoading, isError, hasData: !!data });
-
-  // Show loading state
-  if (isLoading) {
-    console.log('[AuthenticatedApp] Showing loading spinner...');
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <LoadingSpinner message="Loading your dashboard..." size="lg" />
-      </div>
-    );
+  // First-login onboarding: full-screen takeover until the role question is answered
+  if (session && session.next_route === "onboarding") {
+    return <OnboardingFlow />;
   }
 
-  // Show error state
-  if (isError) {
-    console.log('[AuthenticatedApp] Showing error state...');
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Connection Error</h2>
-          <p className="text-muted-foreground mb-4">
-            Unable to connect to the server. Using offline mode with sample data.
+  // The shell renders straight away; every page loads its own sections
+  // (skeletons per block) instead of a page-wide spinner. While the session
+  // is still unknown we keep the content area empty so onboarding can't flash.
+  return (
+    <AppShell>
+      {isError && !isInitialized ? (
+        <div className="mx-auto mt-10 w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center">
+          <p className="text-sm font-semibold">Couldn't reach the server</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Your sessions and stats will appear once the backend responds.
           </p>
-          <p className="text-sm text-muted-foreground">
-            The app will continue to function with limited features.
-          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-4 inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Try again
+          </button>
         </div>
-      </div>
-    );
-  }
-
-  // Render the outlet for nested routes
-  console.log('[AuthenticatedApp] Rendering dashboard content...');
-  return <Outlet />;
+      ) : !session && sessionLoading ? null : (
+        <Outlet />
+      )}
+    </AppShell>
+  );
 };
 
 const App = () => (

@@ -1,21 +1,10 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession, updateTopicProgress, updateUserXP } from '@/services/api';
+import { topicCompletionXp, type XpBreakdown } from '@/lib/xp';
+import { recordAnswers, type AnswerEventIn } from '@/services/activity';
 
-export interface Game {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  likes: number;
-  rating: number;
-  image: string;
-  difficulty: string;
-  questionCount: number;
-  points: number;
-}
-
-interface Question {
+export interface Question {
   id: string;
   question: string;
   options: string[];
@@ -23,11 +12,13 @@ interface Question {
   explanation: string;
 }
 
-interface Topic {
+export interface Topic {
   id: string;
   db_id?: number | null;  // Database ID for syncing progress to backend
   title: string;
   description: string;
+  /** Written study notes for this section (Markdown), AI-generated and user-editable */
+  notes?: string | null;
   questions: Question[];
   completed: boolean;
   score: number | null;
@@ -63,6 +54,10 @@ export interface StudySession {
   pdfContent?: string; // Converted PDF for PPTX files
   extractedTopics?: Topic[];
   folderId?: number | null;
+  /** Where the material came from (e.g. a YouTube video) + a few frame snapshots */
+  sourceKind?: string | null;
+  sourceUrl?: string | null;
+  sourceSnapshots?: string[] | null;
 }
 
 interface AppState {
@@ -77,19 +72,18 @@ interface AppState {
   addSession: (session: StudySession) => void;
   createSession: (title: string, content: string) => StudySession;
   createFullStudy: (sessionId: string) => void;
-  createSpeedRun: (sessionId: string) => void;
-  createQuiz: (sessionId: string) => void;
   processStudyContent: (sessionId: string, content: string) => void;
   answerQuestion: (sessionId: string, topicId: string, answerIndex: number, questionIndex?: number) => { correct: boolean; explanation: string };
   moveToNextQuestion: (sessionId: string, topicId: string) => void;
   completeTopic: (sessionId: string, topicId: string) => void;
+  /** Patch a section's editable fields in the store (title / description / notes). */
+  updateTopic: (sessionId: string, topicId: string, patch: Partial<Pick<Topic, 'title' | 'description' | 'notes'>>) => void;
+  /** Replace a section's quiz with a freshly generated set and reset its progress. */
+  setTopicQuestions: (sessionId: string, topicId: string, questions: Question[]) => void;
   resetTopic: (sessionId: string, topicId: string) => void;
   deleteStudySession: (sessionId: string) => Promise<void>;
   archiveStudySession: (sessionId: string) => Promise<void>;
 
-  // Games
-  games: Game[];
-  likeGame: (id: number) => void;
 
   // Folders
   folders: Folder[];
@@ -97,13 +91,12 @@ interface AppState {
   updateFolder: (folderId: number, updates: Partial<Folder>) => void;
   deleteFolder: (folderId: number) => void;
 
-  // Speed Run Mode
-  speedRunMode: 'cards' | 'mcq';
-  setSpeedRunMode: (mode: 'cards' | 'mcq') => void;
 
   // XP and User Profile
   xp: number;
   addXp: (amount: number) => void;
+  /** Breakdown of the XP earned by the most recently completed topic (for the summary card). */
+  lastTopicReward: { sessionId: string; topicId: string; breakdown: XpBreakdown; sessionCompleted: boolean } | null;
   userProfile: {
     id: string;
     name: string;
@@ -114,6 +107,10 @@ interface AppState {
   // Progress batching for performance
   pendingProgressUpdates: Map<string, { sessionId: string; topicId: number; score: number; currentQuestionIndex: number; completed: boolean }>;
   pendingXPUpdates: number;
+  /** Answered questions not yet sent to /activity/answers (the source of every dashboard number). */
+  pendingAnswers: AnswerEventIn[];
+  /** Record one answered question (any mode) and schedule a flush. */
+  logAnswer: (event: AnswerEventIn) => void;
   syncPendingProgress: () => Promise<void>;
 
   // Stats
@@ -123,6 +120,25 @@ interface AppState {
     questionsAnswered: number;
     totalStudyTime: string;
   };
+}
+
+// Flush measured activity a few seconds after the last answer, and when the tab is hidden.
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleFlush(flush: () => void, delayMs = 4000) {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    flush();
+  }, delayMs);
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+      useAppStore.getState().syncPendingProgress();
+    }
+  });
 }
 
 // Simulated AI topic extraction and question generation
@@ -266,7 +282,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   initializeFromAPI: (data: AppData) => {
     set({
       isInitialized: true,
-      games: data.games,
       studySessions: data.studySessions,
       folders: data.folders || [],
       xp: data.userProfile.xp,
@@ -318,18 +333,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     ),
   })),
   
-  createSpeedRun: (sessionId) => set((state) => ({
-    studySessions: state.studySessions.map((s) =>
-      s.id === sessionId ? { ...s, hasSpeedRun: true } : s
-    ),
-  })),
-  
-  createQuiz: (sessionId) => set((state) => ({
-    studySessions: state.studySessions.map((s) =>
-      s.id === sessionId ? { ...s, hasQuiz: true } : s
-    ),
-  })),
-
   processStudyContent: (sessionId, content) => {
     const topics = generateTopicsFromContent(content);
 
@@ -489,6 +492,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (correct) {
       get().addXp(10); // This now also updates pendingXPUpdates
     }
+    get().logAnswer({
+      session_id: sessionId,
+      topic_id: topic.db_id ?? null,
+      question_id: question.id,
+      correct,
+      mode: 'full_study',
+      at: new Date().toISOString(),
+    });
 
     return { correct, explanation: question.explanation };
   },
@@ -606,9 +617,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  completeTopic: (sessionId, topicId) => set((state) => {
+  completeTopic: (sessionId, topicId) => {
     console.log('✅ completeTopic called', { sessionId, topicId });
 
+    // Award completion bonuses once, on the incomplete -> complete transition.
+    const before = get().studySessions.find((s) => s.id === sessionId);
+    const findTopic = (topics: Topic[] | undefined): Topic | undefined => {
+      for (const t of topics ?? []) {
+        if (t.id === topicId) return t;
+        const inner = findTopic(t.subtopics);
+        if (inner) return inner;
+      }
+      return undefined;
+    };
+    const leafTopics = (topics: Topic[] | undefined): Topic[] =>
+      (topics ?? []).flatMap((t) => (t.subtopics && t.subtopics.length ? leafTopics(t.subtopics) : t.isCategory ? [] : [t]));
+    const topicBefore = findTopic(before?.extractedTopics);
+    const total = topicBefore?.questions?.length ?? 0;
+    const correct = Math.round(((topicBefore?.score ?? 0) * total) / 100);
+    const alreadyCompleted = topicBefore?.completed === true;
+    const othersDone = leafTopics(before?.extractedTopics).filter((t) => t.id !== topicId).every((t) => t.completed);
+    const sessionCompleted = othersDone && leafTopics(before?.extractedTopics).length > 0;
+    const reward = topicCompletionXp(correct, total, { sessionCompleted: sessionCompleted && !alreadyCompleted });
+    if (!alreadyCompleted && reward.bonus > 0) {
+      get().addXp(reward.bonus);
+    }
+
+    set((state) => {
     // Helper function to update topic recursively
     const markCompleteRecursively = (topics: Topic[]): Topic[] => {
       return topics.map(t => {
@@ -639,8 +674,36 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     return {
       studySessions: updatedSessions,
-      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
+      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession,
+      lastTopicReward: { sessionId, topicId, breakdown: { lines: reward.lines, total: reward.total }, sessionCompleted },
     };
+    });
+  },
+
+  updateTopic: (sessionId, topicId, patch) => set((state) => {
+    const apply = (topics: Topic[]): Topic[] =>
+      topics.map((t) => (t.id === topicId ? { ...t, ...patch } : t.subtopics ? { ...t, subtopics: apply(t.subtopics) } : t));
+    const studySessions = state.studySessions.map((s) =>
+      s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s,
+    );
+    const current = state.currentSession?.id === sessionId ? studySessions.find((s) => s.id === sessionId) ?? state.currentSession : state.currentSession;
+    return { studySessions, currentSession: current };
+  }),
+
+  setTopicQuestions: (sessionId, topicId, questions) => set((state) => {
+    const apply = (topics: Topic[]): Topic[] =>
+      topics.map((t) =>
+        t.id === topicId
+          ? { ...t, questions, completed: false, score: 0, currentQuestionIndex: 0 }
+          : t.subtopics
+            ? { ...t, subtopics: apply(t.subtopics) }
+            : t,
+      );
+    const studySessions = state.studySessions.map((s) =>
+      s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s,
+    );
+    const current = state.currentSession?.id === sessionId ? studySessions.find((s) => s.id === sessionId) ?? state.currentSession : state.currentSession;
+    return { studySessions, currentSession: current };
   }),
 
   resetTopic: (sessionId, topicId) => set((state) => {
@@ -729,15 +792,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Games data - Start empty, will be populated by API
-  games: [],
-
-  likeGame: (id) => set((state) => ({
-    games: state.games.map((game) =>
-      game.id === id ? { ...game, likes: game.likes + 1 } : game
-    ),
-  })),
-
   // Folders data - Start empty, will be populated by API
   folders: [],
 
@@ -755,27 +809,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     folders: state.folders.filter((folder) => folder.id !== folderId),
   })),
 
-  // Speed Run Mode
-  speedRunMode: 'mcq',
-  setSpeedRunMode: (mode) => set({ speedRunMode: mode }),
 
   // XP and User Profile - Start with defaults, will be populated by API
   xp: 0,
   addXp: (amount) => set((state) => ({ xp: state.xp + amount, pendingXPUpdates: state.pendingXPUpdates + amount })),
+  lastTopicReward: null,
   userProfile: null,
 
   // Progress batching for performance
   pendingProgressUpdates: new Map(),
   pendingXPUpdates: 0,
+  pendingAnswers: [],
+  logAnswer: (event) => {
+    set((state) => ({ pendingAnswers: [...state.pendingAnswers, event] }));
+    scheduleFlush(() => get().syncPendingProgress());
+  },
   syncPendingProgress: async () => {
     const state = get();
     const updates = Array.from(state.pendingProgressUpdates.values());
     const xpToSync = state.pendingXPUpdates;
+    const answers = state.pendingAnswers;
 
-    console.log(`[Progress Sync] Syncing ${updates.length} progress updates and ${xpToSync} XP`);
+    console.log(`[Progress Sync] Syncing ${updates.length} progress updates, ${answers.length} answers and ${xpToSync} XP`);
 
     // Clear pending updates first to avoid duplicate syncs
-    set({ pendingProgressUpdates: new Map(), pendingXPUpdates: 0 });
+    set({ pendingProgressUpdates: new Map(), pendingXPUpdates: 0, pendingAnswers: [] });
+
+    // Measured activity: answered questions
+    const answersPromise = answers.length
+      ? recordAnswers(answers).catch((err) => {
+          console.warn('Failed to record answers, will retry:', err);
+          set((s) => ({ pendingAnswers: [...answers, ...s.pendingAnswers] }));
+        })
+      : Promise.resolve();
 
     // Sync all progress updates in parallel
     const progressPromises = updates.map(update =>
@@ -794,7 +860,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       : Promise.resolve();
 
     // Wait for all updates to complete
-    await Promise.all([...progressPromises, xpPromise]);
+    await Promise.all([...progressPromises, xpPromise, answersPromise]);
     console.log('✅ All pending progress synced');
   },
 

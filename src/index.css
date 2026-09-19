@@ -2,129 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  PlayStudy design tokens — ported from the Cansee UI design guide.
+
+  Warm off-white surfaces, near-black ink, one purple accent (#7232e0) used
+  sparingly, hairline borders instead of shadows, compact Inter typography.
+  Dark mode is pure black & white: the only tints are the accent and semantic
+  status colours; text hierarchy is white vs. 70% white, never a mid grey.
+
+  Tailwind 3 consumes these as `hsl(var(--x))`, so every value is an HSL
+  triplet. Source hex values are noted beside each token.
+*/
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 0 0% 100%;            /* #ffffff */
+    --foreground: 60 4% 10%;            /* #1a1a18 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;                  /* #ffffff */
+    --card-foreground: 60 4% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 60 4% 10%;
 
-    --primary: 262 83% 58%;
+    --primary: 0 0% 12%;                /* #1e1e1e — dark pill buttons */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 60 8% 95%;             /* #f4f4f2 */
+    --secondary-foreground: 0 0% 12%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 60 8% 95%;                 /* #f4f4f2 */
+    --muted-foreground: 60 2% 41%;      /* #6b6b66 */
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 260 71% 96%;              /* #f2edfc — purple tint */
+    --accent-foreground: 256 64% 34%;   /* #3d1f8f */
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 5 52% 50%;           /* #c2483d */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 60 3% 92%;                /* rgba(20,20,18,.08) on white */
+    --input: 60 2% 86%;                 /* rgba(20,20,18,.14) on white */
+    --ring: 262 74% 54%;                /* #7232e0 */
 
-    --radius: 0.5rem;
+    --chart-1: 262 74% 54%;             /* #7232e0 */
+    --chart-2: 0 0% 12%;                /* #1e1e1e */
+    --chart-3: 60 3% 64%;               /* #a5a5a0 */
+    --chart-4: 144 39% 40%;             /* #3f8f5f success */
+    --chart-5: 38 63% 42%;              /* #b07d28 warning */
 
-    --sidebar-background: 0 0% 98%;
+    --radius: 0.625rem;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-background: 60 11% 96%;   /* #f7f7f5 */
+    --sidebar-foreground: 60 4% 10%;
+    --sidebar-primary: 0 0% 12%;        /* #1e1e1e */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 60 7% 92%;        /* #ecece9 — hover / active pill */
+    --sidebar-accent-foreground: 60 4% 10%;
+    --sidebar-border: 60 3% 92%;
+    --sidebar-ring: 262 74% 54%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Semantic status (light) */
+    --success: 144 39% 40%;             /* #3f8f5f */
+    --warning: 38 63% 42%;              /* #b07d28 */
+    --brand-accent: 262 74% 54%;        /* #7232e0 */
 
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    color-scheme: light;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 0%;              /* #000000 */
+    --foreground: 0 0% 100%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 6%;                 /* #0f0f0f */
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 262 83% 68%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;               /* white pill buttons */
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 10%;              /* #1a1a1a */
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 0 0% 8%;                   /* #141414 */
+    --muted-foreground: 0 0% 70%;       /* #b3b3b3 */
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 0 0% 12%;                 /* #1f1f1f */
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 100% 69%;          /* #ff5f5f */
+    --destructive-foreground: 0 0% 0%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
+    --border: 0 0% 14%;                 /* rgba(255,255,255,.14) on black */
+    --input: 0 0% 24%;                  /* rgba(255,255,255,.24) on black */
+    --ring: 0 0% 100%;
 
-  .dark-grey {
-    --background: 0 0% 10%;
-    --foreground: 0 0% 98%;
+    --chart-1: 255 92% 76%;             /* #a78bfa */
+    --chart-2: 0 0% 100%;
+    --chart-3: 0 0% 54%;                /* #8a8a8a */
+    --chart-4: 142 69% 58%;             /* #4ade80 */
+    --chart-5: 43 96% 56%;              /* #fbbf24 */
 
-    --card: 0 0% 15%;
-    --card-foreground: 0 0% 98%;
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 10%;         /* #1a1a1a */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 12%;         /* rgba(255,255,255,.12) on black */
+    --sidebar-ring: 0 0% 100%;
 
-    --popover: 0 0% 15%;
-    --popover-foreground: 0 0% 98%;
+    --success: 142 69% 58%;             /* #4ade80 */
+    --warning: 43 96% 56%;              /* #fbbf24 */
+    --brand-accent: 255 92% 76%;        /* #a78bfa */
 
-    --primary: 262 83% 68%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 0 0% 20%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 75%;
-
-    --accent: 0 0% 20%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 0 0% 25%;
-    --input: 0 0% 25%;
-    --ring: 0 0% 80%;
-    --sidebar-background: 0 0% 8%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 262 83% 68%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 18%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 18%;
-    --sidebar-ring: 262 83% 68%;
+    color-scheme: dark;
   }
 }
 
@@ -134,69 +126,144 @@
   }
 
   html {
+    /* 14px root keeps the compact 13px-ish body scale from the reference */
     font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.5;
+  }
+
+  /* Quiet 6px scrollbars, thumb in muted ink */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
-/* New Session Badge Animations */
-@keyframes fire-glow {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(249, 115, 22, 0.5), 0 0 20px rgba(239, 68, 68, 0.3);
-    transform: scale(1);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(249, 115, 22, 0.8), 0 0 30px rgba(239, 68, 68, 0.5);
-    transform: scale(1.05);
-  }
+/* Icon-collapsed sidebar: hide labels, sublines and trailing chevrons outright.
+   Chrome still paints a text-overflow ellipsis for a zero-width span, so the
+   stock `truncate` alone leaves a stray "…" beside each icon. */
+[data-collapsible="icon"] [data-sidebar="menu-button"] > span:last-child,
+[data-collapsible="icon"] [data-sidebar="menu-button"] > div.grid,
+[data-collapsible="icon"] [data-sidebar="menu-button"] > svg.ml-auto {
+  display: none;
 }
 
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+/*
+  Marketing landing (`.lp`) — a separate, editorial world per the reference:
+  cream ground, pure ink, Instrument Serif 400 for display, Inter 500 for
+  everything else, hairlines, and no accent colour. It is force-lit: these
+  tokens override the app palette so the page looks the same in dark mode.
+*/
+.lp {
+  --cream: #fff9f0;
+  --cream-alt: #f5f3ee;
+  --ink: #000000;
+  --on-ink: #ffffff;
+  --muted: #474747;
+  --muted-2: #5c5c5c;
+  --on-ink-mut: #b0b0b0;
+  --on-ink-dim: #999999;
+  --hair: rgba(0, 0, 0, 0.1);
+  --hair-soft: rgba(0, 0, 0, 0.06);
+  --hair-ink: rgba(255, 255, 255, 0.12);
+  --hair-ink-2: rgba(255, 255, 255, 0.22);
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --r-media: 8px;
+  --r-card: 16px;
+  --r-pill: 32px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* shadcn tokens re-pointed so any primitive used inside renders light */
+  --background: 40 100% 97%;
+  --foreground: 0 0% 0%;
+  --primary: 0 0% 0%;
+  --primary-foreground: 0 0% 100%;
+  --muted-foreground: 0 0% 28%;
+  --border: 36 20% 88%;
+  --ring: 0 0% 0%;
+
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+  font-synthesis-weight: none;
+  color-scheme: light;
+}
+.lp ::selection {
+  background: var(--ink);
+  color: var(--cream);
+}
+.lp .lp-serif {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+.lp .lp-serif em {
+  font-style: italic;
+  color: var(--muted);
+}
+.lp .on-ink .lp-serif em {
+  color: var(--on-ink-mut);
+}
+html:has(.lp) {
+  color-scheme: light !important;
+}
+html:has(.lp),
+html:has(.lp) body,
+html:has(.lp) #root {
+  background: #fff9f0; /* overscroll stays cream, whatever the app theme */
 }
 
-@keyframes slide-in-bounce {
-  0% {
-    transform: translateX(-20px);
+/* Display serif for numerals and banner titles inside the app (Flow-style).
+   Instrument Serif ships 400 only — never let it synthesise bold. */
+.font-display {
+  font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-synthesis-weight: none;
+  letter-spacing: 0;
+}
+
+/* Presence dot: a slow, soft ring instead of Tailwind's 1s ping */
+@keyframes presence-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  70%, 100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Page entrance — 250ms fade + 8px rise, used by page roots via .fade-in */
+@keyframes fade-in {
+  from {
     opacity: 0;
+    transform: translateY(8px);
   }
-  50% {
-    transform: translateX(5px);
-  }
-  100% {
-    transform: translateX(0);
+  to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@keyframes new-session-highlight {
-  0% {
-    background-color: rgba(249, 115, 22, 0);
-    border-color: inherit;
-  }
-  20% {
-    background-color: rgba(249, 115, 22, 0.1);
-    border-color: rgba(249, 115, 22, 0.5);
-  }
-  100% {
-    background-color: rgba(249, 115, 22, 0);
-    border-color: inherit;
-  }
+.fade-in {
+  animation: fade-in 250ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.fire-badge {
-  animation: fire-glow 2s ease-in-out infinite, pulse-glow 1.5s ease-in-out infinite, slide-in-bounce 0.6s ease-out;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-}
-
-.new-session-card {
-  animation: new-session-highlight 2s ease-out;
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
 }

@@ -1,0 +1,91 @@
+/**
+ * Measured activity — mirrors playstudy-backend/app/api/activity.py.
+ * Everything the dashboard counts (answers, accuracy, study time, XP) starts
+ * as one of these calls.
+ */
+import { authService } from "./authService";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+
+export type AnswerMode = "full_study" | "speed_run" | "quiz" | "game" | "mentor";
+
+export interface AnswerEventIn {
+  session_id?: string | null;
+  topic_id?: number | null;
+  question_id?: string | null;
+  correct: boolean;
+  mode: AnswerMode;
+  /** ISO timestamp; defaults to now on the server */
+  at?: string;
+}
+
+export interface ActivitySummary {
+  totalSessions: number;
+  questionsAnswered: number;
+  correctAnswers: number;
+  averageAccuracy: number;
+  activeSeconds: number;
+  readingSeconds: number;
+  writingSeconds: number;
+  totalStudyTime: string;
+  streakDays: number;
+  measured: true;
+}
+
+function headers(): Record<string, string> {
+  const token = authService.getToken();
+  return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
+/** Batch-record answered questions. Resolves to the number stored. */
+export async function recordAnswers(answers: AnswerEventIn[]): Promise<number> {
+  if (answers.length === 0 || !authService.getToken()) return 0;
+  const res = await fetch(`${API_URL}/activity/answers`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ answers }),
+    keepalive: true,
+  });
+  if (!res.ok) throw new Error(`activity/answers ${res.status}`);
+  return (await res.json()).recorded ?? answers.length;
+}
+
+/** Send today's cumulative presence totals (seconds). Safe to repeat; the server keeps the max. */
+export function syncPresence(day: string, totals: { active: number; reading: number; writing: number }): void {
+  const token = authService.getToken();
+  if (!token) return;
+  const body = JSON.stringify({ day, ...totals });
+  // keepalive lets the request finish even when the tab is being closed
+  fetch(`${API_URL}/activity/presence`, { method: "POST", headers: headers(), body, keepalive: true }).catch(() => {
+    /* offline — the next tick will retry with the larger total */
+  });
+}
+
+export interface ActivityDayRow {
+  /** yyyy-MM-dd */
+  day: string;
+  active: number;
+  reading: number;
+  writing: number;
+  answers: number;
+}
+
+export interface ActivityDays {
+  since: string;
+  days: ActivityDayRow[];
+  currentStreak: number;
+  longestStreak: number;
+}
+
+/** Per-day interaction for the streak heatmap (up to 400 days). */
+export async function fetchActivityDays(days = 400): Promise<ActivityDays | null> {
+  if (!authService.getToken()) return null;
+  const res = await fetch(`${API_URL}/activity/days?days=${days}`, { headers: headers() });
+  return res.ok ? res.json() : null;
+}
+
+export async function fetchActivitySummary(): Promise<ActivitySummary | null> {
+  if (!authService.getToken()) return null;
+  const res = await fetch(`${API_URL}/activity/summary`, { headers: headers() });
+  return res.ok ? res.json() : null;
+}

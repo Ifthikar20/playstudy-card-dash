@@ -50,7 +50,7 @@ export default function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => window.location.href = '/profile'}>
+        <DropdownMenuItem onClick={() => window.location.href = '/dashboard/profile'}>
           <User className="mr-2 h-4 w-4" />
           <span>Profile</span>
         </DropdownMenuItem>

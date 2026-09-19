@@ -95,19 +95,6 @@ const BrowserStorage = {
   }
 };
 
-export interface Game {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  likes: number;
-  rating: number;
-  image: string;
-  difficulty: string;
-  questionCount: number;
-  points: number;
-}
-
 export interface Question {
   id: string;
   question: string;
@@ -143,6 +130,9 @@ export interface StudySession {
   fileType?: string;  // File type: pdf, pptx, docx, txt
   pdfContent?: string;  // Converted PDF for PPTX files (base64)
   extractedTopics?: Topic[];
+  sourceKind?: string | null;
+  sourceUrl?: string | null;
+  sourceSnapshots?: string[] | null;
 }
 
 export interface UserProfile {
@@ -165,7 +155,6 @@ export interface Folder {
 }
 
 export interface AppData {
-  games: Game[];
   studySessions: StudySession[];
   folders: Folder[];
   userProfile: UserProfile;
@@ -488,19 +477,6 @@ export const createStudySessionWithAI = async (
 
     const data = await response.json();
 
-    // Normalize topics to ensure proper initialization
-    const normalizeTopics = (topicList: any[]): any[] => {
-      if (!topicList) return [];
-      return topicList.map((t: any) => ({
-        ...t,
-        db_id: t.db_id ?? t.id, // Preserve database ID for caching
-        score: t.score ?? 0, // Ensure score is 0, not null
-        currentQuestionIndex: t.currentQuestionIndex ?? 0,
-        completed: t.completed ?? false,
-        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
-      }));
-    };
-
     // Transform API response to match frontend StudySession interface
     return {
       id: String(data.id),
@@ -517,6 +493,9 @@ export const createStudySessionWithAI = async (
       fileType: data.fileType,
       pdfContent: data.pdfContent,  // Converted PDF for PPTX files
       extractedTopics: normalizeTopics(data.extractedTopics || []),
+      sourceKind: data.sourceKind ?? null,
+      sourceUrl: data.sourceUrl ?? null,
+      sourceSnapshots: data.sourceSnapshots ?? null,
     };
   } catch (error) {
     console.error('Failed to create study session:', error);
@@ -561,19 +540,6 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 
     const data = await response.json();
 
-    // Normalize topics to ensure proper initialization
-    const normalizeTopics = (topicList: any[]): any[] => {
-      if (!topicList) return [];
-      return topicList.map((t: any) => ({
-        ...t,
-        db_id: t.db_id ?? t.id, // Preserve database ID for caching
-        score: t.score ?? 0, // Ensure score is 0, not null
-        currentQuestionIndex: t.currentQuestionIndex ?? 0,
-        completed: t.completed ?? false,
-        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : []
-      }));
-    };
-
     // Transform backend response to frontend StudySession format
     const session: StudySession = {
       id: data.id.toString(),
@@ -590,6 +556,9 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       fileType: data.fileType,  // File type: pdf, pptx, docx, txt
       pdfContent: data.pdfContent,  // Converted PDF for PPTX files (base64)
       extractedTopics: normalizeTopics(data.extractedTopics || []),
+      sourceKind: data.sourceKind ?? null,
+      sourceUrl: data.sourceUrl ?? null,
+      sourceSnapshots: data.sourceSnapshots ?? null,
     };
 
     // Save to browser storage for next time
@@ -606,6 +575,59 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
  * Stream question generation using Server-Sent Events (SSE)
  * Provides real-time updates as questions are generated in the background
  */
+// Normalize topics from the API into the frontend shape (recursive).
+function normalizeTopics(topicList: any[]): any[] {
+  if (!topicList) return [];
+  return topicList.map((t: any) => ({
+    ...t,
+    db_id: t.db_id ?? t.id,
+    score: t.score ?? 0,
+    currentQuestionIndex: t.currentQuestionIndex ?? 0,
+    completed: t.completed ?? false,
+    subtopics: t.subtopics ? normalizeTopics(t.subtopics) : [],
+  }));
+}
+
+/**
+ * Create a study session from a YouTube video URL. The backend reads the
+ * video's captions and runs the same topic/question pipeline as pasted text.
+ * Returns the created session (questions then stream in via
+ * streamQuestionGeneration, exactly like a normal session).
+ */
+export const createStudySessionFromYouTube = async (
+  url: string,
+  title: string,
+  numTopics: number = 4,
+  questionsPerTopic: number = 30,
+): Promise<StudySession> => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/study-sessions/from-youtube`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ url, title: title || undefined, num_topics: numTopics, questions_per_topic: questionsPerTopic }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not create a session from that video');
+  }
+  return {
+    id: data.id,
+    title: data.title,
+    progress: data.progress ?? 0,
+    topics: data.topics ?? 0,
+    time: 'Just now',
+    createdAt: data.createdAt ?? Date.now(),
+    hasFullStudy: true,
+    hasSpeedRun: data.hasSpeedRun ?? false,
+    hasQuiz: data.hasQuiz ?? false,
+    studyContent: data.studyContent,
+    extractedTopics: normalizeTopics(data.extractedTopics || []),
+    sourceKind: data.sourceKind ?? null,
+    sourceUrl: data.sourceUrl ?? null,
+    sourceSnapshots: data.sourceSnapshots ?? null,
+  };
+};
+
 export const streamQuestionGeneration = (
   sessionId: string,
   onProgress: (progress: {
@@ -795,6 +817,124 @@ export const updateTopicProgress = async (
 /**
  * Update user XP
  */
+/**
+ * Edit a Full Study section (title, short description, written notes).
+ */
+export const updateTopicDetails = async (
+  sessionId: string,
+  topicDbId: number,
+  patch: { title?: string; description?: string; notes?: string },
+): Promise<{ id: number; title: string; description: string; notes: string | null }> => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to save section');
+  }
+  return response.json();
+};
+
+/**
+ * Ask the AI to write the notes for one section (returns existing notes unless force).
+ */
+export const generateTopicNotes = async (sessionId: string, topicDbId: number, force = false): Promise<string> => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes${force ? '?force=1' : ''}`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to write notes');
+  }
+  return (await response.json()).notes as string;
+};
+
+/**
+ * Generate a focused, challenging quiz for one Full Study section, grounded in
+ * that section's notes and source. Returns existing questions unless `force`.
+ */
+export const generateSectionQuiz = async (
+  sessionId: string,
+  topicDbId: number,
+  opts: { count?: number; force?: boolean } = {},
+): Promise<Question[]> => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/quiz`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ count: opts.count ?? 8, force: opts.force ?? false }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to build the quiz');
+  }
+  const data = await response.json();
+  return (data.questions ?? []).map((q: any): Question => ({
+    id: String(q.id),
+    question: q.question,
+    options: q.options ?? [],
+    correctAnswer: q.correctAnswer ?? 0,
+    explanation: q.explanation ?? '',
+  }));
+};
+
+/**
+ * Ask the AI to change part of a section's notes with a plain-language instruction.
+ */
+export const reviseTopicNotes = async (sessionId: string, topicDbId: number, instruction: string): Promise<string> => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes/revise`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ instruction }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to revise notes');
+  }
+  return (await response.json()).notes as string;
+};
+
+export interface Flashcard {
+  id: string;
+  front: string;
+  back: string;
+  hint?: string | null;
+}
+
+/**
+ * Generate recall flashcards for one section, grounded in its notes. Returns
+ * existing cards unless `force`.
+ */
+export const generateSectionFlashcards = async (
+  sessionId: string,
+  topicDbId: number,
+  opts: { count?: number; force?: boolean } = {},
+): Promise<Flashcard[]> => {
+  const token = getAuthToken();
+  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/flashcards/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ count: opts.count ?? 8, force: opts.force ?? false }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to make flashcards');
+  }
+  const data = await response.json();
+  return (data.flashcards ?? []).map((f: any): Flashcard => ({
+    id: String(f.id),
+    front: f.front,
+    back: f.back,
+    hint: f.hint ?? null,
+  }));
+};
+
 export const updateUserXP = async (xpToAdd: number): Promise<void> => {
   try {
     const token = getAuthToken();
@@ -914,20 +1054,6 @@ const getMockAppData = (): AppData => {
       questionsAnswered: 247,
       totalStudyTime: '18hrs',
     },
-    games: [
-      { id: 1, title: "Math Speed Challenge", description: "Race against time solving arithmetic and algebra problems. Perfect for sharpening mental math skills!", category: "Mathematics", likes: 1240, rating: 4.8, image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop", difficulty: "Medium", questionCount: 15, points: 30 },
-      { id: 2, title: "Science Quiz Battle", description: "Test your knowledge across physics, chemistry, and biology in this competitive quiz format.", category: "Science", likes: 980, rating: 4.6, image: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400&h=300&fit=crop", difficulty: "Hard", questionCount: 20, points: 50 },
-      { id: 3, title: "History Trivia Rush", description: "Journey through time answering questions about world events, famous figures, and ancient civilizations.", category: "History", likes: 756, rating: 4.5, image: "https://images.unsplash.com/photo-1461360370896-922624d12a74?w=400&h=300&fit=crop", difficulty: "Easy", questionCount: 10, points: 15 },
-      { id: 4, title: "Language Master", description: "Build vocabulary and grammar skills across multiple languages with interactive challenges.", category: "Languages", likes: 1100, rating: 4.9, image: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=400&h=300&fit=crop", difficulty: "Medium", questionCount: 12, points: 25 },
-      { id: 5, title: "Geography Explorer", description: "Explore countries, capitals, and landmarks. Learn about world geography through fun quizzes!", category: "Geography", likes: 620, rating: 4.4, image: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&h=300&fit=crop", difficulty: "Easy", questionCount: 10, points: 20 },
-      { id: 6, title: "Coding Challenge", description: "Solve programming puzzles and debug code snippets. Great for aspiring developers!", category: "Programming", likes: 890, rating: 4.7, image: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=300&fit=crop", difficulty: "Hard", questionCount: 25, points: 60 },
-      { id: 7, title: "Physics Fundamentals", description: "Master mechanics, thermodynamics, and electromagnetism through interactive problem-solving.", category: "Science", likes: 540, rating: 4.3, image: "https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=400&h=300&fit=crop", difficulty: "Hard", questionCount: 18, points: 45 },
-      { id: 8, title: "Chemistry Quiz", description: "Learn about elements, compounds, and chemical reactions in this engaging quiz game.", category: "Science", likes: 430, rating: 4.2, image: "https://images.unsplash.com/photo-1603126857599-f6e157fa2fe6?w=400&h=300&fit=crop", difficulty: "Medium", questionCount: 15, points: 30 },
-      { id: 9, title: "Biology Basics", description: "Discover the wonders of life science from cells to ecosystems in bite-sized challenges.", category: "Science", likes: 670, rating: 4.5, image: "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=400&h=300&fit=crop", difficulty: "Easy", questionCount: 12, points: 20 },
-      { id: 10, title: "Art History", description: "Explore famous artworks, artists, and movements from Renaissance to Modern art.", category: "Arts", likes: 320, rating: 4.6, image: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=300&fit=crop", difficulty: "Medium", questionCount: 15, points: 25 },
-      { id: 11, title: "Music Theory", description: "Learn notes, scales, and composition basics through interactive music challenges.", category: "Music", likes: 280, rating: 4.4, image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=300&fit=crop", difficulty: "Medium", questionCount: 15, points: 28 },
-      { id: 12, title: "Economics 101", description: "Understand market principles, supply & demand, and financial concepts through gameplay.", category: "Business", likes: 450, rating: 4.3, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=300&fit=crop", difficulty: "Hard", questionCount: 20, points: 50 },
-    ],
     studySessions: [
       { id: '1', title: "Calculus Fundamentals", progress: 92, topics: 12, time: "2 hours ago", createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: true },
       { id: '2', title: "Distribution & Channel Strategy Fundamentals", progress: 0, topics: 7, time: "Just now", createdAt: Date.now() - 1 * 60 * 60 * 1000, hasFullStudy: true, hasSpeedRun: true, hasQuiz: false },

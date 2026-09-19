@@ -1,293 +1,446 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import ShootingStars from "@/components/ShootingStars";
-import { ArrowRight, Upload, Gamepad2, TrendingUp, Users, Clock } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  CalendarDays,
+  ChevronDown,
+  FileText,
+  Flame,
+  Folder,
+  Gamepad2,
+  GraduationCap,
+  Layers,
+  LayoutDashboard,
+  ListChecks,
+  Mic,
+  RotateCcw,
+  Sparkles,
+  Timer,
+  Upload,
+  Wand2,
+  Youtube,
+  Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/*
+  Marketing landing — the "editorial" world from the reference: cream ground,
+  pure ink, Instrument Serif 400 for display type, Inter 500 for everything
+  else, hairlines instead of shadows, one ink pill for navigation and CTAs.
+  Emphasis steps *back* to grey (<em>) rather than reaching for a colour.
+  Tokens live in index.css under `.lp` and force the page light.
+*/
+
+const inkPill =
+  "inline-flex items-center gap-2 rounded-full bg-[var(--ink)] px-6 py-3 text-[15px] font-medium text-[var(--on-ink)] transition-opacity hover:opacity-85";
+const creamPill =
+  "inline-flex items-center gap-2 rounded-full bg-[var(--cream)] px-4 py-2 text-[14px] font-medium text-[var(--ink)] transition-opacity hover:opacity-85";
+const eyebrow = "text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]";
+
+/* The Features mega-menu — PlayStudy's real capabilities, grouped. */
+type Feat = { icon: LucideIcon; title: string; desc: string; tint: string; badge?: string };
+const FEATURE_GROUPS: { label: string; items: Feat[] }[] = [
+  {
+    label: "Organize",
+    items: [
+      { icon: Upload, title: "Upload anything", desc: "PDFs, slides, notes or pasted text", tint: "#EDE9FE" },
+      { icon: Folder, title: "Study folders", desc: "Shelve sessions into covered folders", tint: "#DCFCE7" },
+      { icon: CalendarDays, title: "Calendar", desc: "Plan exams and import your .ics", tint: "#FEF3C7" },
+    ],
+  },
+  {
+    label: "Learn",
+    items: [
+      { icon: GraduationCap, title: "Full Study", desc: "One scrolling note with a quiz per section", tint: "#EDE9FE" },
+      { icon: FileText, title: "Auto notes", desc: "Readable notes with headings & highlights", tint: "#DBEAFE" },
+      { icon: BookOpen, title: "Read mode", desc: "Distraction-free reading, dark or paper", tint: "#DCFCE7" },
+      { icon: Wand2, title: "Ask AI to change", desc: "Rewrite any part of a note by asking", tint: "#FCE7F3" },
+    ],
+  },
+  {
+    label: "Practice & test",
+    items: [
+      { icon: ListChecks, title: "Quiz this section", desc: "Challenging questions from your notes", tint: "#DCFCE7" },
+      { icon: Layers, title: "Flashcards", desc: "Flip-card recall to make it stick", tint: "#DBEAFE" },
+      { icon: RotateCcw, title: "Wrong questions", desc: "Retry only the ones you missed", tint: "#FEF3C7" },
+    ],
+  },
+  {
+    label: "Video & progress",
+    items: [
+      { icon: Youtube, title: "YouTube → study", desc: "Paste a link; we read it and build it", tint: "#FCE7F3", badge: "New" },
+      { icon: Zap, title: "XP & levels", desc: "Every answer earns you XP", tint: "#FEF3C7" },
+      { icon: Flame, title: "Streaks", desc: "Keep your daily study streak alive", tint: "#EDE9FE" },
+      { icon: LayoutDashboard, title: "Progress", desc: "See exactly where you stand", tint: "#DBEAFE" },
+    ],
+  },
+];
 
 const LandingPage = () => {
+  const [featuresOpen, setFeaturesOpen] = useState(false);
+
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[hsl(220,30%,8%)]">
-      <ShootingStars />
-      
-      {/* Navigation */}
-      <nav className="relative z-10 flex items-center justify-between px-6 py-4 lg:px-12">
-        <div className="flex items-center gap-2">
-          <img
-            src="/logo-new.png"
-            alt="PlayStudy"
-            className="h-36 w-auto"
-          />
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <Link to="/auth">
-            <Button variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10">
-              Log In
-            </Button>
+    <div className="lp min-h-screen">
+      {/* Floating ink pill nav */}
+      <header className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
+        <nav className="flex w-full max-w-4xl items-center gap-2 rounded-full bg-[var(--ink)] py-2 pl-2.5 pr-2 text-[var(--on-ink)] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+          <Link to="/" className="flex items-center gap-2.5 pr-2">
+            <img src="/ps-logo.png" alt="" className="size-7 rounded-full" />
+            <span className="text-[15px] font-semibold tracking-tight">Playstudy</span>
+            <span className="rounded-full border border-[var(--hair-ink-2)] px-2 py-px text-[10px] font-semibold uppercase tracking-wider text-[var(--on-ink-mut)]">
+              Beta
+            </span>
           </Link>
-          <Link to="/auth">
-            <Button className="bg-primary hover:bg-primary/90">
-              Get Started
-            </Button>
-          </Link>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 lg:pt-28">
-        <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white max-w-4xl leading-tight">
-          <img src="/canva-new.png" alt="Play" className="inline-block h-12 md:h-16 lg:h-[4.5rem] align-baseline mr-2" /> smarter.
-          <span className="block text-primary mt-1 overflow-hidden whitespace-nowrap border-r-4 border-primary animate-typewriter">
-            Play harder.
-          </span>
-        </h1>
-        
-        <p className="mt-6 text-lg md:text-xl text-white/50 max-w-xl">
-          Transform your notes into interactive games. Upload anything and start learning in seconds.
-        </p>
-        
-        <div className="mt-8">
-          <Link to="/auth">
-            <Button size="lg" className="bg-primary hover:bg-primary/90 px-8 py-6 gap-2">
-              Start Free
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
-        </div>
-
-        {/* Social Proof */}
-        <div className="mt-12 flex items-center gap-6 text-white/40 text-sm">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            <span>10K+ students</span>
-          </div>
-          <div className="w-px h-4 bg-white/20" />
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            <span>500K+ study hours</span>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="relative z-10 px-6 py-24 lg:px-12 overflow-hidden">
-        <div className="max-w-6xl mx-auto">
-          <p className="text-white/40 text-sm uppercase tracking-wider text-center mb-4">How It Works</p>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-20">
-            Three steps to smarter studying
-          </h2>
-          
-          <div className="relative">
-            {/* SVG Curved Path - Behind cards */}
-            <svg 
-              className="absolute left-0 top-0 w-full h-full pointer-events-none hidden md:block -z-10"
-              viewBox="0 0 1000 1400"
-              fill="none"
-              preserveAspectRatio="xMidYMid slice"
+          <div className="mx-auto hidden items-center gap-1 md:flex">
+            <button
+              type="button"
+              onClick={() => setFeaturesOpen((o) => !o)}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-3 py-1.5 text-[14px] transition-colors hover:bg-white/10 hover:text-[var(--on-ink)]",
+                featuresOpen ? "bg-white/10 text-[var(--on-ink)]" : "text-[var(--on-ink-mut)]",
+              )}
             >
-              {/* Curved path from Step 1 to Step 2 */}
-              <path
-                d="M 700 280 Q 900 350, 850 480 Q 800 600, 500 650 Q 200 700, 250 800"
-                stroke="hsl(var(--primary))"
-                strokeWidth="3"
-                strokeDasharray="12 10"
-                strokeLinecap="round"
-                fill="none"
-                opacity="0.35"
-              />
-              {/* Curved path from Step 2 to Step 3 */}
-              <path
-                d="M 250 850 Q 100 950, 200 1050 Q 350 1150, 500 1100 Q 700 1050, 750 1150"
-                stroke="hsl(var(--primary))"
-                strokeWidth="3"
-                strokeDasharray="12 10"
-                strokeLinecap="round"
-                fill="none"
-                opacity="0.35"
-              />
-            </svg>
+              Features
+              <ChevronDown className={cn("size-3.5 transition-transform", featuresOpen && "rotate-180")} />
+            </button>
+            {[
+              ["#how", "How it works"],
+              ["#why", "Why PlayStudy"],
+              ["#manifesto", "Manifesto"],
+            ].map(([href, label]) => (
+              <a
+                key={href}
+                href={href}
+                className="rounded-full px-3 py-1.5 text-[14px] text-[var(--on-ink-mut)] transition-colors hover:bg-white/10 hover:text-[var(--on-ink)]"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+          <Link
+            to="/auth"
+            className="ml-auto rounded-full px-3 py-1.5 text-[14px] text-[var(--on-ink-mut)] transition-colors hover:text-[var(--on-ink)] md:ml-0"
+          >
+            Log in
+          </Link>
+          <Link to="/auth" className={creamPill}>
+            Get started
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </nav>
 
-            {/* Mobile dotted line */}
-            <div className="md:hidden absolute left-6 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-primary/30 -z-10" />
-
-            <div className="flex flex-col gap-20 relative z-10">
-              {/* Step 1 - Right aligned */}
-              <div className="flex justify-center md:justify-end md:pr-8">
-                <div className="w-full max-w-2xl">
-                  <FeatureCard
-                    icon={<Upload className="w-7 h-7" />}
-                    step="01"
-                    title="Upload Content"
-                    description="Drop your PDFs, notes, slides, or paste text. Our AI extracts key concepts instantly."
-                    animationType="upload"
-                  />
-                </div>
-              </div>
-              
-              {/* Step 2 - Left aligned */}
-              <div className="flex justify-center md:justify-start md:pl-8">
-                <div className="w-full max-w-2xl">
-                  <FeatureCard
-                    icon={<Gamepad2 className="w-7 h-7" />}
-                    step="02"
-                    title="Choose Your Game"
-                    description="Pick from quizzes, flashcards, speed runs, or memory games. Learning becomes play."
-                    animationType="game"
-                  />
-                </div>
-              </div>
-              
-              {/* Step 3 - Right aligned */}
-              <div className="flex justify-center md:justify-end md:pr-8">
-                <div className="w-full max-w-2xl">
-                  <FeatureCard
-                    icon={<TrendingUp className="w-7 h-7" />}
-                    step="03"
-                    title="Track Progress"
-                    description="Watch your knowledge grow. Earn XP, unlock achievements, and master every topic."
-                    animationType="progress"
-                  />
+        {/* Features mega-menu */}
+        {featuresOpen && (
+          <>
+            <button
+              type="button"
+              aria-label="Close menu"
+              tabIndex={-1}
+              className="fixed inset-0 z-40 cursor-default"
+              onClick={() => setFeaturesOpen(false)}
+            />
+            <div className="fade-in absolute inset-x-0 top-[calc(100%+0.5rem)] z-50 flex justify-center px-4">
+              <div className="w-full max-w-5xl rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6 shadow-[0_28px_70px_rgba(0,0,0,0.16)] md:p-8">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:grid-cols-4">
+                  {FEATURE_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <p className={eyebrow}>{group.label}</p>
+                      <ul className="mt-4 space-y-4">
+                        {group.items.map((it) => (
+                          <li key={it.title}>
+                            <Link
+                              to="/auth"
+                              onClick={() => setFeaturesOpen(false)}
+                              className="group flex items-start gap-3 rounded-lg -mx-2 px-2 py-1 transition-colors hover:bg-[var(--cream)]"
+                            >
+                              <span
+                                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105"
+                                style={{ backgroundColor: it.tint }}
+                              >
+                                <it.icon className="size-4 text-[var(--ink)]" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="flex items-center gap-1.5 text-[14px] font-medium text-[var(--ink)]">
+                                  {it.title}
+                                  {it.badge && (
+                                    <span className="rounded bg-[#FEF08A] px-1.5 py-px text-[10px] font-semibold text-[var(--ink)]">{it.badge}</span>
+                                  )}
+                                </span>
+                                <span className="mt-0.5 block text-[12.5px] leading-snug text-[var(--muted)]">{it.desc}</span>
+                              </span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
+          </>
+        )}
+      </header>
+
+      {/* Hero */}
+      <section className="mx-auto max-w-5xl px-6 pb-16 pt-36 text-center md:pt-44">
+        <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--hair)] bg-[var(--cream-alt)] px-3 py-1 text-[12px] font-medium text-[var(--muted)]">
+          <Sparkles className="size-3.5" />
+          AI study games for students and teachers
+        </p>
+        <h1 className="lp-serif mx-auto mt-6 max-w-4xl text-[3.25rem] md:text-[4.5rem] lg:text-[5.5rem]">
+          Study smarter. <em>Play harder.</em>
+        </h1>
+        <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
+          Drop in your notes, slides or a PDF. PlayStudy turns them into topics, questions and games you'll actually
+          want to finish.
+        </p>
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+          <Link to="/auth" className={inkPill}>
+            Start free
+            <ArrowRight className="size-4" />
+          </Link>
+          <a
+            href="#how"
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[15px] font-medium text-[var(--ink)] underline-offset-4 transition-opacity hover:opacity-70"
+          >
+            See how it works
+            <ArrowUpRight className="size-4" />
+          </a>
+        </div>
+
+        {/* Hero showcase — the product in motion, framed as a cinematic card
+            with the copy and the numbers set over a dimmed video. */}
+        <div className="relative mx-auto mt-16 max-w-5xl overflow-hidden rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--ink)] text-left shadow-[0_28px_70px_rgba(0,0,0,0.12)]">
+          <video
+            src="/vid-1.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="h-[clamp(360px,54vh,580px)] w-full object-cover"
+          />
+          {/* darken top + bottom so overlaid text stays legible, video shows through the middle */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/75 via-black/15 to-black/80" />
+
+          {/* Copy — top */}
+          <div className="absolute inset-x-0 top-0 flex flex-col items-start justify-between gap-4 p-6 md:flex-row md:p-8">
+            <p className="lp-serif max-w-md text-[1.9rem] leading-[1.05] text-white md:text-[2.5rem]">
+              Your notes, in motion.
+            </p>
+            <p className="max-w-sm text-[14px] leading-relaxed text-white/80 md:text-[15px]">
+              You forget most of what you read within a day. PlayStudy turns your notes into active recall and games — the
+              two things the research below says actually make it stick.
+            </p>
           </div>
+
+          {/* Numbers — bottom. Real, cited study-science, not vanity metrics. */}
+          <dl className="absolute inset-x-0 bottom-0 grid grid-cols-1 gap-4 p-6 sm:grid-cols-3 md:p-8">
+            {[
+              {
+                v: "67%",
+                l: "of new material is forgotten within a day without review",
+                src: "Ebbinghaus · Murre & Dros, 2015",
+                href: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4492928/",
+              },
+              {
+                v: "61%",
+                l: "recalled a week later with active recall — vs 40% from rereading",
+                src: "Roediger & Karpicke, 2006",
+                href: "https://journals.sagepub.com/doi/10.1111/j.1467-9280.2006.01693.x",
+              },
+              {
+                v: "g = 0.49",
+                l: "boost to learning from gamification (meta-analysis, 19 studies)",
+                src: "Sailer & Homner, 2020",
+                href: "https://eric.ed.gov/?id=EJ1245270",
+              },
+            ].map((s) => (
+              <div key={s.src} className="min-w-0">
+                <dt className="lp-serif text-[1.8rem] leading-none text-white md:text-[2.3rem]">{s.v}</dt>
+                <dd className="mt-1.5 text-[12px] leading-snug text-white/80 md:text-[12.5px]">{s.l}</dd>
+                <a
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-[11px] text-white/55 underline decoration-white/30 underline-offset-2 transition-colors hover:text-white/85"
+                >
+                  Source: {s.src}
+                </a>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
-      {/* Feature Cards Grid - 5 Cards */}
-      <section className="relative z-10 px-6 py-16 lg:px-12">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-16">
-            Why Choose PlayStudy
+      {/* How it works */}
+      <section id="how" className="scroll-mt-24 border-t border-[var(--hair)] px-6 py-20 md:py-28">
+        <div className="mx-auto max-w-6xl">
+          <p className={eyebrow}>How it works</p>
+          <h2 className="lp-serif mt-3 max-w-2xl text-[2.5rem] md:text-[3rem]">
+            Three steps to <em>smarter</em> studying
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 auto-rows-auto">
-            {/* Card 1 */}
-            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-1 md:row-start-1">
-              <img
-                src="/image-card-1.png"
-                alt="New game added every week"
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            {/* Card 2 - Center/Tall */}
-            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col md:min-h-[660px] md:col-start-2 md:row-span-2">
-              <div className="p-8 flex-1 flex flex-col justify-start items-center text-center">
-                <h3 className="text-4xl md:text-5xl font-bold text-white mb-0">
-                  Card 2
-                </h3>
-              </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] relative md:col-start-3 md:row-start-1">
-              <span className="absolute top-5 right-5 bg-primary text-white px-3 py-1.5 rounded-md text-xs font-semibold">
-                New
-              </span>
-              <div className="p-8 flex-1 flex flex-col justify-start">
-                <h3 className="text-xl font-bold text-white leading-snug">
-                  Card 3
-                </h3>
-              </div>
-            </div>
-
-            {/* Card 4 */}
-            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-1 md:row-start-2">
-              <video
-                src="/video-card4.mp4"
-                autoPlay
-                muted
-                loop
-                playsInline
-                className="w-full h-full object-cover"
-              />
-            </div>
-
-            {/* Card 5 */}
-            <div className="bg-[#1a1a1a] rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:col-start-3 md:row-start-2">
-              <div className="p-8 flex-1 flex flex-col justify-start">
-                <h3 className="text-xl font-bold text-white leading-snug">
-                  Card 5
-                </h3>
-              </div>
-            </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            <StepCard
+              n="01"
+              icon={<Upload className="size-5" />}
+              title="Upload anything"
+              body="PDFs, slides, notes or pasted text. Key concepts are extracted into a topic tree in seconds."
+              art="upload"
+            />
+            <StepCard
+              n="02"
+              icon={<Gamepad2 className="size-5" />}
+              title="Pick your mode"
+              body="Full study, speed runs, an AI mentor that talks you through it, or a game. Learning becomes play."
+              art="game"
+            />
+            <StepCard
+              n="03"
+              icon={<Zap className="size-5" />}
+              title="Watch it stick"
+              body="Every answer earns XP, every topic mastered is a level up, and your dashboard shows exactly where you stand."
+              art="progress"
+            />
           </div>
         </div>
       </section>
 
-      {/* Manifesto Section */}
-      <section className="relative z-10 px-6 py-24 lg:px-12">
-        <div className="max-w-2xl mx-auto">
-          <div className="p-10 md:p-16 rounded-3xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10">
-            <p className="font-handwritten text-primary text-xs md:text-sm mb-4">Our Manifesto</p>
-            <h2 className="font-handwritten text-xl md:text-2xl lg:text-3xl text-white mb-6 leading-tight">
-              Learning shouldn't feel like a chore.
-            </h2>
-            <div className="space-y-4 font-handwritten text-sm md:text-base text-white/70 leading-relaxed">
-              <p>
-                We believe the best learning happens when you're having fun. When curiosity takes over and studying feels like playing your favorite game.
+      {/* Why PlayStudy — ink band */}
+      <section id="why" className="on-ink scroll-mt-24 bg-[var(--ink)] px-6 py-20 text-[var(--on-ink)] md:py-28">
+        <div className="mx-auto max-w-6xl">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--on-ink-dim)]">Why PlayStudy</p>
+          <h2 className="lp-serif mt-3 max-w-2xl text-[2.5rem] md:text-[3rem]">
+            Built for the way you <em>actually</em> study
+          </h2>
+
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            <InkTile className="overflow-hidden p-0 md:col-start-1 md:row-start-1">
+              <img src="/image-card-1.png" alt="New game added every week" className="h-full w-full object-cover" />
+            </InkTile>
+
+            <InkTile className="md:col-start-2 md:row-span-2">
+              <h3 className="lp-serif text-[1.75rem]">Four ways to learn the same thing</h3>
+              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
+                Switch modes without losing your place. Progress follows the session, not the screen.
               </p>
-              <p>
-                Traditional studying is broken. Highlighting textbooks. Rereading notes. Hoping it sticks. We knew there had to be a better way.
+              <ul className="mt-6 divide-y divide-[var(--hair-ink)] border-y border-[var(--hair-ink)]">
+                {[
+                  [GraduationCap, "Full study", "Topic by topic, with explanations after every answer."],
+                  [Zap, "Speed run", "Flashcards or rapid multiple choice against the clock."],
+                  [Mic, "Mentor mode", "An AI voice that teaches, then quizzes you on what it said."],
+                  [Gamepad2, "Game zone", "Memory match, platformers and a new game every week."],
+                ].map(([Icon, t, d]) => {
+                  const I = Icon as typeof GraduationCap;
+                  return (
+                    <li key={t as string} className="flex items-start gap-3 py-3.5">
+                      <I className="mt-0.5 size-4 shrink-0 text-[var(--on-ink-mut)]" />
+                      <div>
+                        <p className="text-[15px] font-medium">{t as string}</p>
+                        <p className="mt-0.5 text-[13px] text-[var(--on-ink-dim)]">{d as string}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </InkTile>
+
+            <InkTile className="md:col-start-3 md:row-start-1">
+              <Folder className="size-5 text-[var(--on-ink-mut)]" />
+              <h3 className="lp-serif mt-4 text-[1.5rem]">Folders that keep up</h3>
+              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
+                Drag a session onto a folder and it's filed. Subjects, terms, exams — organise it your way.
               </p>
-              <p>
-                So we built PlayStudy — a place where your notes become quizzes, your slides become flashcards, and your textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning becomes something you actually want to do.
+            </InkTile>
+
+            <InkTile className="overflow-hidden p-0 md:col-start-1 md:row-start-2">
+              <video src="/video-card4.mp4" autoPlay muted loop playsInline className="h-full w-full object-cover" />
+            </InkTile>
+
+            <InkTile className="md:col-start-3 md:row-start-2">
+              <Timer className="size-5 text-[var(--on-ink-mut)]" />
+              <h3 className="lp-serif mt-4 text-[1.5rem]">Time that's honest</h3>
+              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
+                PlayStudy only counts the minutes you're really reading and writing, so your study time means something.
               </p>
-              <p className="text-white pt-4">
-                This is studying, reimagined. This is PlayStudy.
-              </p>
-            </div>
-            
-            {/* Signature */}
-            <div className="mt-12 pt-8 border-t border-white/10">
-              <p className="font-handwritten text-base md:text-lg text-primary italic">
-                — The PlayStudy Team
-              </p>
-            </div>
+            </InkTile>
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="relative z-10 px-6 py-16 lg:px-12">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-            <StatCard value="95%" label="Retention Rate" />
-            <StatCard value="3x" label="Faster Learning" />
-            <StatCard value="50K+" label="Topics Covered" />
-            <StatCard value="4.9" label="User Rating" />
+      {/* Manifesto */}
+      <section id="manifesto" className="scroll-mt-24 px-6 py-20 md:py-28">
+        <div className="mx-auto max-w-2xl">
+          <p className={eyebrow}>Our manifesto</p>
+          <h2 className="lp-serif mt-3 text-[2.5rem] md:text-[3rem]">
+            Learning shouldn't feel like a <em>chore.</em>
+          </h2>
+          <div className="mt-8 space-y-5 text-[17px] leading-relaxed text-[var(--muted)]">
+            <p>
+              We believe the best learning happens when you're having fun. When curiosity takes over and studying feels
+              like playing your favourite game.
+            </p>
+            <p>
+              Traditional studying is broken. Highlighting textbooks. Rereading notes. Hoping it sticks. We knew there
+              had to be a better way.
+            </p>
+            <p>
+              So we built PlayStudy: a place where your notes become quizzes, your slides become flashcards and your
+              textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning
+              becomes something you actually want to do.
+            </p>
+            <p className="text-[var(--ink)]">This is studying, reimagined. This is PlayStudy.</p>
           </div>
+          <p className="lp-serif mt-10 border-t border-[var(--hair)] pt-6 text-[1.25rem] italic text-[var(--muted)]">
+            — The PlayStudy team
+          </p>
         </div>
+      </section>
+
+      {/* Stats */}
+      <section className="border-y border-[var(--hair)] px-6 py-14">
+        <dl className="mx-auto grid max-w-5xl grid-cols-2 gap-y-10 md:grid-cols-4 md:divide-x md:divide-[var(--hair)]">
+          {[
+            ["95%", "retention rate"],
+            ["3×", "faster learning"],
+            ["50K+", "topics covered"],
+            ["4.9", "user rating"],
+          ].map(([v, l]) => (
+            <div key={l} className="text-center md:px-6">
+              <dt className="lp-serif text-[3rem] md:text-[3.5rem]">{v}</dt>
+              <dd className="mt-1 text-[13px] text-[var(--muted-2)]">{l}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {/* CTA */}
-      <section className="relative z-10 px-6 py-20 lg:px-12">
-        <div className="max-w-xl mx-auto text-center">
-          <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">Ready to transform how you study?</h2>
-          <p className="text-white/50 mb-8">Join thousands of students who've made learning fun again.</p>
-          <Link to="/auth">
-            <Button size="lg" className="bg-primary hover:bg-primary/90 px-10 py-6 gap-2">
-              Get Started Free
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
-        </div>
+      <section className="px-6 py-24 text-center md:py-32">
+        <h2 className="lp-serif mx-auto max-w-2xl text-[2.5rem] md:text-[3.5rem]">
+          Ready to change how you <em>study?</em>
+        </h2>
+        <p className="mx-auto mt-4 max-w-md text-[16px] text-[var(--muted)]">
+          Join thousands of students who've made learning fun again. Free to start, no card needed.
+        </p>
+        <Link to="/auth" className={cn(inkPill, "mt-8")}>
+          Get started free
+          <ArrowRight className="size-4" />
+        </Link>
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 px-6 py-8 border-t border-white/10">
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img
-              src="/logo-new.png"
-              alt="PlayStudy"
-              className="h-24 w-auto opacity-40"
-            />
-            <span className="text-xs text-white/40">© 2024</span>
+      <footer className="border-t border-[var(--hair)] px-6 py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
+          <div className="flex items-center gap-3">
+            <img src="/ps-logo.png" alt="" className="size-6 rounded-full" />
+            <span className="text-[13px] text-[var(--muted-2)]">© 2026 PlayStudy</span>
           </div>
-          <div className="flex gap-6 text-xs text-white/40">
-            <Link to="/privacy" className="hover:text-white/60 transition-colors">Privacy</Link>
-            <Link to="/terms" className="hover:text-white/60 transition-colors">Terms</Link>
-            <Link to="/contact" className="hover:text-white/60 transition-colors">Contact</Link>
+          <div className="flex gap-6 text-[13px] text-[var(--muted-2)]">
+            <Link to="/privacy" className="transition-opacity hover:opacity-70">Privacy</Link>
+            <Link to="/terms" className="transition-opacity hover:opacity-70">Terms</Link>
+            <Link to="/contact" className="transition-opacity hover:opacity-70">Contact</Link>
           </div>
         </div>
       </footer>
@@ -295,79 +448,92 @@ const LandingPage = () => {
   );
 };
 
-const FeatureCard = ({ icon, step, title, description, animationType }: { icon: React.ReactNode; step: string; title: string; description: string; animationType: 'upload' | 'game' | 'progress' }) => (
-  <div className="group p-4 md:p-6 rounded-3xl bg-[#1a1a1a]/90 border border-white/10 hover:border-white/30 transition-all duration-300 backdrop-blur-sm shadow-xl">
-    {/* Animated SVG Placeholder */}
-    <div className="w-full h-80 md:h-96 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-white/10 mb-4 flex items-center justify-center overflow-hidden">
-      {animationType === 'upload' && (
-        <svg viewBox="0 0 200 150" className="w-64 h-48 md:w-80 md:h-60">
-          {/* Document */}
-          <rect x="60" y="30" width="80" height="100" rx="6" fill="hsl(var(--primary))" opacity="0.2" className="animate-pulse" />
-          <rect x="70" y="50" width="40" height="4" rx="2" fill="hsl(var(--primary))" opacity="0.5" />
-          <rect x="70" y="62" width="55" height="4" rx="2" fill="hsl(var(--primary))" opacity="0.4" />
-          <rect x="70" y="74" width="35" height="4" rx="2" fill="hsl(var(--primary))" opacity="0.3" />
-          <rect x="70" y="86" width="50" height="4" rx="2" fill="hsl(var(--primary))" opacity="0.4" />
-          {/* Upload Arrow */}
-          <g className="animate-bounce" style={{ animationDuration: '2s' }}>
-            <path d="M100 20 L110 35 L103 35 L103 48 L97 48 L97 35 L90 35 Z" fill="hsl(var(--primary))" />
-          </g>
-        </svg>
+function InkTile({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-[300px] flex-col rounded-[var(--r-card)] border border-[var(--hair-ink)] bg-white/[0.03] p-7",
+        className,
       )}
-      {animationType === 'game' && (
-        <svg viewBox="0 0 200 150" className="w-64 h-48 md:w-80 md:h-60">
-          {/* Game Controller */}
-          <rect x="40" y="50" width="120" height="60" rx="30" fill="hsl(var(--primary))" opacity="0.2" className="animate-pulse" />
-          {/* D-pad */}
-          <rect x="60" y="72" width="20" height="8" rx="2" fill="hsl(var(--primary))" opacity="0.6" />
-          <rect x="66" y="66" width="8" height="20" rx="2" fill="hsl(var(--primary))" opacity="0.6" />
-          {/* Buttons */}
-          <circle cx="130" cy="70" r="6" fill="hsl(var(--primary))" opacity="0.7" className="animate-ping" style={{ animationDuration: '2s' }} />
-          <circle cx="145" cy="80" r="6" fill="hsl(var(--primary))" opacity="0.5" />
-          <circle cx="130" cy="90" r="6" fill="hsl(var(--primary))" opacity="0.5" />
-          <circle cx="115" cy="80" r="6" fill="hsl(var(--primary))" opacity="0.5" />
-        </svg>
-      )}
-      {animationType === 'progress' && (
-        <svg viewBox="0 0 200 150" className="w-64 h-48 md:w-80 md:h-60">
-          {/* Chart bars */}
-          <rect x="40" y="100" width="25" height="30" rx="4" fill="hsl(var(--primary))" opacity="0.3">
-            <animate attributeName="height" values="30;45;30" dur="2s" repeatCount="indefinite" />
-            <animate attributeName="y" values="100;85;100" dur="2s" repeatCount="indefinite" />
-          </rect>
-          <rect x="75" y="70" width="25" height="60" rx="4" fill="hsl(var(--primary))" opacity="0.5">
-            <animate attributeName="height" values="60;80;60" dur="2s" repeatCount="indefinite" begin="0.3s" />
-            <animate attributeName="y" values="70;50;70" dur="2s" repeatCount="indefinite" begin="0.3s" />
-          </rect>
-          <rect x="110" y="50" width="25" height="80" rx="4" fill="hsl(var(--primary))" opacity="0.7">
-            <animate attributeName="height" values="80;100;80" dur="2s" repeatCount="indefinite" begin="0.6s" />
-            <animate attributeName="y" values="50;30;50" dur="2s" repeatCount="indefinite" begin="0.6s" />
-          </rect>
-          <rect x="145" y="30" width="25" height="100" rx="4" fill="hsl(var(--primary))" opacity="0.9">
-            <animate attributeName="height" values="100;110;100" dur="2s" repeatCount="indefinite" begin="0.9s" />
-            <animate attributeName="y" values="30;20;30" dur="2s" repeatCount="indefinite" begin="0.9s" />
-          </rect>
-          {/* Trend line */}
-          <path d="M52 95 L87 60 L122 40 L157 25" stroke="hsl(var(--primary))" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.8" />
-        </svg>
-      )}
+    >
+      {children}
     </div>
-    
-    <div className="flex items-center gap-4 mb-5">
-      <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary/30 transition-colors">
-        {icon}
-      </div>
-      <span className="text-primary text-4xl font-bold font-mono">{step}</span>
-    </div>
-    <h3 className="text-white text-2xl font-semibold mb-4">{title}</h3>
-    <p className="text-white/60 text-lg leading-relaxed">{description}</p>
-  </div>
-);
+  );
+}
 
-const StatCard = ({ value, label }: { value: string; label: string }) => (
-  <div>
-    <p className="text-2xl md:text-3xl font-bold text-primary mb-1">{value}</p>
-    <p className="text-white/50 text-sm">{label}</p>
-  </div>
-);
+function StepCard({
+  n,
+  icon,
+  title,
+  body,
+  art,
+}: {
+  n: string;
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  art: "upload" | "game" | "progress";
+}) {
+  return (
+    <div className="flex flex-col rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6">
+      <div className="flex h-44 items-center justify-center rounded-[var(--r-media)] border border-[var(--hair-soft)] bg-[var(--cream)] text-[var(--ink)]">
+        <StepArt kind={art} />
+      </div>
+      <div className="mt-6 flex items-center justify-between">
+        <span className="flex size-9 items-center justify-center rounded-full border border-[var(--hair)] text-[var(--ink)]">
+          {icon}
+        </span>
+        <span className="lp-serif text-[1.75rem] text-[var(--muted-2)]">{n}</span>
+      </div>
+      <h3 className="lp-serif mt-4 text-[1.75rem]">{title}</h3>
+      <p className="mt-2 text-[15px] leading-relaxed text-[var(--muted)]">{body}</p>
+    </div>
+  );
+}
+
+/* Quiet monochrome illustrations — ink on cream, gentle motion only. */
+function StepArt({ kind }: { kind: "upload" | "game" | "progress" }) {
+  if (kind === "upload") {
+    return (
+      <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="62" y="34" width="76" height="96" rx="8" opacity="0.9" />
+        <path d="M74 56h34M74 70h48M74 84h28M74 98h44" strokeLinecap="round" opacity="0.35" />
+        <g className="animate-bounce" style={{ animationDuration: "2.4s" }}>
+          <path d="M100 14v26M90 24l10-10 10 10" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      </svg>
+    );
+  }
+  if (kind === "game") {
+    return (
+      <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="38" y="50" width="124" height="60" rx="30" opacity="0.9" />
+        <path d="M60 80h22M71 69v22" strokeLinecap="round" opacity="0.5" />
+        <circle cx="128" cy="72" r="5" opacity="0.5" />
+        <circle cx="144" cy="80" r="5" opacity="0.5" />
+        <circle cx="128" cy="88" r="5" opacity="0.5" />
+        <circle cx="112" cy="80" r="5" fill="currentColor" stroke="none">
+          <animate attributeName="opacity" values="1;0.25;1" dur="2.4s" repeatCount="indefinite" />
+        </circle>
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {[
+        [40, 100, 30],
+        [75, 74, 56],
+        [110, 52, 78],
+        [145, 30, 100],
+      ].map(([x, y, h], i) => (
+        <rect key={x} x={x} y={y} width="22" height={h} rx="4" opacity={0.25 + i * 0.2}>
+          <animate attributeName="height" values={`${h};${h + 10};${h}`} dur="2.4s" begin={`${i * 0.3}s`} repeatCount="indefinite" />
+          <animate attributeName="y" values={`${y};${y - 10};${y}`} dur="2.4s" begin={`${i * 0.3}s`} repeatCount="indefinite" />
+        </rect>
+      ))}
+      <path d="M51 92L86 64 121 42 156 22" strokeLinecap="round" opacity="0.9" />
+    </svg>
+  );
+}
 
 export default LandingPage;

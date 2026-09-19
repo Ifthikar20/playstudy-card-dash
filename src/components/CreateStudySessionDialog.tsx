@@ -9,25 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
-import {
-  Upload,
-  FileText,
-  ArrowRight,
-  ArrowLeft,
-  BookOpen,
-  Zap,
-  Gamepad2,
-  Clock,
-  Target,
-  Mic,
-  FileImage,
-  File
-} from "lucide-react";
+import { Upload, FileText, ArrowRight, ArrowLeft, BookOpen, Clock, Youtube } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
-import { createStudySessionWithAI, analyzeContent, ContentAnalysis, streamQuestionGeneration } from "@/services/api";
+import { createStudySessionWithAI, createStudySessionFromYouTube, analyzeContent, ContentAnalysis, streamQuestionGeneration } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
@@ -35,24 +20,22 @@ interface CreateStudySessionDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type Step = "upload" | "select-mode";
-type UploadType = "file" | "text";
-type StudyMode = "full-study" | "speed-run" | "game" | "mentor";
+type Step = "upload" | "ready";
+type UploadType = "file" | "text" | "youtube";
 
 export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySessionDialogProps) {
   const navigate = useNavigate();
-  const { setCurrentSession, addSession, createSpeedRun } = useAppStore();
+  const { setCurrentSession, addSession } = useAppStore();
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("upload");
   const [uploadType, setUploadType] = useState<UploadType>("text");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<StudyMode | null>(null);
   const [topicCount, setTopicCount] = useState([4]);
   const [questionCount, setQuestionCount] = useState([10]);
-  const [speedRunDuration, setSpeedRunDuration] = useState([10]);
   const [sessionTitle, setSessionTitle] = useState("");
   const [createdSession, setCreatedSession] = useState<any>(null);
   const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
@@ -173,16 +156,19 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     setIsProcessing(true);
 
     try {
-      const content = textContent.trim();
-      const title = sessionTitle.trim() || `Study Session ${new Date().toLocaleDateString()}`;
+      const title = sessionTitle.trim();
 
-      // Call backend API to create session with AI
-      const newSession = await createStudySessionWithAI(
-        title,
-        content,
-        topicCount[0],
-        questionCount[0]
-      );
+      // Route by source: a YouTube video reads captions server-side; otherwise
+      // the pasted text (or the extracted file text) goes to the same pipeline.
+      const newSession =
+        uploadType === "youtube"
+          ? await createStudySessionFromYouTube(youtubeUrl.trim(), title, topicCount[0], questionCount[0])
+          : await createStudySessionWithAI(
+              title || `Study Session ${new Date().toLocaleDateString()}`,
+              textContent.trim(),
+              topicCount[0],
+              questionCount[0],
+            );
 
       setCreatedSession(newSession);
       setCurrentSession(newSession);
@@ -194,7 +180,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
       });
 
       setIsProcessing(false);
-      setStep("select-mode");
+      setStep("ready");
 
       // Start SSE stream for background question generation
       streamQuestionGeneration(
@@ -250,51 +236,36 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
   const handleStartSession = () => {
     if (!createdSession) return;
-
-    // Navigate to the selected mode
-    if (selectedMode === "full-study") {
-      navigate(`/dashboard/${createdSession.id}/full-study`);
-    } else if (selectedMode === "speed-run") {
-      createSpeedRun(createdSession.id);
-      navigate(`/dashboard/${createdSession.id}/speedrun`);
-    } else if (selectedMode === "mentor") {
-      navigate(`/dashboard/${createdSession.id}/mentor`);
-    } else if (selectedMode === "game") {
-      navigate(`/dashboard/${createdSession.id}/browse-games`);
-    }
+    navigate(`/dashboard/${createdSession.id}/full-study`);
 
     // Reset state
     onOpenChange(false);
     setStep("upload");
     setUploadType("text");
     setTextContent("");
+    setYoutubeUrl("");
     setSelectedFile(null);
-    setSelectedMode(null);
     setSessionTitle("");
     setCreatedSession(null);
   };
 
-  const canProceed = uploadType === "text" ? textContent.trim().length > 0 : selectedFile !== null;
+  const canProceed =
+    uploadType === "text" ? textContent.trim().length > 0
+    : uploadType === "youtube" ? /(?:youtube\.com|youtu\.be)/.test(youtubeUrl.trim())
+    : selectedFile !== null;
 
-  const getEstimatedTime = () => {
-    if (selectedMode === "full-study") {
-      return `~${topicCount[0] * 5} mins`;
-    } else if (selectedMode === "speed-run") {
-      return `${speedRunDuration[0]} mins`;
-    }
-    return "~5 mins";
-  };
+  const getEstimatedTime = () => `~${topicCount[0] * 5} mins`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader className="space-y-3 pb-4">
-          <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-primary via-blue-500 to-purple-500 bg-clip-text text-transparent">
-            {step === "upload" ? "✨ Create Study Session" : "🎯 Choose Your Study Mode"}
+        <DialogHeader className="space-y-1.5 pb-2">
+          <DialogTitle className="text-xl font-semibold tracking-tight">
+            {step === "upload" ? "Create study session" : "Your notes are ready"}
           </DialogTitle>
           {step === "upload" && (
             <p className="text-sm text-muted-foreground">
-              Upload your study material or paste text to generate personalized learning content
+              Paste text, upload a file, or add a YouTube link — PlayStudy writes the notes and quizzes.
             </p>
           )}
         </DialogHeader>
@@ -313,36 +284,49 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               />
             </div>
 
-            {/* Upload Type Toggle */}
-            <div className="flex rounded-xl border-2 border-border p-1.5 bg-gradient-to-r from-muted/50 to-muted/30 shadow-sm">
-              <button
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all",
-                  uploadType === "text"
-                    ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md shadow-purple-500/30 scale-105"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                )}
-                onClick={() => setUploadType("text")}
-              >
-                <FileText size={18} />
-                Paste Text
-              </button>
-              <button
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-semibold transition-all",
-                  uploadType === "file"
-                    ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-500/30 scale-105"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                )}
-                onClick={() => setUploadType("file")}
-              >
-                <Upload size={18} />
-                Upload File
-              </button>
+            {/* Source toggle — clean segmented control */}
+            <div className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-muted/50 p-1">
+              {([
+                { id: "text", label: "Paste text", Icon: FileText },
+                { id: "file", label: "Upload file", Icon: Upload },
+                { id: "youtube", label: "YouTube", Icon: Youtube },
+              ] as const).map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    uploadType === id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setUploadType(id)}
+                >
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
             </div>
 
             {/* Content Area */}
-            {uploadType === "text" ? (
+            {uploadType === "youtube" ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 focus-within:border-foreground">
+                  <Youtube size={18} className="shrink-0 text-muted-foreground" />
+                  <input
+                    type="url"
+                    inputMode="url"
+                    placeholder="Paste a YouTube link (e.g. https://youtu.be/...)"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  PlayStudy reads the video's captions and builds the same sections, notes and quizzes as a document.
+                  Works with videos that have subtitles — processing a longer video can take a minute.
+                </p>
+              </div>
+            ) : uploadType === "text" ? (
               <div className="space-y-2">
                 <Textarea
                   placeholder="Paste your study material here... (notes, textbook content, articles, etc.)"
@@ -360,19 +344,17 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                   >
                     {isAnalyzing ? (
                       <>
-                        <div className="inline-block h-3.5 w-3.5 mr-2 rounded-full border-2 border-transparent border-t-[#97E35C] border-r-[#97E35C] animate-spin"></div>
-                        <span className="bg-gradient-to-r from-[#97E35C] to-[#7BC850] bg-clip-text text-transparent font-semibold">
-                          Analyzing...
-                        </span>
+                        <div className="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"></div>
+                        Analyzing…
                       </>
                     ) : (
-                      'Analyze Content'
+                      "Analyze content"
                     )}
                   </Button>
                 )}
               </div>
             ) : (
-              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-all hover:bg-primary/5">
+              <div className="rounded-xl border border-dashed border-border p-8 text-center transition-colors hover:border-foreground/40 hover:bg-muted/40">
                 <Input
                   type="file"
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
@@ -382,69 +364,18 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                 />
                 <label htmlFor="file-upload" className="cursor-pointer">
                   {selectedFile ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-center gap-2 text-primary">
-                        <FileText size={24} />
-                        <p className="text-foreground font-medium">{selectedFile.name}</p>
-                      </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <FileText size={20} className="text-foreground" />
+                      <p className="font-medium text-foreground">{selectedFile.name}</p>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {/* Decorative File Icons */}
-                      <div className="flex items-center justify-center gap-3 mb-4">
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center transform -rotate-6 hover:rotate-0 transition-transform shadow-lg">
-                            <FileText className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            W
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center hover:scale-105 transition-transform shadow-lg">
-                            <FileText className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            T
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center transform rotate-6 hover:rotate-0 transition-transform shadow-lg">
-                            <File className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            P
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center transform -rotate-3 hover:rotate-0 transition-transform shadow-lg">
-                            <FileImage className="text-white" size={28} />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-bold text-white">
-                            P
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Upload Icon */}
-                      <div className="flex items-center justify-center">
-                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Upload className="text-primary" size={24} />
-                        </div>
-                      </div>
-
-                      {/* Text */}
+                    <div className="flex flex-col items-center gap-3">
+                      <span className="flex size-11 items-center justify-center rounded-2xl bg-muted">
+                        <Upload className="size-5 text-muted-foreground" />
+                      </span>
                       <div>
-                        <p className="text-lg font-semibold text-foreground mb-1">
-                          Drag & drop files to upload
-                        </p>
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Supported types: PDF, Word, PPT, TXT, JPG, JPEG, PNG, HEIC, WebP, MP3, WAV, M4A
-                        </p>
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-primary font-medium text-sm transition-colors">
-                          <Upload size={16} />
-                          Select file
-                        </div>
+                        <p className="text-sm font-semibold text-foreground">Drag &amp; drop, or select a file</p>
+                        <p className="mt-1 text-xs text-muted-foreground">PDF, Word, PowerPoint, or plain text</p>
                       </div>
                     </div>
                   )}
@@ -454,29 +385,24 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
             {/* Content Analysis Info */}
             {contentAnalysis && (
-              <div className="bg-gradient-to-br from-primary/10 via-blue-500/5 to-purple-500/10 border-2 border-primary/30 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">✓</span>
+              <div className="rounded-xl border border-border bg-muted/40 p-4">
+                <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Content analyzed</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                  <div>
+                    <span className="block text-xs text-muted-foreground">Words</span>
+                    <span className="font-semibold text-foreground tabular-nums">{contentAnalysis.word_count}</span>
                   </div>
-                  <h3 className="font-semibold text-foreground">Content Analyzed</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Word Count</span>
-                    <span className="font-bold text-foreground">{contentAnalysis.word_count}</span>
+                  <div>
+                    <span className="block text-xs text-muted-foreground">Reading time</span>
+                    <span className="font-semibold text-foreground tabular-nums">{contentAnalysis.estimated_reading_time} min</span>
                   </div>
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Reading Time</span>
-                    <span className="font-bold text-foreground">{contentAnalysis.estimated_reading_time} min</span>
+                  <div>
+                    <span className="block text-xs text-muted-foreground">Complexity</span>
+                    <span className="font-semibold text-foreground tabular-nums">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
                   </div>
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Complexity</span>
-                    <span className="font-bold text-foreground">{(contentAnalysis.complexity_score * 100).toFixed(0)}%</span>
-                  </div>
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-muted-foreground block text-xs">Recommended</span>
-                    <span className="font-bold text-primary">{contentAnalysis.recommended_topics} topics</span>
+                  <div>
+                    <span className="block text-xs text-muted-foreground">Suggested</span>
+                    <span className="font-semibold text-foreground tabular-nums">{contentAnalysis.recommended_topics} topics</span>
                   </div>
                 </div>
               </div>
@@ -484,7 +410,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
             {/* Process Button */}
             <Button
-              className="w-full gap-2 bg-gradient-to-r from-primary via-blue-500 to-purple-500 hover:from-primary/90 hover:via-blue-500/90 hover:to-purple-500/90 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              className="w-full gap-2"
               size="lg"
               disabled={!canProceed || isProcessing || isAnalyzing}
               onClick={handleProcessContent}
@@ -492,17 +418,15 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-1 py-1">
                   <div className="flex items-center gap-1">
-                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }}></div>
                   </div>
-                  <span className="text-xs text-white/90 animate-pulse">
-                    {loadingMessages[loadingMessageIndex]}
-                  </span>
+                  <span className="text-xs opacity-90">{loadingMessages[loadingMessageIndex]}</span>
                 </div>
               ) : (
                 <>
-                  ✨ Process Content
+                  Generate notes &amp; quizzes
                   <ArrowRight size={18} />
                 </>
               )}
@@ -510,117 +434,34 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
           </div>
         )}
 
-        {step === "select-mode" && (
+        {step === "ready" && createdSession && (
           <div className="space-y-4">
-            {/* Mode Selection */}
-            <div className="grid gap-3">
-              <Card 
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "full-study" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("full-study")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <BookOpen className="text-primary" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Full Study Session</h3>
-                      <p className="text-sm text-muted-foreground">Complete learning path with progress tracking</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card 
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "speed-run" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("speed-run")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-orange-500/10">
-                      <Zap className="text-orange-500" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Speed Run</h3>
-                      <p className="text-sm text-muted-foreground">Rapid fire flip cards for quick review</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "mentor" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("mentor")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <Mic className="text-blue-500" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Mentor Mode</h3>
-                      <p className="text-sm text-muted-foreground">Listen to AI narration like a teacher guiding you through the content</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card
-                className={cn(
-                  "cursor-pointer transition-all hover:shadow-md",
-                  selectedMode === "game" && "ring-2 ring-primary"
-                )}
-                onClick={() => setSelectedMode("game")}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-purple-500/10">
-                      <Gamepad2 className="text-purple-500" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">Game Mode</h3>
-                      <p className="text-sm text-muted-foreground">Battle enemies while answering questions to survive!</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Estimated Time */}
-            {selectedMode && (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
-                <Clock size={16} />
-                Estimated time: <span className="font-medium text-foreground">{getEstimatedTime()}</span>
+            <div className="rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+                  <BookOpen className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{createdSession.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {createdSession.topics} section{createdSession.topics === 1 ? "" : "s"} · one quiz per section
+                    {generationProgress.inProgress ? " · questions are still being written in the background" : ""}
+                  </p>
+                </div>
               </div>
-            )}
-
-            {/* Action Buttons */}
+            </div>
+            <div className="flex items-center justify-center gap-2 py-1 text-sm text-muted-foreground">
+              <Clock size={16} />
+              Estimated time: <span className="font-medium text-foreground">{getEstimatedTime()}</span>
+            </div>
             <div className="flex gap-3">
-              <Button 
-                variant="outline" 
-                className="gap-2"
-                onClick={() => setStep("upload")}
-              >
+              <Button variant="outline" className="gap-2" onClick={() => setStep("upload")}>
                 <ArrowLeft size={18} />
                 Back
               </Button>
-              <Button 
-                className="flex-1 gap-2" 
-                size="lg"
-                disabled={!selectedMode}
-                onClick={handleStartSession}
-              >
-                <Target size={18} />
-                Start Session
+              <Button className="flex-1 gap-2" size="lg" onClick={handleStartSession}>
+                Open notes
+                <ArrowRight size={18} />
               </Button>
             </div>
           </div>

@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/appStore";
-import { ArrowLeft, FolderOpen } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { FolderGlyph, parseCover } from "@/lib/folderCovers";
+
+const SERIF = "'Instrument Serif', Georgia, 'Times New Roman', serif";
 
 export default function FolderDetailPage() {
   const { folderId } = useParams();
@@ -21,8 +23,7 @@ export default function FolderDetailPage() {
 
   if (!folder) {
     return (
-      <div className="min-h-screen bg-background flex w-full">
-        <Sidebar />
+      <div className="flex flex-1 min-h-0 w-full">
         <div className="flex-1 p-4 md:p-8 flex items-center justify-center">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-foreground mb-2">Folder not found</h2>
@@ -37,35 +38,41 @@ export default function FolderDetailPage() {
     );
   }
 
+  const cover = parseCover(folder.icon);
+
   return (
-    <div className="min-h-screen bg-background flex w-full">
-      <Sidebar />
-      <div className="flex-1 p-4 md:p-8 overflow-auto">
-        <div className="max-w-5xl mx-auto">
+    <div className="relative -m-4 min-h-full overflow-hidden md:-m-6">
+      {/* The folder's own cover, worn as an ambient background so the page feels
+          like this folder. Blurred + dimmed so content stays readable. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {cover ? (
+          <div className="absolute inset-0 scale-125 bg-cover bg-center opacity-30 blur-3xl" style={{ backgroundImage: `url(${cover.src})` }} />
+        ) : (
+          <div className="absolute inset-0" style={{ backgroundImage: `radial-gradient(900px 480px at 50% -8%, ${folder.color}2e, transparent 60%)` }} />
+        )}
+        <div className="absolute inset-0 bg-background/78" />
+      </div>
+
+      <div className="relative p-4 md:p-8">
+        <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-8">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/dashboard')}
-              className="mb-4"
+              className="mb-4 -ml-2 text-muted-foreground"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Dashboard
+              Back to dashboard
             </Button>
 
-            <div className="flex items-center gap-4 mb-2">
-              <div
-                className="text-5xl"
-                style={{
-                  filter: `drop-shadow(0 0 8px ${folder.color}40)`
-                }}
-              >
-                {folder.icon}
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-foreground">{folder.name}</h1>
-                <p className="text-muted-foreground">
+            <div className="flex items-center gap-4">
+              <FolderGlyph icon={folder.icon} color={folder.color} size="lg" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Folder</p>
+                <h1 className="text-3xl leading-tight tracking-tight md:text-4xl" style={{ fontFamily: SERIF }}>{folder.name}</h1>
+                <p className="text-sm text-muted-foreground">
                   {folderSessions.length} session{folderSessions.length !== 1 ? 's' : ''}
                 </p>
               </div>
@@ -88,13 +95,11 @@ export default function FolderDetailPage() {
                 return (
                   <div
                     key={session.id}
-                    className="cursor-pointer hover:bg-accent/50 transition-colors p-4 rounded-lg border border-border"
-                    style={{
-                      borderLeftColor: folder.color,
-                      borderLeftWidth: '4px'
-                    }}
+                    className="group relative cursor-pointer overflow-hidden rounded-2xl border bg-card p-4 pl-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                    style={{ backgroundImage: `linear-gradient(150deg, ${folder.color}14, transparent 62%)`, borderColor: `${folder.color}33` }}
                     onClick={() => handleSessionClick(session)}
                   >
+                    <span className="absolute inset-y-3 left-0 w-1.5 rounded-r-full" style={{ backgroundColor: folder.color }} />
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -133,14 +138,14 @@ export default function FolderDetailPage() {
               })}
             </div>
           ) : (
-            <div className="text-center py-16 bg-card rounded-xl border border-border">
-              <FolderOpen className="w-20 h-20 text-muted-foreground/30 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">No sessions yet</h3>
-              <p className="text-muted-foreground text-sm mb-4">
-                Drag and drop study sessions into this folder to organize them
+            <div className="rounded-2xl border border-dashed bg-card/60 px-6 py-16 text-center shadow-sm" style={{ borderColor: `${folder.color}55` }}>
+              <FolderGlyph icon={folder.icon} color={folder.color} size="md" className="mx-auto" />
+              <h3 className="mt-4 text-2xl" style={{ fontFamily: SERIF }}>This shelf is empty</h3>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted-foreground">
+                Sessions you add to <span className="font-medium text-foreground">{folder.name}</span> will appear here. Move one in from a session's menu on the dashboard.
               </p>
-              <Button onClick={() => navigate('/dashboard')}>
-                Go to Dashboard
+              <Button className="mt-5" onClick={() => navigate('/dashboard')}>
+                Go to dashboard
               </Button>
             </div>
           )}

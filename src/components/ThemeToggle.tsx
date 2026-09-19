@@ -1,60 +1,78 @@
-import { Moon, Sun, Laptop } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Moon, Sun } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-type Theme = 'light' | 'dark' | 'dark-grey';
+/**
+ * Light ⇄ dark theme toggle.
+ *
+ * Persists to localStorage['theme'] and mirrors the state onto <html> as the
+ * `.dark` class (Tailwind `darkMode: 'class'`) plus `color-scheme`. The inline
+ * script in index.html applies the same value before first paint.
+ * Legacy 'dark-grey' values are treated as 'dark'.
+ */
+type Theme = "light" | "dark";
 
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('light');
+function readStoredTheme(): Theme {
+  try {
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark" || stored === "dark-grey") return "dark";
+    if (stored === "system") {
+      return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+  return "light";
+}
+
+function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  root.classList.remove("dark", "dark-grey");
+  if (theme === "dark") root.classList.add("dark");
+  root.style.colorScheme = theme;
+}
+
+export function useTheme() {
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
   useEffect(() => {
-    const root = document.documentElement;
-    // Remove all theme classes
-    root.classList.remove('dark', 'dark-grey');
-
-    // Add the current theme class (except for light which is default)
-    if (theme !== 'light') {
-      root.classList.add(theme);
-    }
+    applyTheme(theme);
   }, [theme]);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme;
-    if (stored && ['light', 'dark', 'dark-grey'].includes(stored)) {
-      setTheme(stored);
+  const setTheme = useCallback((next: Theme) => {
+    setThemeState(next);
+    try {
+      localStorage.setItem("theme", next);
+    } catch {
+      /* private mode */
     }
   }, []);
 
-  const toggleTheme = () => {
-    // Cycle through: light → dark → dark-grey → light
-    const themeOrder: Theme[] = ['light', 'dark', 'dark-grey'];
-    const currentIndex = themeOrder.indexOf(theme);
-    const nextTheme = themeOrder[(currentIndex + 1) % themeOrder.length];
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  }, [theme, setTheme]);
 
-    setTheme(nextTheme);
-    localStorage.setItem("theme", nextTheme);
-  };
+  return { theme, setTheme, toggleTheme, isDark: theme === "dark" };
+}
 
-  const getIcon = () => {
-    switch (theme) {
-      case 'light':
-        return <Sun size={20} className="text-foreground" />;
-      case 'dark':
-        return <Moon size={20} className="text-foreground" />;
-      case 'dark-grey':
-        return <Laptop size={20} className="text-foreground" />;
-      default:
-        return <Sun size={20} className="text-foreground" />;
-    }
-  };
+interface ThemeToggleProps {
+  className?: string;
+}
+
+export function ThemeToggle({ className }: ThemeToggleProps) {
+  const { isDark, toggleTheme } = useTheme();
 
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
       onClick={toggleTheme}
-      className="p-2 rounded-lg hover:bg-accent transition-colors"
       aria-label="Toggle theme"
-      title={`Current: ${theme === 'dark-grey' ? 'Dark Grey' : theme.charAt(0).toUpperCase() + theme.slice(1)}`}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className={cn("size-8 text-muted-foreground hover:text-foreground", className)}
     >
-      {getIcon()}
-    </button>
+      {isDark ? <Moon className="size-4" /> : <Sun className="size-4" />}
+    </Button>
   );
 }

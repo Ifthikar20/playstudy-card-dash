@@ -48,7 +48,10 @@ ENV/
 .env.*.local
 .env.development
 .env.production
-.env.test
+# .env.test is committed on purpose: it holds only Cloudflare's public test
+# keys and a relative API path. Ignoring it would keep it out of CI, which
+# is exactly how the test build ended up pointing at localhost.
+!.env.test
 *.pem
 *.key
 *.crt
@@ -135,3 +138,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Raw source photos for public/covers (unreferenced in the app, ~54 MB)
+PS_DUMP/

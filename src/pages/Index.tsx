@@ -1,15 +1,26 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Sidebar } from "@/components/Sidebar";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  FolderInput,
+  FolderPlus,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
-import { CreateFolderDialog } from "@/components/CreateFolderDialog";
-import UserMenu from "@/components/UserMenu";
-import { useAppStore } from "@/store/appStore";
-import { moveSessionToFolder } from "@/services/folder-api";
-import { fetchAppData, deleteStudySession } from "@/services/api";
-import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,557 +31,497 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, FolderPlus, Folder as FolderIcon, ArrowRight, Upload, Trash2, AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
+import { CreateFolderDialog } from "@/components/CreateFolderDialog";
+import { XpCard } from "@/components/XpCard";
+import { StreakCard } from "@/components/StreakCard";
+import { SourceLogo } from "@/components/SourceLogo";
+import { useAppStore, type Folder, type StudySession } from "@/store/appStore";
+import { moveSessionToFolder } from "@/services/folder-api";
+import { fetchAppData, deleteStudySession } from "@/services/api";
+import { connectSource, disconnectSource, listSources, type NoteSource } from "@/services/sources";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { folderLabelIcon, parseCover } from "@/lib/folderCovers";
+
+/*
+  Dashboard — after the Flow reference: one greeting, a single ink banner,
+  a plain list under a small-caps label, and a right rail of serif numerals.
+  Every block loads on its own (skeletons), nothing takes over the page.
+*/
+
+const NEW_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function completionOf(s: StudySession): number {
+  const topics = s.extractedTopics ?? [];
+  if (topics.length > 0) return Math.round((topics.filter((t) => t.completed).length / topics.length) * 100);
+  return Math.max(0, Math.min(100, Math.round(s.progress ?? 0)));
+}
 
 export default function Index() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { isInitialized, studySessions, folders, stats, userProfile, xp, setCurrentSession, initializeFromAPI } = useAppStore();
+
   const [showCreateSession, setShowCreateSession] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const [expandedFolder, setExpandedFolder] = useState<number | null>(null);
-  const [draggedSession, setDraggedSession] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<number | null>(null);
-  const [isDeleteZoneActive, setIsDeleteZoneActive] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const navigate = useNavigate();
-  const { studySessions, folders, setCurrentSession, userProfile, initializeFromAPI } = useAppStore();
-  const { toast } = useToast();
+  const [activeFolder, setActiveFolder] = useState<number | null>(null);
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | "none" | null>(null);
+  const [toDelete, setToDelete] = useState<StudySession | null>(null);
 
-  const handleSessionClick = (session: any) => {
-    setCurrentSession(session);
-    navigate(`/dashboard/${session.id}/full-study`);
-  };
+  const firstName = (userProfile?.name || "there").split(" ")[0];
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
-  const handleDragStart = (e: React.DragEvent, sessionId: string) => {
-    console.log('[Drag] Starting drag for session:', sessionId);
-    setDraggedSession(sessionId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', sessionId);
-    // Add visual feedback
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '0.5';
+  const sessions = useMemo(() => {
+    const list = activeFolder == null ? studySessions : studySessions.filter((s) => s.folderId === activeFolder);
+    return [...list].sort((a, b) => completionOf(a) - completionOf(b));
+  }, [studySessions, activeFolder]);
+  const nextUp = useMemo(() => [...studySessions].sort((a, b) => completionOf(a) - completionOf(b)).find((s) => completionOf(s) < 100), [studySessions]);
+  const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
+  // When a folder is selected, the "Next up" card wears that folder's cover as
+  // a darkened background; with no folder selected it's the plain card.
+  const nextUpImage = useMemo(() => {
+    if (activeFolder == null) return undefined;
+    return parseCover(folderById.get(activeFolder)?.icon)?.src;
+  }, [activeFolder, folderById]);
+
+  // ---- sources ---------------------------------------------------------------
+  const [sources, setSources] = useState<NoteSource[] | null>(null);
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const loadSources = useCallback(async () => {
+    try {
+      setSources(await listSources());
+    } catch {
+      setSources([]);
     }
-  };
-
-  const handleDragEnd = (e: React.DragEvent) => {
-    setDraggedSession(null);
-    setDropTarget(null);
-    setIsDeleteZoneActive(false);
-    // Reset visual feedback
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '1';
+  }, []);
+  useEffect(() => {
+    loadSources();
+  }, [loadSources]);
+  useEffect(() => {
+    // Return leg of a source connection: /dashboard#connected=<id>
+    const m = window.location.hash.match(/connected=([a-z_]+)/);
+    if (m) {
+      window.history.replaceState(null, "", "/dashboard");
+      loadSources().then(() => toast({ title: "Connected", description: `${m[1].replace("_", " ")} is now linked to your account.` }));
     }
-  };
+  }, [loadSources, toast]);
 
-  const handleDragOver = (e: React.DragEvent, folderId: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
-    console.log('[Drag] Drag over folder:', folderId);
-    setDropTarget(folderId);
-  };
-
-  const handleDragLeave = () => {
-    console.log('[Drag] Drag leave');
-    setDropTarget(null);
-  };
-
-  const handleDrop = async (e: React.DragEvent, folderId: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('[Drag] Drop on folder:', folderId);
-
-    const sessionId = e.dataTransfer.getData('text/plain');
-    console.log('[Drag] Session ID from dataTransfer:', sessionId);
-
-    if (!sessionId) {
-      console.error('[Drag] No session ID found in dataTransfer');
+  const onConnect = async (src: NoteSource) => {
+    if (src.manual) {
+      setShowCreateSession(true);
       return;
     }
-
+    setConnecting(src.id);
     try {
-      await moveSessionToFolder(sessionId, folderId);
-
-      const session = studySessions.find(s => s.id === sessionId);
-      const folder = folders.find(f => f.id === folderId);
-
-      // Refresh data seamlessly without page reload
-      const updatedData = await fetchAppData();
-      initializeFromAPI(updatedData);
-
-      toast({
-        title: "Session moved!",
-        description: `"${session?.title}" moved to "${folder?.name}"`,
-      });
-    } catch (error) {
-      console.error('Failed to move session:', error);
-      toast({
-        title: "Failed to move session",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setDraggedSession(null);
-      setDropTarget(null);
+      await connectSource(src.id); // navigates away on success
+    } catch (e) {
+      toast({ title: `Can't connect ${src.name}`, description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+      setConnecting(null);
     }
   };
-
-  const handleDeleteZoneDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setIsDeleteZoneActive(true);
-    setDropTarget(null); // Clear folder drop target
+  const onDisconnect = async (src: NoteSource) => {
+    await disconnectSource(src.id);
+    await loadSources();
+    toast({ title: `${src.name} disconnected` });
   };
 
-  const handleDeleteZoneDragLeave = () => {
-    setIsDeleteZoneActive(false);
+  // ---- sessions --------------------------------------------------------------
+  const open = (s: StudySession) => {
+    setCurrentSession(s);
+    navigate(`/dashboard/${s.id}/full-study`);
   };
-
-  const handleDeleteZoneDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const sessionId = e.dataTransfer.getData('text/plain');
-    if (!sessionId) return;
-
-    // Set session to delete and show confirmation
-    setSessionToDelete(sessionId);
-    setShowDeleteConfirm(true);
-    setIsDeleteZoneActive(false);
-    setDraggedSession(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!sessionToDelete) return;
-
+  const refresh = async () => initializeFromAPI(await fetchAppData());
+  const moveTo = async (s: StudySession, folder: Folder | null) => {
     try {
-      await deleteStudySession(sessionToDelete);
-
-      const session = studySessions.find(s => s.id === sessionToDelete);
-
-      // Refresh data seamlessly
-      const updatedData = await fetchAppData();
-      initializeFromAPI(updatedData);
-
-      toast({
-        title: "Session deleted",
-        description: `"${session?.title}" has been permanently deleted`,
-      });
-    } catch (error) {
-      console.error('Failed to delete session:', error);
-      toast({
-        title: "Failed to delete session",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setShowDeleteConfirm(false);
-      setSessionToDelete(null);
+      if (folder) await moveSessionToFolder(s.id, folder.id);
+      await refresh();
+      toast({ title: folder ? `Moved to ${folder.name}` : "Session moved" });
+    } catch (e) {
+      toast({ title: "Couldn't move session", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     }
   };
+  const confirmDelete = async () => {
+    if (!toDelete) return;
+    try {
+      await deleteStudySession(toDelete.id);
+      await refresh();
+      toast({ title: "Session deleted", description: `"${toDelete.title}" was removed.` });
+    } catch (e) {
+      toast({ title: "Couldn't delete session", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    } finally {
+      setToDelete(null);
+    }
+  };
+  const onDrop = async (e: React.DragEvent, folder: Folder) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain");
+    const s = studySessions.find((x) => x.id === id);
+    setDragged(null);
+    setDropTarget(null);
+    if (s) await moveTo(s, folder);
+  };
 
+  const statItems = [
+    { value: stats?.totalSessions ?? studySessions.length, label: "sessions" },
+    { value: `${stats?.averageAccuracy ?? 0}%`, label: "accuracy" },
+    { value: stats?.totalStudyTime ?? "0min", label: "studied" },
+    { value: (stats?.questionsAnswered ?? 0).toLocaleString(), label: "answered" },
+  ];
 
   return (
-    <>
-      <style>{`
-        @keyframes fire-flicker {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          25% { opacity: 0.9; transform: scale(1.05); }
-          50% { opacity: 0.95; transform: scale(1.02); }
-          75% { opacity: 0.92; transform: scale(1.08); }
-        }
-        .fire-badge {
-          animation: fire-flicker 2s ease-in-out infinite;
-        }
+    <div className="fade-in mx-auto w-full max-w-6xl">
+      {/* Greeting */}
+      <h1 className="text-[26px] font-semibold tracking-tight md:text-[30px]">
+        Hey {firstName}, pick up where you left off
+        <span className="ml-3 hidden align-middle text-sm font-normal text-muted-foreground md:inline">
+          or jump anywhere with{" "}
+          <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">{isMac ? "⌘" : "Ctrl"}</kbd>{" "}
+          +{" "}
+          <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">K</kbd>
+        </span>
+      </h1>
 
-        /* Drag and drop visual guides */
-        @keyframes pulse-border {
-          0%, 100% {
-            border-width: 3px;
-            transform: scale(1);
-            box-shadow: 0 0 0 rgba(var(--primary), 0);
-          }
-          50% {
-            border-width: 3px;
-            transform: scale(1.03);
-            box-shadow: 0 0 20px rgba(var(--primary), 0.3);
-          }
-        }
-
-        @keyframes dash-rotate {
-          0% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: 100; }
-        }
-
-        .drop-zone-active {
-          animation: pulse-border 1.5s ease-in-out infinite !important;
-          position: relative;
-        }
-
-        .drop-zone-ready {
-          border: 2px dashed hsl(var(--primary)) !important;
-          opacity: 0.9;
-        }
-
-        .drop-zone-dimmed {
-          opacity: 0.4;
-        }
-
-        .drag-hint {
-          animation: bounce 2s infinite;
-        }
-
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-
-        @keyframes delete-pulse {
-          0%, 100% {
-            border-width: 3px;
-            transform: scale(1);
-            box-shadow: 0 0 0 rgba(239, 68, 68, 0);
-          }
-          50% {
-            border-width: 3px;
-            transform: scale(1.05);
-            box-shadow: 0 0 30px rgba(239, 68, 68, 0.5);
-          }
-        }
-
-        .delete-zone-active {
-          animation: delete-pulse 1s ease-in-out infinite !important;
-          border-color: #ef4444 !important;
-          background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.15) 100%) !important;
-        }
-
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-5px); }
-          75% { transform: translateX(5px); }
-        }
-
-        .delete-zone-hover {
-          animation: shake 0.5s ease-in-out;
-        }
-      `}</style>
-      <div className="min-h-screen bg-background flex w-full">
-        <Sidebar />
-      
-      <div className="flex-1 p-4 md:p-8 overflow-auto">
-        <div className="max-w-5xl mx-auto">
-          {/* Header */}
-          <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-                {userProfile?.name ? `Welcome Back, ${userProfile.name}!` : 'Welcome Back!'}
-              </h1>
-              <p className="text-muted-foreground">
-                Transform your study materials into engaging, competitive quizzes
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                size="default"
-                variant="outline"
-                className="gap-2"
-                onClick={() => setShowCreateFolder(true)}
-              >
-                <FolderPlus size={18} />
-                New Folder
-              </Button>
-              <Button
-                size="lg"
-                className="gap-2 shadow-lg hover:shadow-xl transition-all relative overflow-hidden"
-                style={{
-                  boxShadow: '0 0 20px rgba(59, 130, 246, 0.3), 0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                }}
-                onClick={() => setShowCreateSession(true)}
-              >
-                <Plus size={20} />
-                Create Study Session
-              </Button>
-              <UserMenu />
-            </div>
-          </div>
-
-          {/* Folders - Show first 5 */}
-          {folders.length > 0 && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground mb-0.5">
-                    📁 My Folders
-                  </h2>
-                  <p className="text-[10px] text-muted-foreground/60">
-                    drag and drop sessions into folders
-                  </p>
-                </div>
-                {folders.length > 5 && (
-                  <Link to="/dashboard/folders">
-                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
-                      View All ({folders.length})
-                      <ArrowRight size={16} />
-                    </Button>
-                  </Link>
-                )}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_296px]">
+        <div className="min-w-0 space-y-9">
+          {/* Banner */}
+          {!isInitialized ? (
+            <Skeleton className="h-44 rounded-2xl" />
+          ) : nextUp ? (
+            <section
+              className={cn(
+                "relative flex flex-col justify-between gap-6 overflow-hidden rounded-2xl p-7 md:flex-row md:items-end md:p-8",
+                nextUpImage ? "text-white" : "bg-foreground text-background",
+              )}
+            >
+              {nextUpImage && (
+                <>
+                  <div aria-hidden className="pointer-events-none absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${nextUpImage})` }} />
+                  <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-black/90 via-black/72 to-black/45" />
+                </>
+              )}
+              <div className="relative min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">Next up</p>
+                <h2 className="font-display mt-2 truncate text-[30px] leading-tight md:text-[34px]">{nextUp.title}</h2>
+                <p className="mt-1.5 text-sm opacity-80">
+                  {nextUp.topics} topic{nextUp.topics === 1 ? "" : "s"} · {completionOf(nextUp)}% complete
+                  {nextUp.time ? ` · last opened ${nextUp.time}` : ""}
+                </p>
               </div>
-              <div className="flex gap-4 overflow-x-auto pb-2">
-                {folders.slice(0, 5).map((folder) => {
-                  const isActiveDropTarget = dropTarget === folder.id;
-                  const isDragging = draggedSession !== null;
-                  const isDimmed = isDragging && !isActiveDropTarget;
-
-                  return (
-                    <div
-                      key={folder.id}
-                      className={`group flex-shrink-0 cursor-pointer transition-all duration-200 p-4 rounded-xl flex flex-col items-center gap-2 text-center min-w-[110px] relative ${
-                        isActiveDropTarget
-                          ? 'drop-zone-active bg-primary/10 scale-105 shadow-2xl'
-                          : isDragging
-                          ? 'drop-zone-ready drop-zone-dimmed hover:opacity-100'
-                          : 'bg-card hover:bg-accent/30 hover:shadow-md'
-                      }`}
-                      style={{
-                        border: isActiveDropTarget
-                          ? `3px solid ${folder.color}`
-                          : isDragging
-                          ? `2px dashed ${folder.color}60`
-                          : '1px solid hsl(var(--border))',
-                        backgroundColor: isActiveDropTarget
-                          ? `${folder.color}15`
-                          : undefined,
-                      }}
-                      onDragOver={(e) => handleDragOver(e, folder.id)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, folder.id)}
-                      onClick={(e) => {
-                        if (!draggedSession) {
-                          navigate(`/dashboard/folder/${folder.id}`);
-                        }
-                      }}
-                    >
-                      {/* Drop indicator overlay */}
-                      {isActiveDropTarget && (
-                        <div className="absolute inset-0 rounded-xl pointer-events-none flex items-center justify-center bg-gradient-to-b from-transparent via-primary/5 to-transparent">
-                          <div className="drag-hint">
-                            <Upload size={32} style={{ color: folder.color }} strokeWidth={2.5} />
-                          </div>
-                        </div>
-                      )}
-
-                      <div
-                        className={`text-3xl transition-all ${
-                          isActiveDropTarget
-                            ? 'scale-125 opacity-60'
-                            : 'group-hover:scale-110'
-                        }`}
-                        style={{
-                          filter: isActiveDropTarget
-                            ? `drop-shadow(0 0 12px ${folder.color})`
-                            : isDragging
-                            ? `drop-shadow(0 0 6px ${folder.color}40)`
-                            : 'none'
-                        }}
-                      >
-                        {folder.icon}
-                      </div>
-                      <div className={`font-medium text-xs truncate w-full ${
-                        isActiveDropTarget ? 'text-primary font-bold' : 'text-foreground'
-                      }`}>
-                        {folder.name}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {folder.session_count} {folder.session_count !== 1 ? 'sessions' : 'session'}
-                      </div>
-                      {isActiveDropTarget && (
-                        <div
-                          className="text-xs font-bold mt-1 px-2 py-1 rounded-md animate-pulse"
-                          style={{
-                            color: folder.color,
-                            backgroundColor: `${folder.color}20`,
-                            border: `1px solid ${folder.color}40`
-                          }}
-                        >
-                          📥 Drop Here
-                        </div>
-                      )}
-                      {isDragging && !isActiveDropTarget && (
-                        <div className="text-[9px] text-muted-foreground mt-1">
-                          Drag here
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="relative flex shrink-0 items-center gap-2">
+                <Button
+                  variant="ghost"
+                  className={nextUpImage ? "text-white/85 hover:bg-white/15 hover:text-white" : "text-background/80 hover:bg-background/10 hover:text-background"}
+                  onClick={() => setShowCreateSession(true)}
+                >
+                  <Plus className="size-4" />
+                  New session
+                </Button>
+                <Button
+                  className={nextUpImage ? "bg-white text-neutral-900 hover:bg-white/90" : "bg-background text-foreground hover:bg-background/90"}
+                  onClick={() => open(nextUp)}
+                >
+                  Continue
+                  <ArrowRight className="size-4" />
+                </Button>
               </div>
-            </div>
+            </section>
+          ) : (
+            <section className="flex flex-col justify-between gap-6 rounded-2xl bg-foreground p-7 text-background md:flex-row md:items-end md:p-8">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-60">Start here</p>
+                <h2 className="font-display mt-2 text-[30px] leading-tight md:text-[34px]">Turn your notes into a game</h2>
+                <p className="mt-1.5 max-w-md text-sm opacity-70">
+                  Paste text, drop a PDF, or connect the place your notes already live. PlayStudy builds the topics and questions.
+                </p>
+              </div>
+              <Button className="shrink-0 bg-background text-foreground hover:bg-background/90" onClick={() => setShowCreateSession(true)}>
+                Create study session
+                <ArrowRight className="size-4" />
+              </Button>
+            </section>
           )}
 
-          {/* Delete Zone - Shows when dragging */}
-          {draggedSession && (
-            <div className="mb-8">
-              <div
-                className={`group cursor-pointer transition-all duration-200 p-6 rounded-xl border-4 border-dashed flex flex-col items-center justify-center gap-3 min-h-[120px] ${
-                  isDeleteZoneActive
-                    ? 'delete-zone-active'
-                    : 'border-red-400/40 bg-red-50/30 dark:bg-red-950/10 hover:border-red-500/60 hover:bg-red-50/50 dark:hover:bg-red-950/20'
-                }`}
-                onDragOver={handleDeleteZoneDragOver}
-                onDragLeave={handleDeleteZoneDragLeave}
-                onDrop={handleDeleteZoneDrop}
-              >
-                {/* Delete icon with animation */}
-                <div className={`transition-all ${isDeleteZoneActive ? 'scale-125 delete-zone-hover' : 'scale-100'}`}>
-                  <Trash2
-                    size={isDeleteZoneActive ? 48 : 40}
-                    className="text-red-500"
-                    strokeWidth={2.5}
+          {/* Sessions */}
+          <section>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Continue studying</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <FolderChip label="All" active={activeFolder == null} onClick={() => setActiveFolder(null)} />
+                {folders.map((f) => (
+                  <FolderChip
+                    key={f.id}
+                    label={`${folderLabelIcon(f.icon)}${f.name}`}
+                    count={f.session_count}
+                    active={activeFolder === f.id}
+                    dropping={dropTarget === f.id}
+                    dragging={!!dragged}
+                    onClick={() => setActiveFolder(activeFolder === f.id ? null : f.id)}
+                    onDragOver={(e) => { e.preventDefault(); setDropTarget(f.id); }}
+                    onDragLeave={() => setDropTarget(null)}
+                    onDrop={(e) => onDrop(e, f)}
                   />
-                </div>
-
-                {/* Text */}
-                <div className="text-center">
-                  <div className={`font-bold ${isDeleteZoneActive ? 'text-red-600 text-lg' : 'text-red-500'}`}>
-                    {isDeleteZoneActive ? '🗑️ Drop to Delete' : 'Drag here to delete'}
-                  </div>
-                  <div className="text-xs text-red-400 mt-1">
-                    {isDeleteZoneActive ? 'Release to confirm deletion' : 'This action will require confirmation'}
-                  </div>
-                </div>
-
-                {/* Warning badge */}
-                {isDeleteZoneActive && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-800 animate-pulse">
-                    <AlertTriangle size={16} className="text-red-600" />
-                    <span className="text-xs font-semibold text-red-600">Permanent Action</span>
-                  </div>
-                )}
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowCreateFolder(true)}
+                  className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <FolderPlus className="size-3.5" />
+                  New folder
+                </button>
               </div>
             </div>
-          )}
 
-          {/* My Study Sessions */}
-          {studySessions.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">
-                My Study Sessions
-              </h2>
-              <div className="space-y-2">
-                {studySessions.map((session) => {
-                  // Calculate completion percentage from extractedTopics if available
-                  const completionPercentage = session.extractedTopics
-                    ? Math.round(
-                        (session.extractedTopics.filter(t => t.completed).length /
-                        session.extractedTopics.length) * 100
-                      )
-                    : session.progress;
-
-                  // Show NEW badge for sessions created within the last 48 hours
-                  const isNew = session.createdAt && (Date.now() - session.createdAt) < 48 * 60 * 60 * 1000;
-
-                  return (
-                    <div
-                      key={session.id}
-                      draggable={true}
-                      onDragStart={(e) => handleDragStart(e, session.id)}
-                      onDragEnd={handleDragEnd}
-                      className={`cursor-move hover:bg-accent/50 transition-colors p-3 rounded-lg border border-border select-none ${isNew ? 'new-session-card' : ''} ${
-                        draggedSession === session.id ? 'opacity-50' : ''
-                      }`}
-                      style={{
-                        userSelect: 'none',
-                      } as React.CSSProperties}
-                      title="Drag to folder or click title to open"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="font-semibold text-foreground cursor-pointer hover:text-primary transition-colors select-text"
-                          style={{ userSelect: 'text' }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSessionClick(session);
-                          }}
-                          onMouseDown={(e) => {
-                            // Prevent drag when clicking on title
-                            e.stopPropagation();
-                          }}
-                          onDragStart={(e) => {
-                            // Prevent drag from starting on title text
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                        >
-                          {session.title}
-                        </div>
-                        {isNew && (
-                          <div className="relative">
-                            <Badge
-                              variant="destructive"
-                              className="text-[10px] px-2 py-0.5 h-5 font-bold bg-gradient-to-r from-orange-500 to-red-500 border-0 fire-badge"
-                            >
-                              🔥 NEW
-                            </Badge>
-                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
-                            </span>
+            <div className="mt-3 rounded-2xl border border-border bg-card">
+              {!isInitialized ? (
+                <div className="divide-y divide-border">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex items-center gap-4 px-5 py-4">
+                      <Skeleton className="h-3 w-16" />
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="ml-auto h-3 w-24" />
+                    </div>
+                  ))}
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="px-6 py-10 text-center">
+                  <p className="text-sm font-semibold">{activeFolder == null ? "No study sessions yet" : "Nothing in this folder yet"}</p>
+                  <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                    {activeFolder == null
+                      ? "Create one from your notes, a PDF or a connected source, and it will show up here."
+                      : "Drag a session onto the folder chip above, or use “Move to” on a session."}
+                  </p>
+                  {activeFolder == null && (
+                    <Button size="sm" className="mt-4" onClick={() => setShowCreateSession(true)}>
+                      Create study session
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {sessions.map((s) => {
+                    const pct = completionOf(s);
+                    const isNew = !!s.createdAt && Date.now() - s.createdAt < NEW_WINDOW_MS;
+                    const folder = s.folderId != null ? folderById.get(s.folderId) : undefined;
+                    return (
+                      <li
+                        key={s.id}
+                        draggable
+                        onDragStart={(e) => { setDragged(s.id); e.dataTransfer.setData("text/plain", s.id); e.dataTransfer.effectAllowed = "move"; }}
+                        onDragEnd={() => { setDragged(null); setDropTarget(null); }}
+                        className={cn("group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/50", dragged === s.id && "opacity-40")}
+                      >
+                        <span className="hidden w-20 shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{s.time || "—"}</span>
+                        <button type="button" onClick={() => open(s)} className="min-w-0 flex-1 text-left">
+                          <span className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium">{s.title}</span>
+                            {isNew && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">New</span>}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {s.topics} topic{s.topics === 1 ? "" : "s"}
+                            {folder ? ` · ${folderLabelIcon(folder.icon)}${folder.name}` : ""}
+                          </span>
+                        </button>
+                        <div className="flex w-28 shrink-0 items-center gap-2">
+                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div className={cn("h-full rounded-full", pct >= 100 ? "bg-success" : "bg-chart-1")} style={{ width: `${Math.max(2, pct)}%` }} />
                           </div>
+                          <span className="w-8 text-right text-xs font-semibold tabular-nums">{pct}%</span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="size-8" onClick={() => open(s)} aria-label="Open">
+                                <ArrowRight className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top">Open</TooltipContent>
+                          </Tooltip>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+                                <MoreHorizontal className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-48">
+                              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Move to</DropdownMenuLabel>
+                              {folders.length === 0 && (
+                                <DropdownMenuItem onSelect={() => setShowCreateFolder(true)}>
+                                  <FolderPlus /> Create a folder first
+                                </DropdownMenuItem>
+                              )}
+                              {folders.map((f) => (
+                                <DropdownMenuItem key={f.id} onSelect={() => moveTo(s, f)} disabled={s.folderId === f.id}>
+                                  <FolderInput />
+                                  <span className="truncate">{folderLabelIcon(f.icon)}{f.name}</span>
+                                  {s.folderId === f.id && <Check className="ml-auto" />}
+                                </DropdownMenuItem>
+                              ))}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onSelect={() => setToDelete(s)} className="text-destructive focus:text-destructive">
+                                <Trash2 /> Delete session
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* Sources */}
+          <section>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your notes</p>
+                <p className="mt-1 text-sm text-muted-foreground">Connect where your notes live and PlayStudy reads them from there.</p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {sources === null
+                ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[76px] rounded-2xl" />)
+                : sources.map((src) => {
+                    return (
+                      <div key={src.id} className="flex items-center gap-3.5 rounded-2xl border border-border bg-card px-4 py-3.5">
+                        <span className="relative shrink-0">
+                          <SourceLogo id={src.id} />
+                          {src.connected && (
+                            <span className="absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-success text-background ring-2 ring-card">
+                              <Check className="size-2.5" />
+                            </span>
+                          )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{src.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {src.connected ? `Connected · ${src.account ?? "linked"}` : src.description}
+                          </p>
+                        </div>
+                        {src.connected ? (
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => onDisconnect(src)}>
+                            Disconnect
+                          </Button>
+                        ) : src.manual ? (
+                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onConnect(src)}>
+                            Import
+                          </Button>
+                        ) : src.configured ? (
+                          <Button size="sm" className="h-7 text-xs" disabled={connecting === src.id} onClick={() => onConnect(src)}>
+                            {connecting === src.id ? <Loader2 className="size-3.5 animate-spin" /> : "Connect"}
+                          </Button>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help text-xs text-muted-foreground">Needs setup</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              {src.name} needs {src.provider === "google" ? "Google" : src.provider === "microsoft" ? "Microsoft" : "Notion"} API
+                              credentials on the server before it can be connected.
+                            </TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        {session.topics} topic{session.topics !== 1 ? 's' : ''} • {completionPercentage}% complete
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
             </div>
-          )}
+          </section>
 
         </div>
+
+        {/* Right rail */}
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-border bg-card p-5">
+            {!isInitialized ? (
+              <div className="space-y-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-8 w-32" />
+                ))}
+              </div>
+            ) : (
+              <dl className="space-y-3.5">
+                {statItems.map((s) => (
+                  <div key={s.label} className="flex items-baseline gap-2.5">
+                    <dt className="font-display text-[30px] leading-none tabular-nums">{s.value}</dt>
+                    <dd className="text-sm text-muted-foreground">{s.label}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+          {isInitialized ? <XpCard xp={xp} /> : <Skeleton className="h-28 rounded-2xl" />}
+          <StreakCard />
+        </aside>
       </div>
 
-      <CreateStudySessionDialog
-        open={showCreateSession}
-        onOpenChange={setShowCreateSession}
-      />
+      <CreateStudySessionDialog open={showCreateSession} onOpenChange={setShowCreateSession} />
+      <CreateFolderDialog open={showCreateFolder} onOpenChange={setShowCreateFolder} />
 
-      <CreateFolderDialog
-        open={showCreateFolder}
-        onOpenChange={setShowCreateFolder}
-      />
-
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="text-red-500" size={24} />
-              Delete Study Session?
+              <AlertTriangle className="size-5 text-destructive" />
+              Delete study session?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <span className="font-semibold">"{studySessions.find(s => s.id === sessionToDelete)?.title}"</span>?
-              <br /><br />
-              This action cannot be undone. All questions, progress, and data associated with this session will be permanently removed.
+              "{toDelete?.title}" and all of its questions and progress will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setShowDeleteConfirm(false);
-              setSessionToDelete(null);
-            }}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-red-500 hover:bg-red-600 text-white"
-            >
-              <Trash2 size={16} className="mr-2" />
-              Delete Permanently
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      </div>
-    </>
+    </div>
+  );
+}
+
+function FolderChip({
+  label,
+  count,
+  active,
+  dropping,
+  dragging,
+  onClick,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  label: string;
+  count?: number;
+  active?: boolean;
+  dropping?: boolean;
+  dragging?: boolean;
+  onClick: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={cn(
+        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+        active ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:bg-muted",
+        dragging && onDrop && !active && "border-dashed",
+        dropping && "border-chart-1 bg-accent text-accent-foreground",
+      )}
+    >
+      {label}
+      {typeof count === "number" && <span className={cn("tabular-nums", active ? "opacity-70" : "text-muted-foreground")}>{count}</span>}
+    </button>
   );
 }

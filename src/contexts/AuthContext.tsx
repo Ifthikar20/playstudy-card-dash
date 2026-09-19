@@ -6,16 +6,20 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authService, AuthResponse, TokenPayload } from '../services/authService';
+import { authService, AuthResponse, TokenPayload, Session } from '../services/authService';
 
 interface AuthContextType {
   user: TokenPayload | null;
+  /** Server-side identity: role, organization, onboarding state. null until loaded. */
+  session: Session | null;
+  sessionLoading: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string, recaptchaToken?: string) => Promise<AuthResponse>;
-  register: (email: string, name: string, password: string, recaptchaToken?: string) => Promise<AuthResponse>;
+  login: (email: string, password: string, recaptchaToken?: string, turnstileToken?: string) => Promise<AuthResponse>;
+  register: (email: string, name: string, password: string, recaptchaToken?: string, turnstileToken?: string) => Promise<AuthResponse>;
   logout: () => void;
   refreshAuth: () => void;
+  refreshSession: () => Promise<Session | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +31,30 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<TokenPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [sessionLoading, setSessionLoading] = useState<boolean>(false);
+
+  /**
+   * Load /auth/session for the signed-in user (role, org, next_route).
+   */
+  const refreshSession = useCallback(async (): Promise<Session | null> => {
+    if (!authService.isAuthenticated()) {
+      setSession(null);
+      return null;
+    }
+    setSessionLoading(true);
+    try {
+      const next = await authService.fetchSession();
+      setSession(next);
+      return next;
+    } catch (error) {
+      console.error('[AuthContext] Session load failed:', error);
+      setSession(null);
+      return null;
+    } finally {
+      setSessionLoading(false);
+    }
+  }, []);
 
   /**
    * Initialize auth state from stored token
@@ -57,6 +85,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [initializeAuth]);
 
   /**
+   * Load the server session whenever the signed-in identity changes
+   */
+  useEffect(() => {
+    if (user) {
+      refreshSession();
+    } else {
+      setSession(null);
+    }
+  }, [user?.sub, refreshSession]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
    * Check token expiry periodically
    */
   useEffect(() => {
@@ -78,11 +117,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (
     email: string,
     password: string,
-    recaptchaToken?: string
+    recaptchaToken?: string,
+    turnstileToken?: string
   ): Promise<AuthResponse> => {
     setIsLoading(true);
     try {
-      const result = await authService.login({ email, password, recaptchaToken });
+      const result = await authService.login({ email, password, recaptchaToken, turnstileToken });
 
       if (result.success) {
         const currentUser = authService.getCurrentUser();
@@ -109,11 +149,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     email: string,
     name: string,
     password: string,
-    recaptchaToken?: string
+    recaptchaToken?: string,
+    turnstileToken?: string
   ): Promise<AuthResponse> => {
     setIsLoading(true);
     try {
-      const result = await authService.register({ email, name, password, recaptchaToken });
+      const result = await authService.register({ email, name, password, recaptchaToken, turnstileToken });
 
       if (result.success) {
         const currentUser = authService.getCurrentUser();
@@ -139,6 +180,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(() => {
     console.log('[AuthContext] Logging out user');
     setUser(null);
+    setSession(null);
     authService.logout();
   }, []);
 
@@ -151,12 +193,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const value: AuthContextType = {
     user,
+    session,
+    sessionLoading,
     isAuthenticated: !!user && authService.isAuthenticated(),
     isLoading,
     login,
     register,
     logout,
-    refreshAuth
+    refreshAuth,
+    refreshSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

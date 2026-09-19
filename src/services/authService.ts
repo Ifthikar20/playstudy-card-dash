@@ -18,6 +18,7 @@ export interface LoginCredentials {
   email: string;
   password: string;
   recaptchaToken?: string;
+  turnstileToken?: string;
 }
 
 export interface RegisterCredentials {
@@ -25,6 +26,7 @@ export interface RegisterCredentials {
   name: string;
   password: string;
   recaptchaToken?: string;
+  turnstileToken?: string;
 }
 
 export interface AuthResponse {
@@ -42,6 +44,68 @@ export interface TokenPayload {
   email: string;
   exp: number; // expiration timestamp
   iat: number; // issued at timestamp
+}
+
+export type UserRole = 'student' | 'teacher';
+export type TeacherType = 'individual' | 'organization';
+export type SsoProvider = 'google' | 'microsoft' | 'saml';
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  xp: number;
+  level: number;
+  role: UserRole | null;
+  teacher_type: TeacherType | null;
+  onboarding_completed: boolean;
+  auth_provider: 'password' | SsoProvider;
+  org_role: 'owner' | 'admin' | 'member' | null;
+}
+
+export interface Organization {
+  id: number;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  sso_provider: SsoProvider | null;
+  sso_enforced: boolean;
+  domains: string[];
+  methods: SsoProvider[];
+}
+
+export interface Session {
+  user: SessionUser;
+  org: Organization | null;
+  next_route: 'onboarding' | 'dashboard';
+  providers: Record<SsoProvider, boolean>;
+}
+
+export interface OrgLookup {
+  found: boolean;
+  domain: string;
+  personal: boolean;
+  org: Organization | null;
+  methods: SsoProvider[];
+}
+
+export interface OnboardingPayload {
+  role: UserRole;
+  teacher_type?: TeacherType;
+  work_email?: string;
+  org_name?: string;
+}
+
+/** Thrown by completeOnboarding when the org identity must come from SSO. */
+export class SignInWithOrgError extends Error {
+  domain: string;
+  org: Organization | null;
+  constructor(domain: string, org: Organization | null) {
+    super(`Sign in with your ${domain} account to continue`);
+    this.name = 'SignInWithOrgError';
+    this.domain = domain;
+    this.org = org;
+  }
 }
 
 class AuthService {
@@ -67,6 +131,26 @@ class AuthService {
     } catch (error) {
       console.error('[AuthService] Failed to decode token:', error);
     }
+  }
+
+  /**
+   * Adopt an externally obtained access token (dev tooling / scripted login).
+   * Validates that it decodes and is not expired before storing it.
+   * Returns true when the token was accepted.
+   */
+  adoptToken(token: string): boolean {
+    const payload = this.decodeToken(token);
+    if (!payload?.exp) {
+      console.error('[AuthService] adoptToken: token is not a valid JWT');
+      return false;
+    }
+    if (payload.exp - Math.floor(Date.now() / 1000) < 60) {
+      console.error('[AuthService] adoptToken: token is expired');
+      return false;
+    }
+    this.setToken(token);
+    console.log('[AuthService] Adopted token for user:', payload.email);
+    return true;
   }
 
   /**
@@ -160,6 +244,7 @@ class AuthService {
           email: credentials.email,
           password: credentials.password,
           recaptchaToken: credentials.recaptchaToken,
+          turnstileToken: credentials.turnstileToken,
         }),
       });
 
@@ -212,6 +297,7 @@ class AuthService {
           name: credentials.name,
           password: credentials.password,
           recaptchaToken: credentials.recaptchaToken,
+          turnstileToken: credentials.turnstileToken,
         }),
       });
 
@@ -272,6 +358,84 @@ class AuthService {
     // 2. Update access token
     // 3. Return success status
     return false;
+  }
+
+  private authHeaders(): Record<string, string> {
+    const token = this.getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  /** Who am I, my organization, and where the app should send me next. */
+  async fetchSession(): Promise<Session | null> {
+    if (!this.getToken()) return null;
+    const res = await fetch(`${API_URL}/auth/session`, { headers: this.authHeaders() });
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  /** Answer the first-login question (student / teacher / organization). */
+  async completeOnboarding(payload: OnboardingPayload): Promise<Session> {
+    const res = await fetch(`${API_URL}/auth/onboarding`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409 && data?.detail?.code === 'sign_in_with_org') {
+      throw new SignInWithOrgError(data.detail.domain, data.detail.org ?? null);
+    }
+    if (!res.ok) {
+      throw new Error(typeof data?.detail === 'string' ? data.detail : 'Could not save your answer');
+    }
+    return data as Session;
+  }
+
+  /** Which organization owns this email domain, and how it signs in. */
+  async lookupOrg(email: string): Promise<OrgLookup> {
+    const res = await fetch(`${API_URL}/auth/org-lookup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) throw new Error('Could not look up that email domain');
+    return res.json();
+  }
+
+  /** Which SSO providers this server has credentials for. */
+  async getProviders(): Promise<Record<SsoProvider, boolean>> {
+    try {
+      const res = await fetch(`${API_URL}/auth/providers`);
+      if (!res.ok) throw new Error();
+      return res.json();
+    } catch {
+      return { google: false, microsoft: false, saml: false };
+    }
+  }
+
+  /**
+   * Hand the browser to Google / Microsoft. The backend runs the OAuth
+   * exchange and returns to /auth/callback#token=… (see AuthCallbackPage).
+   */
+  startOAuth(provider: 'google' | 'microsoft', opts: { next?: string; hd?: string; loginHint?: string } = {}): void {
+    const params = new URLSearchParams({ next: opts.next ?? '/dashboard' });
+    if (opts.hd) params.set('hd', opts.hd);
+    if (opts.loginHint) params.set('login_hint', opts.loginHint);
+    window.location.href = `${API_URL}/auth/${provider}/start?${params.toString()}`;
+  }
+
+  /** SAML through the broker. Resolves to '' on redirect, or an error string to render inline. */
+  async startSaml(email: string): Promise<string> {
+    const res = await fetch(`${API_URL}/auth/saml/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.url) {
+      window.location.href = data.url;
+      return '';
+    }
+    return typeof data?.detail === 'string' ? data.detail : 'Company SSO is temporarily unavailable.';
   }
 
   /**
