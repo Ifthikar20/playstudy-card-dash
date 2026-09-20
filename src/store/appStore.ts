@@ -101,7 +101,8 @@ interface AppState {
     id: string;
     name: string;
     email: string;
-    level: number;
+    /** Measured reading seconds, all time - the read half of the XP total. */
+    studySeconds: number;
   } | null;
 
   // Progress batching for performance
@@ -289,7 +290,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         id: data.userProfile.id,
         name: data.userProfile.name,
         email: data.userProfile.email,
-        level: data.userProfile.level,
+        studySeconds: data.userProfile.studySeconds ?? 0,
       },
       stats: data.stats,
     });
@@ -686,7 +687,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const studySessions = state.studySessions.map((s) =>
       s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s,
     );
-    const current = state.currentSession?.id === sessionId ? studySessions.find((s) => s.id === sessionId) ?? state.currentSession : state.currentSession;
+    // Patch the open session's own tree too: the list copy can be a summary (or an older
+    // fetch), and swapping it in would drop or revert what the page is showing.
+    const current =
+      state.currentSession?.id === sessionId && state.currentSession.extractedTopics
+        ? { ...state.currentSession, extractedTopics: apply(state.currentSession.extractedTopics) }
+        : state.currentSession;
     return { studySessions, currentSession: current };
   }),
 
@@ -702,7 +708,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const studySessions = state.studySessions.map((s) =>
       s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s,
     );
-    const current = state.currentSession?.id === sessionId ? studySessions.find((s) => s.id === sessionId) ?? state.currentSession : state.currentSession;
+    // Patch the open session's own tree too: the list copy can be a summary (or an older
+    // fetch), and swapping it in would drop or revert what the page is showing.
+    const current =
+      state.currentSession?.id === sessionId && state.currentSession.extractedTopics
+        ? { ...state.currentSession, extractedTopics: apply(state.currentSession.extractedTopics) }
+        : state.currentSession;
     return { studySessions, currentSession: current };
   }),
 

@@ -1,20 +1,21 @@
 /**
- * Experience (XP) — the single source of truth for how XP is earned and how
- * levels are derived. Mirrored on the backend in app/core/xp.py; keep both in
- * sync.
+ * Experience (XP) — the single source of truth for how XP is earned.
+ * Mirrored on the backend in app/core/xp.py; keep both in sync.
  *
  * Earning
+ *   minute studied ........ +2   (measured reading time, not time with the tab open)
  *   correct answer ........ +10
  *   topic completed ....... +25
  *   perfect topic ......... +25 extra (every question right)
  *   session completed ..... +100 (every topic in a session done)
  *
- * Levels
- *   The XP needed to *reach* level n is 50 · (n−1) · n, so each level costs
- *   100 XP more than the one before: L2 = 100, L3 = 300, L4 = 600, L5 = 1 000…
+ * There are no levels. XP is just time put in plus progress made, so every
+ * point traces back to something the student actually did, and the number
+ * never means anything other than "this much work".
  */
 
 export const XP_RULES = {
+  minuteStudied: 2,
   correctAnswer: 10,
   topicCompleted: 25,
   perfectTopic: 25,
@@ -22,45 +23,24 @@ export const XP_RULES = {
 } as const;
 
 export const XP_RULE_LABELS: { key: keyof typeof XP_RULES; label: string; hint: string }[] = [
+  { key: "minuteStudied", label: "Minute of reading", hint: "measured while you're actually reading or answering" },
   { key: "correctAnswer", label: "Correct answer", hint: "in any mode: full study, speed run or a game" },
   { key: "topicCompleted", label: "Topic completed", hint: "finish every question in a topic" },
   { key: "perfectTopic", label: "Perfect topic", hint: "bonus when you get every question right" },
   { key: "sessionCompleted", label: "Session completed", hint: "bonus when every topic in a session is done" },
 ];
 
-/** Cumulative XP required to reach `level` (level 1 = 0). */
-export function xpForLevel(level: number): number {
-  const n = Math.max(1, Math.floor(level));
-  return 50 * (n - 1) * n;
+/** XP earned from measured study time. Part-minutes don't count. */
+export function studyXp(seconds: number): number {
+  return Math.max(0, Math.floor((seconds || 0) / 60)) * XP_RULES.minuteStudied;
 }
 
-/** Level for a cumulative XP total. */
-export function levelFromXp(xp: number): number {
-  const x = Math.max(0, Math.floor(xp || 0));
-  // invert 50·(n−1)·n ≤ x  →  n = floor((1 + sqrt(1 + 8x/100)) / 2)
-  return Math.max(1, Math.floor((1 + Math.sqrt(1 + (8 * x) / 100)) / 2));
-}
-
-export interface LevelProgress {
-  level: number;
-  /** XP since the current level began */
-  into: number;
-  /** XP needed from the start of this level to the next */
-  span: number;
-  /** XP still needed to reach the next level */
-  remaining: number;
-  /** 0–1 */
-  ratio: number;
-  nextLevel: number;
-}
-
-export function levelProgress(xp: number): LevelProgress {
-  const level = levelFromXp(xp);
-  const start = xpForLevel(level);
-  const next = xpForLevel(level + 1);
-  const span = next - start;
-  const into = Math.max(0, Math.floor(xp || 0) - start);
-  return { level, into, span, remaining: Math.max(0, span - into), ratio: span ? Math.min(1, into / span) : 1, nextLevel: level + 1 };
+/** Read time for the XP card: "0m" · "45m" · "2h 5m". */
+export function formatStudyTime(seconds: number): string {
+  const mins = Math.max(0, Math.floor((seconds || 0) / 60));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h ? `${h}h ${m}m` : `${m}m`;
 }
 
 export interface XpLine {

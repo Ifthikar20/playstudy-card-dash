@@ -13,6 +13,8 @@ import { Upload, FileText, ArrowRight, ArrowLeft, BookOpen, Clock, Youtube } fro
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/appStore";
 import { createStudySessionWithAI, createStudySessionFromYouTube, analyzeContent, ContentAnalysis, streamQuestionGeneration } from "@/services/api";
+import { fetchLoadingFacts } from "@/services/guide";
+import { LoadingFacts } from "@/components/LoadingFacts";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateStudySessionDialogProps {
@@ -40,6 +42,9 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [createdSession, setCreatedSession] = useState<any>(null);
   const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [contentFacts, setContentFacts] = useState<string[]>([]);
+  const [factsSubject, setFactsSubject] = useState<string | null>(null);
+  const [processingStartedAt, setProcessingStartedAt] = useState(0);
   const [generationProgress, setGenerationProgress] = useState({
     generated: 0,
     remaining: 0,
@@ -157,6 +162,18 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
     try {
       const title = sessionTitle.trim();
+      setProcessingStartedAt(Date.now());
+      setContentFacts([]);
+      setFactsSubject(null);
+      // Something worth reading while the notes are written: facts about this very material.
+      void fetchLoadingFacts({
+        text: uploadType === "text" ? textContent.trim().slice(0, 4000) : undefined,
+        youtube_url: uploadType === "youtube" ? youtubeUrl.trim() : undefined,
+        title: title || selectedFile?.name,
+      }).then((r) => {
+        setContentFacts(r.facts);
+        setFactsSubject(r.subject || null);
+      });
 
       // Route by source: a YouTube video reads captions server-side; otherwise
       // the pasted text (or the extracted file text) goes to the same pipeline.
@@ -258,20 +275,41 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader className="space-y-1.5 pb-2">
           <DialogTitle className="text-xl font-semibold tracking-tight">
-            {step === "upload" ? "Create study session" : "Your notes are ready"}
+            {step !== "upload" ? "Your notes are ready" : isProcessing ? "Creating your study session" : "Create study session"}
           </DialogTitle>
           {step === "upload" && (
             <p className="text-sm text-muted-foreground">
-              Paste text, upload a file, or add a YouTube link — PlayStudy writes the notes and quizzes.
+              {isProcessing
+                ? "PlayStudy is reading your material and writing the notes and quizzes. Keep this open — it usually takes under a minute."
+                : "Paste text, upload a file, or add a YouTube link — PlayStudy writes the notes and quizzes."}
             </p>
           )}
         </DialogHeader>
 
-        {step === "upload" && (
-          <div className="space-y-4">
+        {step === "upload" && isProcessing && (
+          <div className="min-w-0 space-y-3">
+            <LoadingFacts
+              facts={contentFacts}
+              subject={factsSubject}
+              startedAt={processingStartedAt || undefined}
+              expectedMs={uploadType === "youtube" ? 75_000 : 45_000}
+            />
+            <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" style={{ animationDelay: "0ms" }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" style={{ animationDelay: "150ms" }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" style={{ animationDelay: "300ms" }} />
+              </span>
+              {loadingMessages[loadingMessageIndex]}
+            </p>
+          </div>
+        )}
+
+        {step === "upload" && !isProcessing && (
+          <div className="min-w-0 space-y-4">
             {/* Session Title */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
@@ -409,40 +447,22 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
             )}
 
             {/* Process Button */}
-            <Button
-              className="w-full gap-2"
-              size="lg"
-              disabled={!canProceed || isProcessing || isAnalyzing}
-              onClick={handleProcessContent}
-            >
-              {isProcessing ? (
-                <div className="flex flex-col items-center gap-1 py-1">
-                  <div className="flex items-center gap-1">
-                    <div className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                  </div>
-                  <span className="text-xs opacity-90">{loadingMessages[loadingMessageIndex]}</span>
-                </div>
-              ) : (
-                <>
-                  Generate notes &amp; quizzes
-                  <ArrowRight size={18} />
-                </>
-              )}
+            <Button className="w-full gap-2" size="lg" disabled={!canProceed || isAnalyzing} onClick={handleProcessContent}>
+              Generate notes &amp; quizzes
+              <ArrowRight size={18} />
             </Button>
           </div>
         )}
 
         {step === "ready" && createdSession && (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="min-w-0 space-y-4">
+            <div className="overflow-hidden rounded-2xl border border-border bg-card p-5">
               <div className="flex items-start gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
                   <BookOpen className="size-4" />
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{createdSession.title}</p>
+                  <p className="line-clamp-2 break-words text-sm font-semibold">{createdSession.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {createdSession.topics} section{createdSession.topics === 1 ? "" : "s"} · one quiz per section
                     {generationProgress.inProgress ? " · questions are still being written in the background" : ""}

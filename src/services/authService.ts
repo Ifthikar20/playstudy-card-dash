@@ -55,7 +55,6 @@ export interface SessionUser {
   email: string;
   name: string;
   xp: number;
-  level: number;
   role: UserRole | null;
   teacher_type: TeacherType | null;
   onboarding_completed: boolean;
@@ -107,6 +106,8 @@ export class SignInWithOrgError extends Error {
     this.org = org;
   }
 }
+
+export type RefreshResult = 'refreshed' | 'rejected' | 'unavailable';
 
 class AuthService {
   /**
@@ -210,11 +211,12 @@ class AuthService {
   }
 
   /**
-   * Check if user is authenticated with a valid token
+   * Signed in = a token is stored. Expiry is not a sign-out: an expired token is
+   * renewed in the background (see ensureFreshToken) and only a token the server
+   * rejects clears the session.
    */
   isAuthenticated(): boolean {
-    const token = this.getToken();
-    return !!token && !this.isTokenExpired();
+    return !!this.getToken();
   }
 
   /**
@@ -347,17 +349,48 @@ class AuthService {
     window.location.href = '/auth';
   }
 
+  private refreshing: Promise<RefreshResult> | null = null;
+
   /**
-   * Refresh authentication token
-   * TODO: Implement when backend supports refresh tokens
+   * Trade the stored token for a fresh one. The backend accepts a token that has
+   * already expired (for a long grace period), so a student is only signed out when
+   * the server definitively rejects the token or they sign out themselves.
+   * 'unavailable' = couldn't reach the server; the current token is kept.
    */
-  async refreshToken(): Promise<boolean> {
-    console.log('[AuthService] Token refresh not yet implemented');
-    // TODO: Implement refresh token logic
-    // 1. Call /auth/refresh endpoint with refresh token
-    // 2. Update access token
-    // 3. Return success status
-    return false;
+  async refreshToken(): Promise<RefreshResult> {
+    if (this.refreshing) return this.refreshing;
+    const token = this.getToken();
+    if (!token) return 'rejected';
+    this.refreshing = (async (): Promise<RefreshResult> => {
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.access_token) {
+            this.setToken(data.access_token);
+            console.log('[AuthService] Token renewed');
+            return 'refreshed';
+          }
+          return 'unavailable';
+        }
+        return res.status === 401 || res.status === 403 ? 'rejected' : 'unavailable';
+      } catch {
+        return 'unavailable';
+      } finally {
+        this.refreshing = null;
+      }
+    })();
+    return this.refreshing;
+  }
+
+  /** Renew the token when it has expired or has under a week left. Cheap to call often. */
+  async ensureFreshToken(): Promise<RefreshResult | 'fresh'> {
+    const token = this.getToken();
+    if (!token) return 'rejected';
+    const payload = this.decodeToken(token);
+    const now = Math.floor(Date.now() / 1000);
+    if (payload?.exp && payload.exp - now > 7 * 86400) return 'fresh';
+    return this.refreshToken();
   }
 
   private authHeaders(): Record<string, string> {

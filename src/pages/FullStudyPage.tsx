@@ -4,6 +4,10 @@ import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+import "katex/dist/contrib/mhchem.mjs"; // \ce{...} chemistry in notes
 import {
   AlertTriangle,
   ArrowRight,
@@ -14,6 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  GraduationCap,
+  Presentation,
   Layers,
   ListChecks,
   Loader2,
@@ -32,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
+import { primeSpeechAudio } from "@/lib/guide/speech";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicSummary } from "@/components/TopicSummary";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -40,6 +47,9 @@ import { usePresenceStore } from "@/store/presenceStore";
 import { generateSectionFlashcards, generateSectionQuiz, generateTopicNotes, getStudySession, reviseTopicNotes, updateTopicDetails, type Flashcard } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { TeachMode, type TeachSection } from "@/components/guide/TeachMode";
+import { GuideVisual, VISUAL_FENCE, parseVisualFence } from "@/components/guide/GuideVisual";
+import { LoadingFacts } from "@/components/LoadingFacts";
 
 /*
   Full Study — the one way to study. A session is a single scrolling note:
@@ -88,11 +98,31 @@ function sanitizeNotes(md: string): string {
    headings differ. Mid-tone so they read on both light and dark backgrounds. */
 const HEADING_COLORS = ["#7C3AED", "#2563EB", "#0D9488", "#D97706", "#DB2777", "#0EA5E9"];
 
+/* A visual the student pinned from the Teach mode whiteboard. It's stored in the
+   notes as a fenced `playstudy-visual` block, and drawn here by the same component
+   that drew it on the board, so it looks exactly like what they were shown. */
+function PinnedOrPre(props: any) {
+  const child = Array.isArray(props.children) ? props.children[0] : props.children;
+  const className: string = child?.props?.className ?? "";
+  if (className.includes(`language-${VISUAL_FENCE}`)) {
+    const spec = parseVisualFence(String(child?.props?.children ?? ""));
+    if (spec) {
+      return (
+        <div className="guide-pinned not-prose">
+          <GuideVisual spec={spec} />
+        </div>
+      );
+    }
+  }
+  return <pre {...props} />;
+}
+
 const BASE_NOTE_COMPONENTS = {
   // Highlighter: a light amber chip with dark ink — reads on any background
   // (app light/dark and both Read-mode themes), like a real highlighter.
   mark: (props: any) => <mark className="rounded bg-amber-200/80 px-1 py-0.5 text-amber-950" {...props} />,
   a: (props: any) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+  pre: PinnedOrPre,
 };
 
 /* Shared Markdown renderer: pastel-highlighted headings (cycled in document
@@ -113,22 +143,26 @@ function Markdown({ md }: { md: string }) {
   };
   const components = { ...BASE_NOTE_COMPONENTS, h2: heading("h2"), h3: heading("h3") };
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={components as any}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+      rehypePlugins={[rehypeRaw, rehypeKatex]}
+      components={components as any}
+    >
       {sanitizeNotes(md)}
     </ReactMarkdown>
   );
 }
 
 const NOTE_PROSE =
-  "prose prose-base max-w-[74ch] text-[15.5px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-lg prose-h3:mt-5 prose-h3:text-base prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-4 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.07] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-foreground";
+  "prose prose-base max-w-[78ch] text-[15.5px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-lg prose-h3:mt-5 prose-h3:text-base prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-4 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.07] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-foreground";
 
 // Book-like reading measure for Read mode; `prose`/`prose-invert` is added per theme.
 const READ_PROSE =
   "prose prose-lg max-w-none text-[17px] leading-[1.85] prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mt-8 prose-h2:text-xl prose-h3:mt-6 prose-h3:text-lg prose-p:my-4 prose-p:leading-[1.85] prose-li:my-1.5 prose-code:rounded prose-code:bg-black/10 prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-5 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.08] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic";
 
-function RichNotes({ md }: { md: string }) {
+function RichNotes({ md, guideKey }: { md: string; guideKey?: number }) {
   return (
-    <div className={NOTE_PROSE}>
+    <div className={NOTE_PROSE} data-guide-notes={guideKey}>
       <Markdown md={md} />
     </div>
   );
@@ -269,6 +303,9 @@ export default function FullStudyPage() {
   const [wrong, setWrong] = useState<WrongEntry[]>([]);
   const [showWrong, setShowWrong] = useState(false);
   const [readMode, setReadMode] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [boardOn, setBoardOn] = useState(true);
+  const pageRef = useRef<HTMLDivElement>(null);
   const [readTheme, setReadTheme] = useState<"paper" | "night">(() => {
     try {
       return (localStorage.getItem("ps-read-theme") as "paper" | "night") || "paper";
@@ -398,13 +435,16 @@ export default function FullStudyPage() {
   }
 
   const session = currentSession!;
+  const teachSections: TeachSection[] = sections
+    .filter((s) => s.topic.db_id)
+    .map((s) => ({ topicId: s.topic.id, dbId: s.topic.db_id!, title: s.topic.title, index: s.index }));
 
   return (
-    <div className="relative -m-4 min-h-full md:-m-6">
+    <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
       {/* full-bleed reading backdrop */}
       <div aria-hidden className="pointer-events-none absolute inset-0" style={BACKDROP_STYLE} />
-      <div className="relative p-4 md:p-6">
-        <div className="fade-in mx-auto w-full max-w-6xl">
+      <div className="guide-shift relative p-4 md:p-6">
+        <div className="fade-in mx-auto w-full max-w-[76rem]">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
@@ -414,6 +454,35 @@ export default function FullStudyPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            onClick={() => {
+              primeSpeechAudio();
+              setGuideOpen(true);
+            }}
+            title="Teach mode: PlayStudy AI scrolls, points and explains these notes out loud"
+            className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          >
+            <GraduationCap className="size-3.5" />
+            Teach mode
+          </button>
+          {guideOpen && (
+            <button
+              type="button"
+              onClick={() => setBoardOn((v) => !v)}
+              title={boardOn ? "Hide the working-out board" : "Show the working-out board"}
+              aria-pressed={boardOn}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                boardOn
+                  ? "border-pink-500/40 bg-pink-500/10 text-pink-700 dark:text-pink-300"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted",
+              )}
+            >
+              <Presentation className="size-3.5" />
+              Board
+            </button>
+          )}
+          <button
+            type="button"
             onClick={() => setReadMode(true)}
             title="Distraction-free reading"
             className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
@@ -421,6 +490,19 @@ export default function FullStudyPage() {
             <BookText className="size-3.5" />
             Read mode
           </button>
+          {/* Where these notes came from: a link, not a banner across the page. */}
+          {session.sourceKind === "youtube" && session.sourceUrl && (
+            <a
+              href={session.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Built from this video's transcript — ${session.sourceUrl}`}
+              aria-label="Open the video these notes were built from"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-600"
+            >
+              <Youtube className="size-4" />
+            </a>
+          )}
           {wrong.length > 0 && (
             <button
               type="button"
@@ -451,38 +533,7 @@ export default function FullStudyPage() {
         </div>
       </div>
 
-      {/* Source — the video this session was built from */}
-      {session.sourceKind === "youtube" && session.sourceUrl && (
-        <a
-          href={session.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-5 flex items-center gap-3 rounded-2xl border border-border bg-card p-2.5 pr-4 transition-colors hover:bg-muted/50"
-        >
-          <span className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg bg-muted">
-            {session.sourceSnapshots?.[0] && (
-              <img
-                src={session.sourceSnapshots[0]}
-                alt=""
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-            )}
-            <span className="absolute inset-0 flex items-center justify-center">
-              <Youtube className="size-6 text-white drop-shadow" />
-            </span>
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">From YouTube</span>
-            <span className="mt-0.5 block truncate text-sm font-medium">Built from this video's transcript</span>
-            <span className="block truncate text-xs text-muted-foreground">{session.sourceUrl}</span>
-          </span>
-        </a>
-      )}
-
-      <div className="mt-6 grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      <div className="guide-grid mt-6 grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
         {/* Document */}
         <div className="order-2 min-w-0 space-y-12 lg:order-1">
           {sections.map((s) => (
@@ -558,6 +609,16 @@ export default function FullStudyPage() {
           theme={readTheme}
           onToggleTheme={toggleReadTheme}
           onClose={() => setReadMode(false)}
+        />
+      )}
+      {guideOpen && (
+        <TeachMode
+          sessionId={session.id}
+          sections={teachSections}
+          hostRef={pageRef}
+          onClose={() => setGuideOpen(false)}
+          boardEnabled={boardOn}
+          onBoardClose={() => setBoardOn(false)}
         />
       )}
     </div>
@@ -708,6 +769,8 @@ function StudySection({
 
   const isCurrentAnswered = answers[idx] !== undefined;
   const onLast = idx === questions.length - 1;
+  // The quiz card stays one compact row until the learner starts it.
+  const quizIdle = !quizLoading && !(showSummary && reward) && !review && !(revealed && questions.length > 0) && !topic.completed;
 
   return (
     <section id={`section-${topic.id}`} className="scroll-mt-4">
@@ -834,7 +897,7 @@ function StudySection({
               </div>
             </div>
           ) : topic.notes ? (
-            <RichNotes md={topic.notes} />
+            <RichNotes md={topic.notes} guideKey={topic.db_id} />
           ) : notesLoading || writing ? (
             <div className="space-y-2.5 py-1">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -844,6 +907,7 @@ function StudySection({
               <Skeleton className="h-3.5 w-full" />
               <Skeleton className="h-3.5 w-4/5" />
               <Skeleton className="h-3.5 w-10/12" />
+              <LoadingFacts compact className="pt-1" />
             </div>
           ) : (
             <div className="flex flex-col items-start gap-3 py-2">
@@ -871,16 +935,20 @@ function StudySection({
         </div>
       </div>
 
+      <SectionFlashcards session={session} topic={topic} />
+
       {/* Quiz */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
-        <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quiz</p>
-          {(revealed || (topic.completed && !showSummary)) && questions.length > 0 && !review && (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {revealed ? `${Math.min(idx + 1, questions.length)} / ${questions.length}` : `Score ${Math.round(topic.score ?? 0)}%`}
-            </span>
-          )}
-        </div>
+      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+        {!quizIdle && (
+          <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quiz</p>
+            {(revealed || (topic.completed && !showSummary)) && questions.length > 0 && !review && (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {revealed ? `${Math.min(idx + 1, questions.length)} / ${questions.length}` : `Score ${Math.round(topic.score ?? 0)}%`}
+              </span>
+            )}
+          </div>
+        )}
 
         {quizLoading ? (
           <div className="flex items-center gap-2 px-5 py-8 text-sm text-muted-foreground">
@@ -983,25 +1051,23 @@ function StudySection({
             </div>
           </div>
         ) : (
-          // Idle CTA
-          <div className="px-5 py-7 text-center">
-            <div className="mx-auto flex size-11 items-center justify-center rounded-2xl bg-chart-1/10">
-              <ListChecks className="size-5 text-chart-1" />
+          // Idle: one compact row — it only expands once the learner starts the quiz.
+          <div className="flex items-center gap-2.5 px-3.5 py-2">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
+              <ListChecks className="size-3.5 text-chart-1" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-tight">Quiz this section</p>
+              <p className="hidden truncate text-xs text-muted-foreground sm:block">A few challenging questions from these notes, one at a time.</p>
             </div>
-            <p className="mt-3 text-sm font-semibold">Quiz this section</p>
-            <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
-              A short set of thoughtful, challenging questions written from this section's notes — one at a time.
-              Anything you miss goes to Wrong questions.
-            </p>
-            <Button size="sm" className="mt-4" onClick={() => openQuiz(false)} disabled={!topic.db_id}>
+            <Button size="sm" className="h-8 shrink-0" onClick={() => openQuiz(false)} disabled={!topic.db_id} data-guide-quiz-button>
               <ListChecks className="size-3.5" />
-              Quiz this section
+              Start
             </Button>
           </div>
         )}
       </div>
 
-      <SectionFlashcards session={session} topic={topic} />
     </section>
   );
 }
@@ -1042,17 +1108,15 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
 
   if (!open) {
     return (
-      <div className="mt-4 flex flex-col items-start gap-2.5 rounded-2xl border border-dashed border-border/70 bg-card/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-chart-1/10">
-            <Layers className="size-4 text-chart-1" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold">Flashcards</p>
-            <p className="text-xs text-muted-foreground">Check your memory — flip cards drawn from this section.</p>
-          </div>
+      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/70 bg-card/40 px-3.5 py-2">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
+          <Layers className="size-3.5 text-chart-1" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-tight">Flashcards</p>
+          <p className="hidden truncate text-xs text-muted-foreground sm:block">Check your memory — flip cards drawn from this section.</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => load(false)} disabled={loading || !topic.db_id}>
+        <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => load(false)} disabled={loading || !topic.db_id}>
           {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Layers className="size-3.5" />}
           {loading ? "Making cards…" : "Flashcards"}
         </Button>
@@ -1072,28 +1136,26 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
         </Button>
       </div>
 
+      {/* A real 3D flip: two faces on one rotating card (see .fc-* in index.css). */}
       <button
         type="button"
         onClick={() => setFlipped((f) => !f)}
         aria-label={flipped ? "Show question" : "Reveal answer"}
-        className={cn(
-          "flex h-52 w-full flex-col items-center justify-center rounded-2xl border px-6 text-center transition-colors",
-          flipped ? "border-chart-1/30 bg-chart-1/5" : "border-border bg-muted/40",
-        )}
+        aria-pressed={flipped}
+        className="fc-scene block h-52 w-full text-center"
       >
-        {flipped ? (
-          <div key="back" className="fade-in">
+        <div className={cn("fc-card", flipped && "fc-flipped")}>
+          <div className="fc-face rounded-2xl border border-border bg-muted/40 px-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recall</p>
+            <p className="mt-3 text-lg font-medium leading-snug">{card.front}</p>
+            <p className="mt-4 text-xs text-muted-foreground">Tap to flip</p>
+          </div>
+          <div className="fc-face fc-back rounded-2xl border border-chart-1/30 bg-chart-1/5 px-6">
             <p className="text-[15px] leading-relaxed">{card.back}</p>
             {card.hint && <p className="mt-3 text-xs text-muted-foreground">Hint: {card.hint}</p>}
             <p className="mt-4 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Tap to flip back</p>
           </div>
-        ) : (
-          <div key="front" className="fade-in">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recall</p>
-            <p className="mt-3 text-lg font-medium leading-snug">{card.front}</p>
-            <p className="mt-4 text-xs text-muted-foreground">Tap to reveal</p>
-          </div>
-        )}
+        </div>
       </button>
 
       <div className="mt-4 flex items-center justify-between">

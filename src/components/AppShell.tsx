@@ -46,6 +46,27 @@ import { cn } from "@/lib/utils";
 const SIDEBAR_WIDTH = "13.75rem"; // 220px expanded (narrower than stock shadcn)
 const SIDEBAR_WIDTH_ICON = "3rem"; // 48px icon rail
 
+/*
+  Tablets. An iPad in portrait is 768–1024 CSS px wide: enough for the desktop
+  layout, but not enough to spend 220px of it on navigation — session titles
+  start truncating three words in. So the sidebar drops to its icon rail in
+  that range and comes back the moment the tablet is turned to landscape.
+  A student who opens it by hand keeps it open until the next rotation.
+*/
+const TABLET_RAIL = "(min-width: 768px) and (max-width: 1023.98px)";
+const isTabletPortrait = () => typeof window !== "undefined" && window.matchMedia(TABLET_RAIL).matches;
+
+function TabletRail() {
+  const { setOpen } = useSidebar();
+  useEffect(() => {
+    const mql = window.matchMedia(TABLET_RAIL);
+    const apply = (e: MediaQueryListEvent) => setOpen(!e.matches);
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, [setOpen]);
+  return null;
+}
+
 const MODE_LABELS: Record<string, string> = {
   "full-study": "Full Study",
 };
@@ -192,8 +213,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider
+      defaultOpen={!isTabletPortrait()}
       style={{ "--sidebar-width": SIDEBAR_WIDTH, "--sidebar-width-icon": SIDEBAR_WIDTH_ICON } as React.CSSProperties}
     >
+      <TabletRail />
       <AppSidebar />
       {/* On md+ the inset is a viewport-height card and pages scroll inside the
           content frame below, so the header stays pinned. Below md the document scrolls. */}

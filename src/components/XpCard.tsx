@@ -1,32 +1,55 @@
 import { useState } from "react";
-import { HelpCircle } from "lucide-react";
+import { Clock, HelpCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { XP_RULES, XP_RULE_LABELS, levelProgress, xpForLevel } from "@/lib/xp";
+import { XP_RULES, XP_RULE_LABELS, formatStudyTime, studyXp } from "@/lib/xp";
 import { cn } from "@/lib/utils";
 
 /*
-  XP card — level, progress to the next level, and a "how it works" dialog
-  that shows the exact rules. There are no tokens or credits: XP is the only
-  currency, and it is always explained.
+  XP card — the total, the read time behind it, and a "how it works" dialog with
+  the exact rules. There are no levels and no tokens: XP is time studied plus
+  progress made, and the split bar shows which half of it came from where.
 */
-export function XpCard({ xp, className }: { xp: number; className?: string }) {
+export function XpCard({ xp, studySeconds = 0, className }: { xp: number; studySeconds?: number; className?: string }) {
   const [open, setOpen] = useState(false);
-  const p = levelProgress(xp);
+
+  const total = Math.max(0, Math.round(xp || 0));
+  const fromTime = Math.min(total, studyXp(studySeconds));
+  const fromProgress = Math.max(0, total - fromTime);
+  const timeShare = total ? (fromTime / total) * 100 : 0;
 
   return (
     <div className={cn("rounded-2xl border border-border bg-card p-5", className)}>
-      <div className="flex items-baseline justify-between">
-        <p className="font-display text-3xl leading-none">
-          Level {p.level}
-        </p>
-        <p className="text-xs tabular-nums text-muted-foreground">{Math.round(xp).toLocaleString()} XP</p>
+      <div className="flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-display text-3xl leading-none tabular-nums">{total.toLocaleString()}</p>
+          <p className="mt-1 text-xs text-muted-foreground">XP earned</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="inline-flex items-baseline gap-1.5 text-lg font-semibold leading-none tabular-nums">
+            <Clock className="size-3.5 translate-y-px text-muted-foreground" />
+            {formatStudyTime(studySeconds)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">read time</p>
+        </div>
       </div>
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-chart-1 transition-[width] duration-700" style={{ width: `${Math.max(2, p.ratio * 100)}%` }} />
-      </div>
-      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-        <span className="tabular-nums">{p.remaining.toLocaleString()} XP to level {p.nextLevel}</span>
-        <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 underline-offset-4 hover:text-foreground hover:underline">
+
+      {/* How the total splits: reading on the left, progress on the right. An
+          empty track when there's nothing yet — a full bar at 0 XP would read
+          as "done". */}
+      {total > 0 ? (
+        <div className="mt-4 flex h-1.5 overflow-hidden rounded-full bg-muted" title={`${fromTime.toLocaleString()} XP from reading · ${fromProgress.toLocaleString()} XP from progress`}>
+          <div className="h-full bg-chart-1 transition-[width] duration-700" style={{ width: `${timeShare}%` }} />
+          <div className="h-full flex-1 bg-chart-2/70 transition-[width] duration-700" />
+        </div>
+      ) : (
+        <div className="mt-4 h-1.5 rounded-full bg-muted" />
+      )}
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span className="truncate tabular-nums">
+          <span className="text-chart-1">{fromTime.toLocaleString()}</span> reading ·{" "}
+          <span className="text-foreground">{fromProgress.toLocaleString()}</span> progress
+        </span>
+        <button type="button" onClick={() => setOpen(true)} className="inline-flex shrink-0 items-center gap-1 underline-offset-4 hover:text-foreground hover:underline">
           <HelpCircle className="size-3.5" />
           How XP works
         </button>
@@ -49,16 +72,11 @@ export function XpCard({ xp, className }: { xp: number; className?: string }) {
               </div>
             ))}
           </dl>
-          <div className="text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">Levels</p>
-            <p className="mt-1">
-              Each level costs 100 XP more than the one before. Reaching level {p.level + 1} takes{" "}
-              {xpForLevel(p.level + 1).toLocaleString()} XP in total; you have {Math.round(xp).toLocaleString()}.
-            </p>
-            <p className="mt-2 tabular-nums">
-              {[2, 3, 5, 10, 20].map((l) => `L${l} · ${xpForLevel(l).toLocaleString()}`).join("   ")}
-            </p>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Read time is measured, not guessed: the clock only runs while you're on a study page and actually reading or
+            answering, and it stops when you switch away. So far that's {formatStudyTime(studySeconds)}, worth{" "}
+            {fromTime.toLocaleString()} XP of your {total.toLocaleString()}.
+          </p>
         </DialogContent>
       </Dialog>
     </div>

@@ -267,3 +267,613 @@ html:has(.lp) #root {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   PlayStudy AI guide — the pink pointer, its click ripple, phrase underlines,
+   and the floating dock. See src/components/guide/.
+--------------------------------------------------------------------------- */
+.guide-cursor {
+  /* movement is animated frame by frame (see GuidePointer); only the fade transitions */
+  transition: opacity 0.35s ease;
+  filter: drop-shadow(0 3px 8px rgba(236, 72, 153, 0.45));
+}
+.guide-cursor-svg { display: block; transform: translate(-3px, -2px); transform-origin: 3px 2px; transition: transform 0.16s ease; }
+.guide-cursor.guide-clicking .guide-cursor-svg { animation: guide-click 0.42s ease-out; }
+.guide-cursor.guide-pressing .guide-cursor-svg { transform: translate(-3px, -2px) scale(0.82); }
+.guide-press-ring {
+  position: absolute; width: 34px; height: 34px; border-radius: 9999px;
+  border: 3px solid rgba(236, 72, 153, 0.75);
+  transform: translate(-50%, -50%) scale(0.3); opacity: 0;
+  animation: guide-ring-fill 0.48s ease-out forwards;
+}
+@keyframes guide-ring-fill {
+  from { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+  40% { opacity: 0.9; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+}
+.guide-chip {
+  position: absolute; left: 18px; top: 26px;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 5px 9px; border-radius: 9999px;
+  background: linear-gradient(135deg, #ec4899, #d946ef); color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: 0.01em;
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.35);
+}
+.guide-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 10px; }
+.guide-eq i { width: 2.5px; height: 10px; border-radius: 2px; background: #fff; transform-origin: bottom; animation: guide-eq 0.9s ease-in-out infinite; }
+.guide-eq i:nth-child(2) { animation-delay: 0.15s; }
+.guide-eq i:nth-child(3) { animation-delay: 0.3s; }
+.guide-ripple {
+  position: absolute; width: 18px; height: 18px; border-radius: 9999px;
+  border: 2.5px solid rgba(236, 72, 153, 0.85);
+  transform: translate(-50%, -50%) scale(0.3); opacity: 0;
+  animation: guide-ripple 0.8s ease-out forwards;
+}
+.guide-underline {
+  position: absolute; border-radius: 4px;
+  background: rgba(236, 72, 153, 0.16);
+  box-shadow: inset 0 -2px 0 0 rgba(236, 72, 153, 0.9);
+  transform-origin: left center;
+  animation: guide-underline 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.guide-driving, .guide-driving * { cursor: none !important; }
+.guide-pop { animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1); }
+.guide-glow { animation: guide-glow 1.6s ease-in-out infinite; }
+.guide-mic-live { animation: guide-mic 1.2s ease-in-out infinite; }
+
+@keyframes guide-click {
+  0% { transform: translate(-3px, -2px) scale(1); }
+  35% { transform: translate(-3px, -2px) scale(0.8); }
+  100% { transform: translate(-3px, -2px) scale(1); }
+}
+@keyframes guide-ripple {
+  0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+}
+@keyframes guide-underline { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes guide-eq { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+@keyframes guide-pop { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes guide-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.45); } 50% { box-shadow: 0 0 0 7px rgba(236, 72, 153, 0); } }
+@keyframes guide-mic { 0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.5); } 50% { box-shadow: 0 0 0 8px rgba(236, 72, 153, 0); } }
+/* Teach mode: outline around the block currently being explained, so the voice
+   and the page never disagree about what is being discussed. */
+.guide-focus {
+  position: absolute; border-radius: 14px;
+  border: 2px solid rgba(236, 72, 153, 0.45);
+  background: rgba(236, 72, 153, 0.045);
+  box-shadow: 0 0 0 5px rgba(236, 72, 153, 0.07);
+  transition: left 0.55s cubic-bezier(0.2, 0.9, 0.25, 1), top 0.55s cubic-bezier(0.2, 0.9, 0.25, 1), width 0.55s ease, height 0.55s ease;
+  animation: guide-pop 0.3s ease-out;
+}
+/* Teach mode: speech bubble next to the pointer — what is being said, where it is said. */
+.guide-bubble {
+  position: absolute; left: 22px; top: 36px;
+  width: max-content; max-width: 340px;
+  padding: 9px 13px 10px; border-radius: 16px; border-top-left-radius: 6px;
+  background: rgba(255, 255, 255, 0.97); color: #1a1a18;
+  border: 1px solid rgba(236, 72, 153, 0.35);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 0 0 4px rgba(236, 72, 153, 0.06);
+  font-size: 14px; line-height: 1.45; font-weight: 500; white-space: normal;
+  animation: guide-pop 0.22s ease-out;
+}
+.guide-bubble-left { left: auto; right: 12px; border-top-left-radius: 16px; border-top-right-radius: 6px; }
+.guide-bubble-head {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #db2777;
+}
+.guide-eq-pink i { background: #ec4899; }
+.dark .guide-bubble { background: rgba(24, 24, 27, 0.97); color: #fafafa; border-color: rgba(236, 72, 153, 0.45); }
+.dark .guide-bubble-head { color: #f472b6; }
+
+/* Teach mode: highlighter marks over the words being explained. A real marker's
+   stroke — slightly skewed, soft ends, sweeps in from the left — in a colour
+   that is never the pointer's pink, so pointer and highlight read as two things. */
+.guide-mark {
+  position: absolute; border-radius: 0.45em 0.25em 0.4em 0.3em;
+  transform-origin: left center; transform: skewY(-0.4deg);
+  mix-blend-mode: multiply;
+  animation: guide-mark-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.guide-mark-yellow { background: linear-gradient(100deg, rgba(253, 224, 71, 0) 0.5%, rgba(253, 224, 71, 0.9) 3%, rgba(253, 224, 71, 0.78) 95%, rgba(253, 224, 71, 0) 99%); }
+.guide-mark-green  { background: linear-gradient(100deg, rgba(163, 230, 53, 0) 0.5%, rgba(163, 230, 53, 0.8) 3%, rgba(163, 230, 53, 0.66) 95%, rgba(163, 230, 53, 0) 99%); }
+.guide-mark-orange { background: linear-gradient(100deg, rgba(251, 146, 60, 0) 0.5%, rgba(251, 146, 60, 0.7) 3%, rgba(251, 146, 60, 0.58) 95%, rgba(251, 146, 60, 0) 99%); }
+.guide-mark-blue   { background: linear-gradient(100deg, rgba(125, 211, 252, 0) 0.5%, rgba(125, 211, 252, 0.8) 3%, rgba(125, 211, 252, 0.66) 95%, rgba(125, 211, 252, 0) 99%); }
+.guide-mark-pink   { background: linear-gradient(100deg, rgba(249, 168, 212, 0) 0.5%, rgba(249, 168, 212, 0.8) 3%, rgba(249, 168, 212, 0.66) 95%, rgba(249, 168, 212, 0) 99%); }
+.dark .guide-mark { mix-blend-mode: screen; opacity: 0.55; }
+@keyframes guide-mark-reveal {
+  from { transform: skewY(-0.4deg) scaleX(0); }
+  to { transform: skewY(-0.4deg) scaleX(1); }
+}
+
+/* Flashcards: a real 3D flip. The scene gives perspective, the card rotates,
+   each face hides its back side; the back face starts pre-rotated so it reads
+   correctly once the card has turned. */
+.fc-scene { perspective: 1400px; }
+.fc-card {
+  position: relative; width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.fc-card.fc-flipped { transform: rotateY(180deg); }
+.fc-face {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  transform: rotateY(0deg) translateZ(1px);
+}
+.fc-back { transform: rotateY(180deg) translateZ(1px); }
+.dark .fc-face { background-color: hsl(var(--card)); }
+
+/* ---- Teach mode whiteboard: a tutor writing math by hand ------------------ */
+.guide-board {
+  position: fixed;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  width: min(560px, 46vw);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: guide-board-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes guide-board-in {
+  from { opacity: 0; transform: translateY(-50%) scale(0.96); }
+  to   { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+.guide-board-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+  background: linear-gradient(hsl(var(--muted) / 0.5), transparent);
+}
+.guide-board-pen {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #ec4899;
+  box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.18);
+}
+.guide-board-body {
+  position: relative;
+  min-height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 22px;
+  color: hsl(var(--foreground));
+}
+.guide-board-line {
+  position: relative;
+  flex-shrink: 0;
+  font-size: 26px;
+  line-height: 1.35;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+  transform-origin: center center;
+  will-change: transform;
+}
+/* handwriting: restyle the letters, numbers and operators; leave KaTeX's fraction
+   bars and roots as they are so the layout stays correct */
+.guide-board .katex { font-size: 1.5em; color: hsl(var(--foreground)); }
+.guide-board .katex .mord,
+.guide-board .katex .mbin,
+.guide-board .katex .mrel,
+.guide-board .katex .mopen,
+.guide-board .katex .mclose,
+.guide-board .katex .mpunct,
+.guide-board .katex .minner,
+.guide-board .katex .mop {
+  font-family: "Patrick Hand", ui-rounded, cursive !important;
+  font-style: normal !important;
+}
+.guide-board-raw {
+  font-family: "Patrick Hand", cursive;
+  font-size: 22px;
+  color: hsl(var(--foreground));
+}
+/* writing: a marker reveals the line left-to-right, a pink nib riding the edge */
+.guide-board-line[data-mode="writing"] { animation: guide-write 1.05s steps(30, end) both; }
+.guide-board-line[data-mode="writing"]::after {
+  content: "";
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  width: 2.5px;
+  background: #ec4899;
+  border-radius: 2px;
+  animation: guide-pen 1.05s steps(30, end) both;
+}
+@keyframes guide-write {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 -4% 0 0); }
+}
+@keyframes guide-pen {
+  from { left: 0; opacity: 0.9; }
+  92%  { opacity: 0.9; }
+  to   { left: 100%; opacity: 0; }
+}
+/* erasing: an eraser sweeps across and wipes the line off left-to-right */
+.guide-board-line[data-mode="erasing"] { animation: guide-erase 0.5s ease-in both; }
+.guide-board-line[data-mode="erasing"]::after {
+  content: "";
+  position: absolute;
+  top: -6%;
+  bottom: -6%;
+  width: 34px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 5px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  animation: guide-eraser 0.5s ease-in both;
+}
+@keyframes guide-erase {
+  from { clip-path: inset(0 0 0 0); opacity: 1; filter: blur(0); }
+  to   { clip-path: inset(0 0 0 100%); opacity: 0.1; filter: blur(2px); }
+}
+@keyframes guide-eraser {
+  from { left: -34px; }
+  to   { left: 100%; }
+}
+@media (max-width: 900px) {
+  .guide-board {
+    right: 12px;
+    left: 12px;
+    bottom: 92px;
+    top: auto;
+    transform: none;
+    width: auto;
+    animation: guide-board-in-sheet 0.3s ease both;
+  }
+  .guide-board-body { min-height: 96px; }
+  @keyframes guide-board-in-sheet {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-board,
+  .guide-board-line[data-mode="writing"],
+  .guide-board-line[data-mode="writing"]::after,
+  .guide-board-line[data-mode="erasing"],
+  .guide-board-line[data-mode="erasing"]::after { animation-duration: 0.01ms; }
+}
+
+/* ---- Teach mode whiteboard charts ---------------------------------------- */
+.guide-board-line[data-kind]:not([data-kind="math"]) { white-space: normal; width: 100%; }
+.guide-board-line[data-kind]:not([data-kind="math"])[data-mode="writing"] { animation: guide-chart-in 0.45s ease both; }
+.guide-board-line[data-kind]:not([data-kind="math"])[data-mode="writing"]::after { display: none; }
+.guide-board-line[data-kind]:not([data-kind="math"])[data-mode="erasing"] { animation: guide-fade-out 0.4s ease both; }
+.guide-board-line[data-kind]:not([data-kind="math"])[data-mode="erasing"]::after { display: none; }
+@keyframes guide-chart-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes guide-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.guide-chart {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.guide-chart-title {
+  font-family: "Patrick Hand", cursive;
+  font-size: 18px;
+  color: hsl(var(--foreground));
+  text-align: center;
+}
+.guide-chart-svg { width: 100%; height: auto; overflow: visible; }
+.guide-chart-label {
+  font-family: "Patrick Hand", cursive;
+  font-size: 15px;
+  fill: hsl(var(--foreground));
+}
+.guide-chart-value {
+  font-family: "Patrick Hand", cursive;
+  font-size: 15px;
+  font-weight: 700;
+  fill: hsl(var(--foreground));
+}
+.guide-chart-tick {
+  font-family: "Patrick Hand", cursive;
+  font-size: 12px;
+  fill: hsl(var(--muted-foreground));
+}
+.guide-chart-track { fill: hsl(var(--muted)); opacity: 0.6; }
+.guide-chart-grid { stroke: hsl(var(--border)); stroke-width: 1; }
+.guide-chart-line { stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+@media (prefers-reduced-motion: reduce) {
+  .guide-board-line[data-kind]:not([data-kind="math"])[data-mode="writing"],
+  .guide-board-line[data-kind]:not([data-kind="math"])[data-mode="erasing"] { animation-duration: 0.01ms; }
+}
+
+/* ---- Teach mode whiteboard: diagrams, atoms, graphs, molecules ----------- */
+.guide-diagram { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.guide-flow { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; }
+.guide-flow-item { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.guide-flow-node {
+  max-width: 340px;
+  text-align: center;
+  padding: 8px 16px;
+  border: 2px solid;
+  border-radius: 12px;
+  background: hsl(var(--card));
+  font-family: "Patrick Hand", cursive;
+  font-size: 18px;
+  line-height: 1.2;
+  color: hsl(var(--foreground));
+}
+.guide-flow-arrow { color: hsl(var(--muted-foreground)); }
+.guide-diagram-edge { stroke: hsl(var(--muted-foreground)); stroke-width: 2; }
+.guide-diagram-edge-label { font-family: "Patrick Hand", cursive; font-size: 12px; fill: hsl(var(--muted-foreground)); }
+.guide-diagram-chip { fill: hsl(var(--card)); stroke-width: 2; }
+.guide-diagram-chip-text { font-family: "Patrick Hand", cursive; font-size: 14px; fill: hsl(var(--foreground)); }
+.guide-atom { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.guide-atom-shell { fill: none; stroke: hsl(var(--border)); stroke-width: 1.5; }
+.guide-atom-electron { fill: #3b82f6; }
+.guide-atom-nucleus { fill: #ec4899; }
+.guide-atom-symbol { fill: #ffffff; font-family: "Patrick Hand", cursive; font-size: 24px; font-weight: 700; }
+.guide-atom-caption { font-family: "Patrick Hand", cursive; font-size: 15px; color: hsl(var(--muted-foreground)); text-align: center; }
+.guide-graph { width: 100%; }
+.guide-graph-axis { stroke: hsl(var(--foreground)); stroke-width: 1.5; opacity: 0.5; }
+.guide-graph-curve { stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.guide-graph-fnlabel { font-family: "Patrick Hand", cursive; font-size: 15px; fill: #ec4899; }
+.guide-molecule { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.guide-molecule-svg { max-height: 260px; }
+
+/* ---- Teach mode whiteboard: macOS-style close / minimize ------------------ */
+.guide-board-traffic { display: flex; align-items: center; gap: 7px; }
+.guide-board-dot {
+  width: 12px; height: 12px; border-radius: 9999px; border: none; padding: 0;
+  cursor: pointer; opacity: 0.92; position: relative;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.guide-board-dot:hover { opacity: 1; }
+.guide-board-dot:active { transform: scale(0.88); }
+.guide-board-dot-close { background: #ff5f57; }
+.guide-board-dot-min { background: #febc2e; }
+.guide-board-dot::before {
+  content: ""; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; line-height: 1; color: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+}
+.guide-board-traffic:hover .guide-board-dot-close::before { content: "\00d7"; opacity: 1; }
+.guide-board-traffic:hover .guide-board-dot-min::before { content: "\2013"; opacity: 1; }
+.guide-board-title {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: default;
+}
+.guide-board.guide-board-min { width: auto; min-width: 210px; }
+.guide-board.guide-board-min .guide-board-title { cursor: pointer; }
+.guide-board.guide-board-min .guide-board-head { border-bottom: none; }
+
+/* ---- Teach mode whiteboard: real photo (from Wikipedia) ------------------- */
+.guide-image { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0; }
+.guide-image-img {
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 12px;
+  object-fit: contain;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.4);
+}
+.guide-image-caption {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
+  font-family: "Patrick Hand", cursive;
+  font-size: 15px;
+  color: hsl(var(--foreground));
+  text-align: center;
+}
+.guide-image-source { font-size: 12px; color: hsl(var(--muted-foreground)); text-decoration: underline; }
+.guide-image-status {
+  min-height: 140px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: hsl(var(--muted-foreground));
+  font-family: "Patrick Hand", cursive; font-size: 16px; text-align: center;
+}
+.guide-image-spinner {
+  width: 26px; height: 26px; border-radius: 9999px;
+  border: 3px solid hsl(var(--border)); border-top-color: #ec4899;
+  animation: guide-spin 0.8s linear infinite;
+}
+@keyframes guide-spin { to { transform: rotate(360deg); } }
+
+/* ---- Teach mode whiteboard: drag by the header, remove title chrome ------- */
+.guide-board-head { cursor: move; touch-action: none; user-select: none; }
+.guide-board.guide-board-moved { animation: none; } /* don't fight the entry transform when positioned */
+.guide-board-minlabel {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---- Teach mode whiteboard: comparison table ----------------------------- */
+.guide-table { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.guide-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Patrick Hand", cursive;
+  font-size: 16px;
+  line-height: 1.3;
+  color: hsl(var(--foreground));
+}
+.guide-table-grid th,
+.guide-table-grid td {
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.guide-table-grid thead th {
+  border-bottom: 2px solid hsl(var(--border));
+  font-size: 17px;
+  white-space: nowrap;
+}
+.guide-table-grid tbody th { font-weight: 400; color: hsl(var(--muted-foreground)); }
+.guide-table-grid tbody tr:last-child th,
+.guide-table-grid tbody tr:last-child td { border-bottom: none; }
+
+/* ---- Teach mode whiteboard: timeline, scale, Venn ------------------------ */
+.guide-timeline, .guide-scale, .guide-venn, .guide-periodic,
+.guide-circuit, .guide-forces, .guide-geometry, .guide-code { width: 100%; }
+.guide-timeline-axis { stroke: hsl(var(--foreground)); stroke-width: 2; opacity: 0.45; }
+.guide-timeline-leader { stroke: hsl(var(--border)); stroke-width: 1.5; }
+.guide-timeline-dot { stroke: hsl(var(--card)); stroke-width: 2; }
+.guide-timeline-year { font-family: "Patrick Hand", cursive; font-size: 16px; font-weight: 700; }
+.guide-scale-bar { stroke: hsl(var(--foreground)); stroke-width: 2.5; opacity: 0.55; stroke-linecap: round; }
+.guide-scale-pin { stroke-width: 2; stroke-dasharray: 3 3; }
+.guide-scale-open { fill: hsl(var(--card)); stroke: hsl(var(--foreground)); stroke-width: 2; }
+.guide-venn-set { font-family: "Patrick Hand", cursive; font-size: 17px; font-weight: 700; }
+.guide-venn-item { font-family: "Patrick Hand", cursive; font-size: 13px; fill: hsl(var(--foreground)); }
+
+/* ---- Teach mode whiteboard: periodic table ------------------------------- */
+.guide-periodic-cell { fill: hsl(var(--muted)); opacity: 0.55; }
+.guide-periodic-fcell { opacity: 0.35; }
+.guide-periodic-live { stroke: hsl(var(--card)); stroke-width: 1.5; }
+.guide-periodic-symbol { font-family: "Patrick Hand", cursive; font-size: 15px; font-weight: 700; fill: #ffffff; }
+.guide-periodic-caption { font-family: "Patrick Hand", cursive; font-size: 14px; fill: hsl(var(--muted-foreground)); }
+
+/* ---- Teach mode whiteboard: circuit, forces, geometry -------------------- */
+.guide-circuit-letter { font-family: "Patrick Hand", cursive; font-size: 14px; fill: #ec4899; }
+.guide-forces-body { fill: hsl(var(--muted)); stroke: hsl(var(--foreground)); stroke-width: 2; opacity: 0.9; }
+.guide-geo-label { font-family: "Patrick Hand", cursive; font-size: 16px; fill: hsl(var(--foreground)); }
+.guide-geo-vertex { font-family: "Patrick Hand", cursive; font-size: 15px; fill: hsl(var(--muted-foreground)); }
+
+/* ---- Teach mode whiteboard: graph extras --------------------------------- */
+.guide-graph-shade { fill: rgba(236, 72, 153, 0.18); stroke: none; }
+.guide-graph-asymptote { stroke: hsl(var(--muted-foreground)); stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.8; }
+.guide-graph-tangent { stroke: #3b82f6; stroke-width: 2; stroke-dasharray: 6 4; }
+.guide-graph-point { fill: #f59e0b; stroke: hsl(var(--card)); stroke-width: 1.5; }
+
+/* ---- Teach mode whiteboard: code ----------------------------------------- */
+.guide-code-pre {
+  margin: 0;
+  padding: 10px 4px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: hsl(var(--foreground));
+  background: none;
+}
+.guide-code-line { display: flex; gap: 12px; padding: 0 8px; border-radius: 5px; white-space: pre; }
+.guide-code-num { width: 18px; flex-shrink: 0; text-align: right; color: hsl(var(--muted-foreground)); opacity: 0.7; user-select: none; }
+.guide-code-lit { background: rgba(236, 72, 153, 0.16); box-shadow: inset 2px 0 0 #ec4899; }
+.guide-code-trace { margin-top: 8px; font-size: 14px; }
+
+/* ---- Teach mode whiteboard: a labelled formula --------------------------- */
+.guide-math { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.guide-math-keys {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px;
+  max-width: 440px; white-space: normal;
+}
+.guide-math-key {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 2px 9px 3px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 9999px;
+  font-family: "Patrick Hand", cursive;
+  font-size: 14px;
+  line-height: 1.3;
+  color: hsl(var(--muted-foreground));
+}
+.guide-math-part { font-size: 16px; font-weight: 700; color: #ec4899; }
+.guide-math-meaning { color: hsl(var(--foreground)); }
+
+/* ---- Teach mode whiteboard: history strip, pin, quiz-me, full screen ----- */
+.guide-board-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 10px 8px;
+  border-top: 1px solid hsl(var(--border));
+  background: linear-gradient(transparent, hsl(var(--muted) / 0.4));
+}
+.guide-board-nav { display: flex; align-items: center; gap: 4px; }
+.guide-board-arrow {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.guide-board-arrow:hover:not(:disabled) { color: #ec4899; border-color: #ec4899; background: rgba(236, 72, 153, 0.07); }
+.guide-board-arrow:disabled { opacity: 0.35; cursor: default; }
+.guide-board-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.guide-board-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  background: hsl(var(--card));
+  font-size: 12px; font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+.guide-board-btn:hover:not(:disabled) { color: #ec4899; border-color: #ec4899; background: rgba(236, 72, 153, 0.07); }
+.guide-board-btn:disabled { opacity: 0.75; cursor: default; }
+.guide-board-live {
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid #ec4899;
+  border-radius: 9999px;
+  background: rgba(236, 72, 153, 0.08);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: none;
+  color: #ec4899;
+  cursor: pointer;
+}
+.guide-board-dot-full { background: #28c840; }
+.guide-board-traffic:hover .guide-board-dot-full::before { content: "\2922"; opacity: 1; }
+.guide-board.guide-board-full {
+  left: 3vw; right: 3vw; top: 4vh; bottom: 4vh;
+  width: auto; height: auto;
+  transform: none;
+  animation: none;
+}
+.guide-board.guide-board-full .guide-board-body { flex: 1; min-height: 0; overflow: auto; }
+.guide-board.guide-board-full .guide-board-line { max-width: 1000px; width: 100%; }
+.guide-board.guide-board-full .guide-board-head { cursor: default; }
+
+/* A visual pinned out of the board and kept in the notes. */
+.guide-pinned {
+  margin: 18px 0;
+  padding: 14px 16px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--card));
+}
+@media (max-width: 900px) {
+  .guide-board.guide-board-full { left: 2vw; right: 2vw; top: 2vh; bottom: 2vh; }
+}
+
+/*
+  Teach mode: the whiteboard is fixed to the right of the viewport, so without
+  this the notes keep their full width and the last few words of every line sit
+  underneath it, while a wide empty gutter opens on the left. While the board is
+  up the reading column moves into the space that's actually free, and the "on
+  this page" rail — which the board covers completely — steps aside. Only on
+  screens wide enough to leave a readable column behind.
+*/
+@media (min-width: 1200px) {
+  body.guide-board-open .guide-shift {
+    padding-right: calc(min(560px, 46vw) + 16px);
+    transition: padding-right 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  body.guide-board-open .guide-shift .guide-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body.guide-board-open .guide-shift .guide-grid > :last-child {
+    display: none;
+  }
+}

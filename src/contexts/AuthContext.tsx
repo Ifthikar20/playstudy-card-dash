@@ -65,6 +65,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const currentUser = authService.getCurrentUser();
         setUser(currentUser);
         console.log('[AuthContext] User authenticated:', currentUser?.email);
+        // Renew a token that has expired (or is about to) instead of signing out;
+        // only a token the server rejects ends the session.
+        void authService.ensureFreshToken().then((result) => {
+          if (result === 'rejected') {
+            console.warn('[AuthContext] Stored token rejected by the server, signing out');
+            setUser(null);
+            setSession(null);
+            authService.logout();
+          }
+        });
       } else {
         setUser(null);
         console.log('[AuthContext] No valid authentication');
@@ -96,20 +106,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [user?.sub, refreshSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Check token expiry periodically
+   * Keep the sign-in alive: renew the token in the background every 15 minutes and
+   * whenever the tab comes back into view. Nobody is signed out by an expiry.
    */
   useEffect(() => {
     if (!user) return;
-
-    const interval = setInterval(() => {
-      if (authService.isTokenExpired()) {
-        console.warn('[AuthContext] Token expired, logging out');
-        logout();
-      }
-    }, 60000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, [user]);
+    const renew = () => {
+      void authService.ensureFreshToken().then((result) => {
+        if (result === 'rejected') {
+          console.warn('[AuthContext] Token rejected by the server, signing out');
+          logout();
+        }
+      });
+    };
+    const interval = setInterval(renew, 15 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') renew();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Login user

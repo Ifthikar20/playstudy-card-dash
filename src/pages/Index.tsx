@@ -176,7 +176,7 @@ export default function Index() {
       {/* Greeting */}
       <h1 className="text-[26px] font-semibold tracking-tight md:text-[30px]">
         Hey {firstName}, pick up where you left off
-        <span className="ml-3 hidden align-middle text-sm font-normal text-muted-foreground md:inline">
+        <span className="ml-3 hidden align-middle text-sm font-normal text-muted-foreground lg:inline">
           or jump anywhere with{" "}
           <kbd className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">{isMac ? "⌘" : "Ctrl"}</kbd>{" "}
           +{" "}
@@ -184,7 +184,7 @@ export default function Index() {
         </span>
       </h1>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_296px]">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_296px]">
         <div className="min-w-0 space-y-9">
           {/* Banner */}
           {!isInitialized ? (
@@ -325,8 +325,9 @@ export default function Index() {
                             {folder ? ` · ${folderLabelIcon(folder.icon)}${folder.name}` : ""}
                           </span>
                         </button>
-                        <div className="flex w-28 shrink-0 items-center gap-2">
-                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                        {/* On a phone the bar costs more room than the title can spare, so only the number rides along. */}
+                        <div className="flex w-10 shrink-0 items-center gap-2 sm:w-28">
+                          <div className="hidden h-1 flex-1 overflow-hidden rounded-full bg-muted sm:block">
                             <div className={cn("h-full rounded-full", pct >= 100 ? "bg-success" : "bg-chart-1")} style={{ width: `${Math.max(2, pct)}%` }} />
                           </div>
                           <span className="w-8 text-right text-xs font-semibold tabular-nums">{pct}%</span>
@@ -434,8 +435,10 @@ export default function Index() {
 
         </div>
 
-        {/* Right rail */}
-        <aside className="space-y-4">
+        {/* Right rail — a column beside the content on desktop; on tablet it
+            becomes a two-up row under it rather than three stacked full-width
+            cards you have to scroll past. */}
+        <aside className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <div className="rounded-2xl border border-border bg-card p-5">
             {!isInitialized ? (
               <div className="space-y-4">
@@ -444,7 +447,7 @@ export default function Index() {
                 ))}
               </div>
             ) : (
-              <dl className="space-y-3.5">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3.5 xl:grid-cols-1">
                 {statItems.map((s) => (
                   <div key={s.label} className="flex items-baseline gap-2.5">
                     <dt className="font-display text-[30px] leading-none tabular-nums">{s.value}</dt>
@@ -454,8 +457,10 @@ export default function Index() {
               </dl>
             )}
           </div>
-          {isInitialized ? <XpCard xp={xp} /> : <Skeleton className="h-28 rounded-2xl" />}
-          <StreakCard />
+          {isInitialized ? <XpCard xp={xp} studySeconds={userProfile?.studySeconds ?? 0} /> : <Skeleton className="h-28 rounded-2xl" />}
+          <div className="sm:col-span-2 xl:col-span-1">
+            <StreakCard />
+          </div>
         </aside>
       </div>
 

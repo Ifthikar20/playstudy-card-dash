@@ -25,6 +25,8 @@ export interface ApiRequestOptions {
   skipAuth?: boolean;
   skipEncryption?: boolean;
   timeout?: number;
+  /** Internal: this call already renewed the token and is the one retry. */
+  retryAfterRefresh?: boolean;
 }
 
 export interface ApiError {
@@ -171,8 +173,19 @@ class ApiClient {
 
       clearTimeout(timeoutId);
 
-      // Handle non-OK responses
+      // Handle non-OK responses. A 401 means the token went stale: renew it and
+      // retry once. Only a token the server rejects outright signs the student out.
       if (!response.ok) {
+        if (response.status === 401 && !skipAuth && !options.retryAfterRefresh) {
+          const result = await authService.refreshToken();
+          if (result === 'refreshed') {
+            return this.request<T>(method, endpoint, data, { ...options, retryAfterRefresh: true });
+          }
+          if (result === 'rejected') {
+            console.warn('[ApiClient] Session rejected by the server - signing out');
+            authService.logout();
+          }
+        }
         await this.handleErrorResponse(response);
       }
 
@@ -229,11 +242,7 @@ class ApiClient {
       errorMessage = await response.text() || errorMessage;
     }
 
-    // Handle specific status codes
-    if (response.status === 401) {
-      console.warn('[ApiClient] Unauthorized - clearing auth token');
-      authService.logout();
-    }
+    // 401s are handled in request(): renew the token and retry, sign out only on rejection.
 
     throw new ApiClientError(
       errorMessage,

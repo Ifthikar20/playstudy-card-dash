@@ -139,8 +139,12 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  /** Progress XP plus read-time XP - the number shown on the dashboard. */
   xp: number;
-  level: number;
+  /** Measured reading seconds, all time. */
+  studySeconds: number;
+  /** The part of `xp` that came from reading. */
+  studyXp: number;
   avatar?: string;
 }
 
@@ -166,12 +170,12 @@ export interface AppData {
   };
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 /**
  * Get authentication token from localStorage
  */
-const getAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
@@ -195,6 +199,18 @@ export const removeAuthToken = (): void => {
 export const logout = (): void => {
   removeAuthToken();
   window.location.href = '/auth';
+};
+
+/**
+ * A 401 means the token went stale, not that the student should be thrown out:
+ * renew it and report whether the call can be retried. Signs out only when the
+ * server rejects the token outright.
+ */
+const recoverFromUnauthorized = async (): Promise<boolean> => {
+  const { authService } = await import('./authService');
+  const result = await authService.refreshToken();
+  if (result === 'rejected') authService.logout();
+  return result === 'refreshed';
 };
 
 /**
@@ -389,7 +405,7 @@ export interface ContentAnalysis {
 /**
  * Analyze content and get recommendations for topics/questions
  */
-export const analyzeContent = async (content: string): Promise<ContentAnalysis> => {
+export const analyzeContent = async (content: string, retried = false): Promise<ContentAnalysis> => {
   try {
     const token = getAuthToken();
 
@@ -408,10 +424,7 @@ export const analyzeContent = async (content: string): Promise<ContentAnalysis> 
 
     if (!response.ok) {
       if (response.status === 401) {
-        removeAuthToken();
-        setTimeout(() => {
-          window.location.href = '/auth';
-        }, 2000);
+        if (!retried && (await recoverFromUnauthorized())) return analyzeContent(content, true);
         throw new Error('Your session has expired. Please log in again.');
       }
       const errorData = await response.json();
@@ -433,7 +446,8 @@ export const createStudySessionWithAI = async (
   title: string,
   content: string,
   numTopics: number = 4,
-  questionsPerTopic: number = 10
+  questionsPerTopic: number = 10,
+  retried = false,
 ): Promise<StudySession> => {
   try {
     const token = getAuthToken();
@@ -458,12 +472,9 @@ export const createStudySessionWithAI = async (
 
     if (!response.ok) {
       if (response.status === 401) {
-        // Token expired or invalid - clear it and redirect to login
-        removeAuthToken();
-        // Redirect to login after a short delay to show the error message
-        setTimeout(() => {
-          window.location.href = '/auth';
-        }, 2000);
+        if (!retried && (await recoverFromUnauthorized())) {
+          return createStudySessionWithAI(title, content, numTopics, questionsPerTopic, true);
+        }
         throw new Error('Your session has expired. Please log in again.');
       }
       if (response.status === 413) {
@@ -1046,7 +1057,8 @@ const getMockAppData = (): AppData => {
       name: 'Student User',
       email: 'student@playstudy.ai',
       xp: 2450,
-      level: 12,
+      studySeconds: 64800,
+      studyXp: 2160,
     },
     stats: {
       totalSessions: 12,

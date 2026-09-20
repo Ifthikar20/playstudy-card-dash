@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowRight, ChevronDown, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { XP_RULES, XP_RULE_LABELS, levelProgress, type XpBreakdown } from "@/lib/xp";
+import { XP_RULES, XP_RULE_LABELS, type XpBreakdown } from "@/lib/xp";
 import { useAppStore } from "@/store/appStore";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,7 @@ interface TopicSummaryProps {
 
 /*
   Topic complete — quiet card: score, the XP you earned line by line, the
-  level bar, and a fold-out that explains exactly how XP is calculated.
+  running total, and a fold-out that explains exactly how XP is calculated.
 */
 export function TopicSummary({ topicTitle, score, totalQuestions, onContinue, onRetry, isLastTopic, xp, sessionCompleted }: TopicSummaryProps) {
   const totalXp = useAppStore((s) => s.xp);
@@ -29,7 +29,6 @@ export function TopicSummary({ topicTitle, score, totalQuestions, onContinue, on
   const correct = Math.round(((score || 0) * totalQuestions) / 100);
   const passing = totalQuestions === 0 || correct >= totalQuestions * 0.7;
   const perfect = totalQuestions > 0 && correct === totalQuestions;
-  const progress = levelProgress(totalXp);
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card">
@@ -69,17 +68,10 @@ export function TopicSummary({ topicTitle, score, totalQuestions, onContinue, on
             ))}
           </ul>
 
-          {/* Level bar */}
-          <div className="mt-4">
-            <div className="flex items-baseline justify-between text-xs">
-              <span className="font-medium">Level {progress.level}</span>
-              <span className="tabular-nums text-muted-foreground">
-                {progress.remaining.toLocaleString()} XP to level {progress.nextLevel}
-              </span>
-            </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-chart-1 transition-[width] duration-700" style={{ width: `${Math.max(2, progress.ratio * 100)}%` }} />
-            </div>
+          {/* Running total */}
+          <div className="mt-4 flex items-baseline justify-between border-t border-border pt-3 text-xs">
+            <span className="font-medium">Total XP</span>
+            <span className="tabular-nums text-muted-foreground">{totalXp.toLocaleString()}</span>
           </div>
 
           <button
@@ -102,8 +94,8 @@ export function TopicSummary({ topicTitle, score, totalQuestions, onContinue, on
                 </div>
               ))}
               <p className="mt-2 border-t border-border pt-2 text-muted-foreground">
-                Each level costs 100 XP more than the last: level 2 at 100 XP, level 3 at 300, level 4 at 600, level 5 at
-                1,000, and so on.
+                Reading time counts too: every full minute on a study page adds {XP_RULES.minuteStudied} XP, measured
+                while you're actually reading or answering.
               </p>
             </dl>
           )}

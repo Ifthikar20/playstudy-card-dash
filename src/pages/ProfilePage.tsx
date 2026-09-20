@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/appStore";
 import { usePresenceStore, formatDuration } from "@/store/presenceStore";
 import { logout } from "@/services/api";
+import { formatStudyTime } from "@/lib/xp";
 import { cn } from "@/lib/utils";
 
 /** A toggle that remembers itself in localStorage, so settings actually persist. */
@@ -64,7 +65,6 @@ export default function ProfilePage() {
 
   const name = userProfile?.name ?? "Student";
   const email = userProfile?.email ?? "";
-  const level = userProfile?.level ?? 1;
 
   const sessionCount = studySessions.length;
   const recent = [...studySessions].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)).slice(0, 6);
@@ -94,7 +94,7 @@ export default function ProfilePage() {
                   {email && <p className="mt-0.5 truncate text-sm text-muted-foreground">{email}</p>}
                   <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
                     <TrendingUp className="size-3.5 text-chart-1" />
-                    Level {level} · {xp.toLocaleString()} XP
+                    {xp.toLocaleString()} XP · {formatStudyTime(userProfile?.studySeconds ?? 0)} read
                   </p>
                 </div>
                 <Button variant="outline" size="sm" className="shrink-0 gap-2 text-muted-foreground" onClick={() => logout()}>
