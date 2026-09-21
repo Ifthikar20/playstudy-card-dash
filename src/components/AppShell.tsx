@@ -333,12 +333,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           under every floating layer already in the app: toasts z-100, ReadMode
           z-120, GuideDock z-130, the sticky-selection bubble z-140. */}
       <SidebarInset
-        data-ps-sheet={bare ? sheet : undefined}
+        data-an-sheet={bare ? sheet : undefined}
         className={cn(
           "md:h-[calc(100svh-1rem)] md:overflow-hidden md:rounded-xl",
           // One material: with the gutter painted the same colour, a hairline
           // and a shadow would be the only thing left drawing a seam.
-          bare ? "ps-sheet-surface" : "md:border md:border-border md:shadow-sm",
+          bare ? "an-sheet-surface" : "md:border md:border-border md:shadow-sm",
         )}
       >
         {!bare && (

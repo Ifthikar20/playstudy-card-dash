@@ -79,7 +79,7 @@ export function AddChildDialog({ open, onOpenChange }: Props) {
     if (!created) return;
     try {
       await navigator.clipboard.writeText(
-        `PlayStudy sign-in for ${created.child.name}\nGo to: ${window.location.origin}/kids\nName: ${created.username}\nPIN: ${created.pin}`,
+        `AnotherNotes sign-in for ${created.child.name}\nGo to: ${window.location.origin}/kids\nName: ${created.username}\nPIN: ${created.pin}`,
       );
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

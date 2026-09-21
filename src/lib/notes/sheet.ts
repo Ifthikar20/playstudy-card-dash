@@ -36,6 +36,7 @@ import {
   marksWellFormed,
   type GuardResult,
 } from "@/lib/notes/units";
+import { isVisualFence } from "@/lib/notes/fences";
 
 /* One processor, built from the SAME options constant every other parser in the
    app uses. Four separate copies of `{ singleDollarTextMath: false }` is how a
@@ -115,7 +116,7 @@ type MdNode = {
   position?: { start: { offset: number }; end: { offset: number } };
 };
 
-const VISUAL_LANG = "playstudy-visual";
+
 
 export function buildSheet(md: string): Sheet {
   const n = md.length;
@@ -217,7 +218,7 @@ export function buildSheet(md: string): Sheet {
       if ((node.type && ATOMIC.has(node.type)) || isLone) {
         const kind = isLone ? "math" : node.type!;
         const label =
-          kind === "code" && node.lang === VISUAL_LANG ? ATOM_LABEL.visual : ATOM_LABEL[kind] ?? "Locked block";
+          kind === "code" && isVisualFence(node.lang) ? ATOM_LABEL.visual : ATOM_LABEL[kind] ?? "Locked block";
         fill(f.atom, s, e);
         // A BLOCK atom is frozen together with every newline touching it.
         //

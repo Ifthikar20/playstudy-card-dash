@@ -4,7 +4,7 @@ import { parseIcs } from "@/lib/ics";
 /**
  * Calendar events — exams, study blocks, deadlines and classes.
  *
- * Local-first: events live in localStorage per user (`ps-calendar:<userId>`)
+ * Local-first: events live in localStorage per user (`an-calendar:<userId>`)
  * until a backend endpoint exists. Two ways in: the add/edit dialog, or an
  * .ics import (Google Calendar, Outlook, school portals).
  */
@@ -46,7 +46,7 @@ interface CalendarState {
   importIcs: (text: string) => { added: number; skipped: number; warnings: string[] };
 }
 
-const key = (userId: string) => `ps-calendar:${userId}`;
+const key = (userId: string) => `an-calendar:${userId}`;
 
 function persist(userId: string | null, events: CalendarEvent[]) {
   if (!userId) return;

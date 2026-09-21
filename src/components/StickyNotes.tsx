@@ -239,7 +239,7 @@ function StickyComposer({ onSave, onCancel }: { onSave: (text: string, color: St
  */
 /** A rect for [start,end) of an open line, measured on its painted ink layer. */
 function inkRectOf(input: HTMLTextAreaElement, start: number, end: number): DOMRect | null {
-  const ink = input.parentElement?.querySelector<HTMLElement>("[data-ps-ink]");
+  const ink = input.parentElement?.querySelector<HTMLElement>("[data-an-ink]");
   if (!ink) return null;
   const walker = document.createTreeWalker(ink, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
@@ -289,7 +289,7 @@ export function StickySelection({
       // phrase spanning two paragraphs used to come back silently truncated,
       // and inline `$$…$$` disappeared from it entirely.
       const active = document.activeElement as HTMLTextAreaElement | null;
-      if (active?.tagName === "TEXTAREA" && active.hasAttribute("data-ps-input")) {
+      if (active?.tagName === "TEXTAREA" && active.hasAttribute("data-an-input")) {
         const root = active.closest("[data-guide-notes]") as HTMLElement | null;
         const s0 = active.selectionStart ?? 0;
         const e0 = active.selectionEnd ?? 0;

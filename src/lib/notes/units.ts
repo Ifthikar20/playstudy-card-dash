@@ -105,10 +105,10 @@ export function sanitizeWithMap(src: string): SanitizeMap {
  * 2. The remark plugin that stamps units onto the rendered elements
  * ------------------------------------------------------------------ */
 
-export const UNIT_ATTR = "data-ps-unit";
-export const KIND_ATTR = "data-ps-kind";
-export const TOP_ATTR = "data-ps-top";
-export const HUE_ATTR = "data-ps-hue";
+export const UNIT_ATTR = "data-an-unit";
+export const KIND_ATTR = "data-an-kind";
+export const TOP_ATTR = "data-an-top";
+export const HUE_ATTR = "data-an-hue";
 
 export type UnitKind = "paragraph" | "heading" | "item" | "atom";
 

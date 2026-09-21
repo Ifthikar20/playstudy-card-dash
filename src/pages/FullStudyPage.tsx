@@ -241,7 +241,7 @@ function ReadMode({
   the page read as three stacked materials.
 
   The colour now comes from the chosen sheet, declared once on the content card
-  and on <html> (index.css, `.ps-sheet-surface` / `html[data-ps-sheet]`), so it
+  and on <html> (index.css, `.an-sheet-surface` / `html[data-an-sheet]`), so it
   runs unbroken from the top of the card through overscroll. All that is left
   here is the grain, keyed off the sheet's OWN ink so it works on every swatch.
 */
@@ -269,7 +269,7 @@ function BackgroundPicker() {
       {/* The popover portals to <body>, outside the surface that carries the
           swatch tokens, so it is given them directly — otherwise the menu would
           be the only thing on screen still wearing the app palette. */}
-      <PopoverContent align="end" data-ps-sheet={sheet} className="ps-sheet-surface w-60 p-1.5">
+      <PopoverContent align="end" data-an-sheet={sheet} className="an-sheet-surface w-60 p-1.5">
         <p className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Background
         </p>
@@ -333,7 +333,7 @@ export default function FullStudyPage() {
   const pageRef = useRef<HTMLDivElement>(null);
   const [readTheme, setReadTheme] = useState<"paper" | "night">(() => {
     try {
-      return (localStorage.getItem("ps-read-theme") as "paper" | "night") || "paper";
+      return (localStorage.getItem("an-read-theme") as "paper" | "night") || "paper";
     } catch {
       return "paper";
     }
@@ -342,7 +342,7 @@ export default function FullStudyPage() {
     setReadTheme((t) => {
       const next = t === "paper" ? "night" : "paper";
       try {
-        localStorage.setItem("ps-read-theme", next);
+        localStorage.setItem("an-read-theme", next);
       } catch {
         /* private mode */
       }
@@ -485,7 +485,7 @@ export default function FullStudyPage() {
       <div className="mx-auto w-full max-w-2xl">
         <h1 className="text-2xl font-semibold tracking-tight">{currentSession.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This session has no content yet. Paste your material and PlayStudy will build the sections and quizzes.
+          This session has no content yet. Paste your material and AnotherNotes will build the sections and quizzes.
         </p>
         <div className="mt-6">
           <StudyContentUpload onContentSubmit={(c) => processStudyContent(currentSession.id, c)} isProcessing={false} />
@@ -503,7 +503,7 @@ export default function FullStudyPage() {
     <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
       {/* Grain only — the colour is the sheet, which reaches the top of the
           content card and the overscroll beyond it. */}
-      <div aria-hidden className="ps-sheet-grain pointer-events-none absolute inset-0" />
+      <div aria-hidden className="an-sheet-grain pointer-events-none absolute inset-0" />
       <div className="guide-shift relative p-4 md:p-6">
         <div className="fade-in mx-auto w-full max-w-[76rem]">
       {/* Header */}
@@ -539,7 +539,7 @@ export default function FullStudyPage() {
               primeSpeechAudio();
               setGuideOpen(true);
             }}
-            title="Teach mode: PlayStudy AI scrolls, points and explains these notes out loud"
+            title="Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
             className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98]"
           >
             <GraduationCap className="size-3.5" />
@@ -983,7 +983,7 @@ function StudySection({
       <div className="group/notes relative mt-5 px-6 py-5 sm:px-12 sm:py-8 lg:px-16">
         {topic.db_id && topic.notes && (
           <div
-            data-ps-chrome=""
+            data-an-chrome=""
             className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center justify-end gap-1 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover/notes:opacity-100"
           >
             {keyIdeas.length > 0 && (
@@ -1018,7 +1018,7 @@ function StudySection({
               size="sm"
               className="h-7 text-xs text-muted-foreground"
               disabled={guideOpen}
-              title={guideOpen ? "Writing pauses while PlayStudy is teaching" : "Put the caret in these notes (or just click where you want to write)"}
+              title={guideOpen ? "Writing pauses while AnotherNotes is teaching" : "Put the caret in these notes (or just click where you want to write)"}
               onClick={() => notesRef.current?.startEditing()}
             >
               <Pencil className="size-3.5" />
@@ -1027,7 +1027,7 @@ function StudySection({
           </div>
         )}
         {asking && topic.notes && (
-          <div className="mx-auto mb-4 max-w-[78ch]" data-ps-chrome="">
+          <div className="mx-auto mb-4 max-w-[78ch]" data-an-chrome="">
             <div className="flex items-center gap-2">
               <Wand2 className="size-4 shrink-0 text-chart-1" />
               <input
@@ -1546,7 +1546,7 @@ function SessionPicker({
           <BookOpen className="mx-auto size-6 text-muted-foreground" />
           <p className="mt-3 text-sm font-semibold">No sessions yet</p>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-            Paste notes, drop a PDF, or add a YouTube link and PlayStudy writes the sections and quizzes.
+            Paste notes, drop a PDF, or add a YouTube link and AnotherNotes writes the sections and quizzes.
           </p>
           <Button size="sm" className="mt-4" onClick={onCreate}>
             <Plus className="size-3.5" />

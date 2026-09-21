@@ -1,5 +1,5 @@
 /**
- * Measured activity — mirrors playstudy-backend/app/api/activity.py.
+ * Measured activity — mirrors anothernotes-backend/app/api/activity.py.
  * Everything the dashboard counts (answers, accuracy, study time, XP) starts
  * as one of these calls.
  */

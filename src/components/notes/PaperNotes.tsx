@@ -87,7 +87,7 @@ function Heading({ Tag, rest, children }: { Tag: "h2" | "h3"; rest: Record<strin
   const hue = Number(rest[HUE_ATTR] ?? 0);
   return (
     <Tag {...rest} style={headingVars(HEADING_COLORS[hue % HEADING_COLORS.length])}>
-      <span className="ps-h-chip box-decoration-clone rounded-md px-1.5 py-0.5">{children}</span>
+      <span className="an-h-chip box-decoration-clone rounded-md px-1.5 py-0.5">{children}</span>
     </Tag>
   );
 }
@@ -210,7 +210,7 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
   const onClick = (e: React.MouseEvent) => {
     if (!live || writing) return;
     const t = e.target as HTMLElement | null;
-    if (!t || t.closest("a,button,input,textarea,[data-ps-chrome]")) return;
+    if (!t || t.closest("a,button,input,textarea,[data-an-chrome]")) return;
     const sel = window.getSelection();
     // A drag-select belongs to the sticky-note flow, not to the editor.
     if (sel && !sel.isCollapsed) return;
@@ -252,7 +252,7 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
         <div
           className={cn(prose, live && "cursor-text")}
           data-guide-notes={guideKey}
-          {...(live ? { "data-ps-live": "" } : {})}
+          {...(live ? { "data-an-live": "" } : {})}
           onClick={onClick}
         >
           {tree}

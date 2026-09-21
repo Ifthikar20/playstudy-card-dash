@@ -3,13 +3,14 @@
  *
  * Read mode, the notes page and the in-place editor all import these, so the
  * heading chips, highlights and pinned visuals cannot drift between surfaces.
- * The chip's colour is handed over as CSS custom properties (`--ps-h`,
- * `--ps-h-bg`) and painted by one rule in index.css, so the rendered chip and
+ * The chip's colour is handed over as CSS custom properties (`--an-h`,
+ * `--an-h-bg`) and painted by one rule in index.css, so the rendered chip and
  * the editing ink are the same colour by construction.
  */
 
 import type { CSSProperties, ReactNode } from "react";
-import { GuideVisual, VISUAL_FENCE, parseVisualFence } from "@/components/guide/GuideVisual";
+import { GuideVisual, parseVisualFence } from "@/components/guide/GuideVisual";
+import { VISUAL_FENCES } from "@/lib/notes/fences";
 import { HEADING_COLORS, newTagRe } from "@/lib/notes/units";
 
 /** Keep only <mark> raw HTML in AI notes; drop every other tag so rehype-raw is
@@ -32,7 +33,7 @@ export { HEADING_COLORS };
 type CssVars = CSSProperties & Record<`--${string}`, string>;
 
 export const headingVars = (c: string): CssVars =>
-  ({ "--ps-h": c, "--ps-h-bg": `${c}22` }) as CssVars;
+  ({ "--an-h": c, "--an-h-bg": `${c}22` }) as CssVars;
 
 /* A visual the student pinned from the Teach mode whiteboard. It's stored in the
    notes as a fenced `playstudy-visual` block, and drawn here by the same component
@@ -44,18 +45,18 @@ type MdComponentProps = { node?: unknown; children?: ReactNode } & Record<string
 export function PinnedOrPre({ node, ...props }: MdComponentProps) {
   const child = Array.isArray(props.children) ? props.children[0] : props.children;
   const className: string = child?.props?.className ?? "";
-  const unit: string | undefined = child?.props?.["data-ps-unit"];
-  if (className.includes(`language-${VISUAL_FENCE}`)) {
+  const unit: string | undefined = child?.props?.["data-an-unit"];
+  if (VISUAL_FENCES.some((f) => className.includes(`language-${f}`))) {
     const spec = parseVisualFence(String(child?.props?.children ?? ""));
     if (spec) {
       return (
-        <div className="guide-pinned not-prose" data-ps-unit={unit} data-ps-kind="atom">
+        <div className="guide-pinned not-prose" data-an-unit={unit} data-an-kind="atom">
           <GuideVisual spec={spec} />
         </div>
       );
     }
   }
-  return <pre {...props} data-ps-unit={unit} data-ps-kind="atom" />;
+  return <pre {...props} data-an-unit={unit} data-an-kind="atom" />;
 }
 
 export const BASE_NOTE_COMPONENTS = {
@@ -76,7 +77,7 @@ export function headingFactory(counter: { current: number }) {
       const c = HEADING_COLORS[counter.current++ % HEADING_COLORS.length];
       return (
         <Tag {...rest} style={headingVars(c)}>
-          <span className="ps-h-chip box-decoration-clone rounded-md px-1.5 py-0.5">{children}</span>
+          <span className="an-h-chip box-decoration-clone rounded-md px-1.5 py-0.5">{children}</span>
         </Tag>
       );
     };

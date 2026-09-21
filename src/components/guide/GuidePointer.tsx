@@ -355,10 +355,10 @@ export const GuidePointer = forwardRef<
                   <>
                     <GuideBot kind={speaker.kind} variant="head" size={22} mood={speaking ? "talking" : "idle"} />
                     {speaker.name}
-                    <span className="guide-bubble-role">· PlayStudy AI</span>
+                    <span className="guide-bubble-role">· AnotherNotes AI</span>
                   </>
                 ) : (
-                  "PlayStudy AI"
+                  "AnotherNotes AI"
                 )}
                 {speaking && (
                   <span className="guide-eq guide-eq-pink">
@@ -378,7 +378,7 @@ export const GuidePointer = forwardRef<
                   {speaker.name}
                 </>
               ) : (
-                "PlayStudy AI"
+                "AnotherNotes AI"
               )}
               {speaking && (
                 <span className="guide-eq">

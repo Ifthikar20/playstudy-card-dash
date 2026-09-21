@@ -16,7 +16,7 @@ const ERRORS: Record<string, string> = {
   not_configured: "That sign-in method isn't configured on this server yet.",
   invalid_state: "That sign-in link expired or was reused. Please try again.",
   exchange_failed: "We couldn't complete the sign-in with the provider. Please try again.",
-  no_email: "The provider didn't share an email address, which PlayStudy needs.",
+  no_email: "The provider didn't share an email address, which AnotherNotes needs.",
   inactive: "This account has been deactivated.",
   sso_enforced: "Your organisation requires a different sign-in method.",
 };

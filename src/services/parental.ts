@@ -6,7 +6,7 @@
  * writes to the zustand app store.
  *
  * The reason is a trap rather than a preference. fetchAppData caches into
- * localStorage under global, non-user-scoped keys (playstudy_sessions), and
+ * localStorage under global, non-user-scoped keys (anothernotes_sessions), and
  * useAppData keys its react-query entry on ['appData'] with no user in it.
  * Rendering a child's data through either would overwrite the *guardian's*
  * own dashboard with their child's work. So child data has its own fetchers

@@ -63,7 +63,7 @@ export default function FamilyPage() {
         <EmptyState
           icon={<Users />}
           title="No learners yet"
-          body="Create a profile for a child — they sign in with a name and a PIN, no email needed. Or connect to someone who already has their own PlayStudy account."
+          body="Create a profile for a child — they sign in with a name and a PIN, no email needed. Or connect to someone who already has their own AnotherNotes account."
           ctaLabel="Add a child"
           onCta={() => setAddOpen(true)}
         />

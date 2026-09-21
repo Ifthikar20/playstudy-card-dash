@@ -77,7 +77,7 @@ export function SlashMenu({
   return (
     <div
       ref={ref}
-      data-ps-chrome=""
+      data-an-chrome=""
       role="listbox"
       aria-label="Insert a block"
       className="fixed z-50 max-h-[min(20rem,60vh)] overflow-y-auto overscroll-contain rounded-xl border border-border/70 bg-popover py-1.5 text-popover-foreground shadow-xl"
@@ -177,7 +177,7 @@ export function BlockEditor({
   }, [block.draft]);
 
   return (
-    <div className="mx-auto mt-3 max-w-[78ch] rounded-lg border border-border/70 bg-card/60 p-3" data-ps-chrome="">
+    <div className="mx-auto mt-3 max-w-[78ch] rounded-lg border border-border/70 bg-card/60 p-3" data-an-chrome="">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{block.label}</span>
         <span className="text-[11px] text-muted-foreground">⌘↵ to apply · Esc to cancel</span>

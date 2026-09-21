@@ -20,6 +20,7 @@ import { GuideCircuit } from "./GuideCircuit";
 import { GuideForces } from "./GuideForces";
 import { GuideGeometry } from "./GuideGeometry";
 import { GuideCode } from "./GuideCode";
+import { VISUAL_FENCE } from "@/lib/notes/fences";
 
 /*
   One place that turns a VisualSpec into a drawing.
@@ -160,7 +161,8 @@ export function blankVisual(spec: VisualSpec): VisualSpec {
    there at the next revision. Maths and tables become native Markdown; the rest
    ride in a fenced block the notes renderer knows how to draw.
 -------------------------------------------------------------------------- */
-export const VISUAL_FENCE = "playstudy-visual";
+/* The fence names live in lib/notes/fences.ts — one module the writer here, the
+   reader in render.tsx and the writing surface in sheet.ts all agree on. */
 
 /** `space` is handed to JSON.stringify for the fenced kinds. The AI's own pin
  *  path leaves it 0 (one dense line); the `/` menu passes 2, because a block a

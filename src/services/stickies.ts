@@ -1,6 +1,6 @@
 /**
  * Sticky notes — the important bits a student keeps from their studying.
- * Mirrors playstudy-backend/app/api/sticky_notes.py.
+ * Mirrors anothernotes-backend/app/api/sticky_notes.py.
  */
 import { authService } from "./authService";
 

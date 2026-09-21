@@ -9,6 +9,7 @@ import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/apiClient";
+import { migrateLocalKeys } from "@/lib/localData";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import StandardAccountRoute from "@/components/StandardAccountRoute";
 import { AppShell } from "@/components/AppShell";
@@ -33,6 +34,13 @@ import NotFound from "./pages/NotFound";
 import DevLoginPage from "./pages/DevLoginPage";
 
 const queryClient = new QueryClient();
+
+// Carry a returning person's stored preferences across the rename to
+// AnotherNotes. Idempotent, and studySurface.ts calls it too — that one reads
+// its key during module evaluation, which happens BEFORE this file's body runs,
+// so it cannot wait for this call. This is the catch-all for every other key,
+// and the place the migration is visible from the app's entry point.
+migrateLocalKeys();
 
 // Initialize API client on app startup
 apiClient.initialize().catch((error) => {

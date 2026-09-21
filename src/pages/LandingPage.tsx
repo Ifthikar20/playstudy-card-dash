@@ -44,7 +44,7 @@ const creamPill =
   "inline-flex items-center gap-2 rounded-full bg-[var(--cream)] px-4 py-2 text-[14px] font-medium text-[var(--ink)] transition-opacity hover:opacity-85";
 const eyebrow = "text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]";
 
-/* The Features mega-menu — PlayStudy's real capabilities, grouped. */
+/* The Features mega-menu — AnotherNotes's real capabilities, grouped. */
 type Feat = { icon: LucideIcon; title: string; desc: string; tint: string; badge?: string };
 const FEATURE_GROUPS: { label: string; items: Feat[] }[] = [
   {
@@ -101,8 +101,8 @@ const LandingPage = () => {
       <header className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
         <nav className="flex w-full max-w-4xl items-center gap-2 rounded-full bg-[var(--ink)] py-2 pl-2.5 pr-2 text-[var(--on-ink)] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
           <Link to="/" className="flex items-center gap-2.5 pr-2">
-            <img src="/ps-logo.png" alt="" className="size-7 rounded-full" />
-            <span className="text-[15px] font-semibold tracking-tight">Playstudy</span>
+            <img src="/an-logo.svg" alt="" className="size-7 rounded-full" />
+            <span className="text-[15px] font-semibold tracking-tight">AnotherNotes</span>
             <span className="rounded-full border border-[var(--hair-ink-2)] px-2 py-px text-[10px] font-semibold uppercase tracking-wider text-[var(--on-ink-mut)]">
               Beta
             </span>
@@ -121,7 +121,7 @@ const LandingPage = () => {
             </button>
             {[
               ["#how", "How it works"],
-              ["#why", "Why PlayStudy"],
+              ["#why", "Why AnotherNotes"],
               ["#manifesto", "Manifesto"],
             ].map(([href, label]) => (
               <a
@@ -207,7 +207,7 @@ const LandingPage = () => {
             Your notes, <em>in motion.</em>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
-            Drop in your notes, slides or a PDF. PlayStudy turns them into topics, questions and games you'll actually
+            Drop in your notes, slides or a PDF. AnotherNotes turns them into topics, questions and games you'll actually
             want to finish.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
@@ -252,7 +252,7 @@ const LandingPage = () => {
               Four modes, one set of notes.
             </p>
             <p className="max-w-sm text-[14px] leading-relaxed text-white/80 md:text-[15px]">
-              You forget most of what you read within a day. PlayStudy turns your notes into active recall and games — the
+              You forget most of what you read within a day. AnotherNotes turns your notes into active recall and games — the
               two things the research below says actually make it stick.
             </p>
           </div>
@@ -329,10 +329,10 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Why PlayStudy — ink band */}
+      {/* Why AnotherNotes — ink band */}
       <section id="why" className="on-ink scroll-mt-24 bg-[var(--ink)] px-6 py-20 text-[var(--on-ink)] md:py-28">
         <div className="mx-auto max-w-6xl">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--on-ink-dim)]">Why PlayStudy</p>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--on-ink-dim)]">Why AnotherNotes</p>
           <h2 className="lp-serif mt-3 max-w-2xl text-[2.5rem] md:text-[3rem]">
             Built for the way you <em>actually</em> study
           </h2>
@@ -384,7 +384,7 @@ const LandingPage = () => {
               <Timer className="size-5 text-[var(--on-ink-mut)]" />
               <h3 className="lp-serif mt-4 text-[1.5rem]">Time that's honest</h3>
               <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
-                PlayStudy only counts the minutes you're really reading and writing, so your study time means something.
+                AnotherNotes only counts the minutes you're really reading and writing, so your study time means something.
               </p>
             </InkTile>
 
@@ -424,14 +424,14 @@ const LandingPage = () => {
               had to be a better way.
             </p>
             <p>
-              So we built PlayStudy: a place where your notes become quizzes, your slides become flashcards and your
+              So we built AnotherNotes: a place where your notes become quizzes, your slides become flashcards and your
               textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning
               becomes something you actually want to do.
             </p>
-            <p className="text-[var(--ink)]">This is studying, reimagined. This is PlayStudy.</p>
+            <p className="text-[var(--ink)]">This is studying, reimagined. This is AnotherNotes.</p>
           </div>
           <p className="lp-serif mt-10 border-t border-[var(--hair)] pt-6 text-[1.25rem] italic text-[var(--muted)]">
-            — The PlayStudy team
+            — The AnotherNotes team
           </p>
         </div>
       </section>
@@ -471,8 +471,8 @@ const LandingPage = () => {
       <footer className="border-t border-[var(--hair)] px-6 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
           <div className="flex items-center gap-3">
-            <img src="/ps-logo.png" alt="" className="size-6 rounded-full" />
-            <span className="text-[13px] text-[var(--muted-2)]">© 2026 PlayStudy</span>
+            <img src="/an-logo.svg" alt="" className="size-6 rounded-full" />
+            <span className="text-[13px] text-[var(--muted-2)]">© 2026 AnotherNotes</span>
           </div>
           <div className="flex gap-6 text-[13px] text-[var(--muted-2)]">
             <Link to="/privacy" className="transition-opacity hover:opacity-70">Privacy</Link>

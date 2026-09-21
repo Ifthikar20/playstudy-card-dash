@@ -12,7 +12,7 @@ const PrivacyPage = () => {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <Brain className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold text-white">PlayStudy.ai</span>
+          <span className="text-xl font-bold text-white">AnotherNotes</span>
         </Link>
       </nav>
 

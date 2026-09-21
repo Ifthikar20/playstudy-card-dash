@@ -175,8 +175,8 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
     <div className="lp flex min-h-screen flex-col">
       <header className="flex items-center justify-between px-6 py-5 sm:px-10">
         <div className="flex items-center gap-2.5">
-          <img src="/ps-logo.png" alt="" className="size-7 rounded-full" />
-          <span className="text-[15px] font-semibold tracking-tight">Playstudy</span>
+          <img src="/an-logo.svg" alt="" className="size-7 rounded-full" />
+          <span className="text-[15px] font-semibold tracking-tight">AnotherNotes</span>
         </div>
         <button type="button" onClick={logout} className={ghostLink}>
           <LogOut className="size-3.5" />
@@ -191,7 +191,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
         {step === "role" && (
           <>
             <h1 className="lp-serif mt-6 text-[2.5rem] md:text-[3rem]">
-              Welcome, {firstName}. <em>How will you use PlayStudy?</em>
+              Welcome, {firstName}. <em>How will you use AnotherNotes?</em>
             </h1>
             <p className="mt-3 max-w-xl text-[15px] text-[var(--muted)]">
               We'll set up the right dashboard for you. You only answer this once.
@@ -256,7 +256,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
               Your <em>school email</em>
             </h1>
             <p className="mt-3 max-w-xl text-[15px] text-[var(--muted)]">
-              We use the domain to find your organisation. If it isn't on PlayStudy yet, you'll set it up and become its
+              We use the domain to find your organisation. If it isn't on AnotherNotes yet, you'll set it up and become its
               first admin.
             </p>
 
@@ -303,7 +303,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
                     {lookup.found ? (
                       <>
                         <p className="truncate text-[15px] font-semibold">{lookup.org?.name}</p>
-                        <p className="text-[13px] text-[var(--muted-2)]">@{lookup.domain} · already on PlayStudy</p>
+                        <p className="text-[13px] text-[var(--muted-2)]">@{lookup.domain} · already on AnotherNotes</p>
                       </>
                     ) : (
                       <>

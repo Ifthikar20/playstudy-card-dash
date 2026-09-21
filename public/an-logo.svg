@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="AnotherNotes">
+  <!--
+    AnotherNotes mark: a placeholder in the palette the app already uses (the
+    chart-1 token, #7232e0), keeping the shape language of the badge it
+    replaces: a purple disc, a lime ring, a monogram. Flat SVG, so it is crisp
+    at the 21-28px it is actually drawn at and costs 1KB rather than the 279KB
+    raster it replaces. Swap it for real artwork when there is some.
+
+    Note for editors: no double hyphen anywhere in this comment. XML forbids it,
+    and a malformed SVG does not fail loudly - it silently renders nothing when
+    used as an <img>, which is exactly how it is used in six places here.
+  -->
+  <defs>
+    <linearGradient id="an-disc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a97bf0"/>
+      <stop offset="0.5" stop-color="#7232e0"/>
+      <stop offset="1" stop-color="#4c1d95"/>
+    </linearGradient>
+    <linearGradient id="an-ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e9ddff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="url(#an-disc)"/>
+  <circle cx="256" cy="256" r="248" fill="none" stroke="#c4b5fd" stroke-opacity="0.55" stroke-width="12"/>
+  <circle cx="256" cy="256" r="186" fill="none" stroke="#bef264" stroke-width="22"/>
+  <circle cx="256" cy="256" r="186" fill="none" stroke="#a3e635" stroke-opacity="0.45" stroke-width="40"/>
+  <!-- "AN", drawn as paths so it needs no font to be installed anywhere. -->
+  <g fill="url(#an-ink)">
+    <!-- A -->
+    <path d="M150 336 L196 176 L236 176 L282 336 L244 336 L235 302 L197 302 L188 336 Z M205 270 L227 270 L216 228 Z"/>
+    <!-- N -->
+    <path d="M300 336 L300 176 L336 176 L386 268 L386 176 L420 176 L420 336 L385 336 L334 242 L334 336 Z"/>
+  </g>
+</svg>

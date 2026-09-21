@@ -212,13 +212,13 @@ export function AppSidebar({ onSearch }: { onSearch: () => void }) {
         <SidebarMenu>
           {/* Brand row */}
           <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg" tooltip="PlayStudy">
+            <SidebarMenuButton asChild size="lg" tooltip="AnotherNotes">
               <Link to="/dashboard" onClick={() => { setCurrentSession(null); closeOnNav(); }}>
                 <div className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <img src="/ps-logo.png" alt="" className="size-6 object-contain" />
+                  <img src="/an-logo.svg" alt="" className="size-6 object-contain" />
                 </div>
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate text-sm font-semibold tracking-tight">Playstudy.ai</span>
+                  <span className="truncate text-sm font-semibold tracking-tight">AnotherNotes</span>
                   <span className="truncate text-xs text-muted-foreground tabular-nums">
                     {userProfile ? (activeSeconds >= 60 ? `${formatDuration(activeSeconds)} studied` : "Studying now") : "Study smarter"}
                   </span>

@@ -10,7 +10,7 @@
  * and everything drawn on it follows without per-element overrides.
  *
  * STORAGE follows every other preference in this app: localStorage, per-device,
- * the `ps-` prefix, the `ps-pref:<name>` shape used by the profile toggles, a
+ * the `an-` prefix, the `an-pref:<name>` shape used by the profile toggles, a
  * lazy read so the first paint is already correct, and try/catch around every
  * read and write because private mode throws. There is no server preferences
  * endpoint anywhere in this codebase, so a per-account choice would need a new
@@ -18,6 +18,7 @@
  */
 
 import { useSyncExternalStore } from "react";
+import { migrateLocalKeys } from "@/lib/localData";
 
 export type SheetId = "auto" | "paper" | "sand" | "sage" | "slate" | "ink";
 
@@ -39,7 +40,7 @@ export const SHEETS: SheetSwatch[] = [
   { id: "ink", label: "Ink", hint: "Near black, like Read mode", css: "#0c0c0e", ink: "#e7e5df" },
 ];
 
-const KEY = "ps-pref:sheet";
+const KEY = "an-pref:sheet";
 const VALID = new Set(SHEETS.map((s) => s.id));
 
 export function readSheet(): SheetId {
@@ -51,6 +52,12 @@ export function readSheet(): SheetId {
   }
   return "auto";
 }
+
+/* The sheet is read HERE, during module evaluation, so the first paint is
+   already the right colour — which means it happens before App.tsx's body runs
+   and before App.tsx's own call. Ordering is guaranteed by the import above,
+   not by where this file sits in anyone's import list. */
+migrateLocalKeys();
 
 let current: SheetId = readSheet();
 const listeners = new Set<(id: SheetId) => void>();
@@ -77,8 +84,8 @@ export function subscribeSheet(fn: (id: SheetId) => void) {
  *  scrolls, so a background that stops at the content box is not enough. */
 export function applySheetAttr(id: SheetId | null) {
   const el = document.documentElement;
-  if (id) el.dataset.psSheet = id;
-  else delete el.dataset.psSheet;
+  if (id) el.dataset.anSheet = id;
+  else delete el.dataset.anSheet;
 }
 
 /** The chosen sheet, live. Lazy by construction: `current` is read from

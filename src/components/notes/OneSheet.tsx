@@ -54,17 +54,17 @@ const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt
 
 const runClass = (r: SheetRun) =>
   [
-    r.syntax && "ps-syntax",
-    r.strong && "ps-strong",
-    r.em && "ps-em",
-    r.del && "ps-del",
-    r.code && "ps-code",
-    r.mark && "ps-mark",
-    r.link && !r.syntax && "ps-link",
-    r.tag && "ps-tag",
-    r.atom && "ps-atom",
-    r.quote && "ps-quote",
-    r.head > 0 && "ps-head",
+    r.syntax && "an-syntax",
+    r.strong && "an-strong",
+    r.em && "an-em",
+    r.del && "an-del",
+    r.code && "an-code",
+    r.mark && "an-mark",
+    r.link && !r.syntax && "an-link",
+    r.tag && "an-tag",
+    r.atom && "an-atom",
+    r.quote && "an-quote",
+    r.head > 0 && "an-head",
   ]
     .filter(Boolean)
     .join(" ");
@@ -76,7 +76,7 @@ function paint(ink: HTMLElement, runs: SheetRun[]) {
   for (const r of runs) {
     const cls = runClass(r);
     const hue = r.hue >= 0 ? HEADING_COLORS[r.hue] : null;
-    const style = hue ? ` style="--ps-h:${hue};--ps-h-bg:${hue}22"` : "";
+    const style = hue ? ` style="--an-h:${hue};--an-h-bg:${hue}22"` : "";
     html += cls || style ? `<span class="${cls}"${style}>${esc(r.text)}</span>` : esc(r.text);
   }
   ink.innerHTML = html;
@@ -819,18 +819,18 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
   return (
     <>
       {conflict && (
-        <div className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-ps-chrome="">
+        <div className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-an-chrome="">
           <span>These notes changed somewhere else while you were writing.</span>
           <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={onClose}>
             Show me the new version
           </button>
         </div>
       )}
-      <div className="ps-sheet relative mx-auto max-w-[78ch]" data-guide-notes={guideKey}>
-        <div ref={inkRef} data-ps-ink="" aria-hidden="true" />
+      <div className="an-sheet relative mx-auto max-w-[78ch]" data-guide-notes={guideKey}>
+        <div ref={inkRef} data-an-ink="" aria-hidden="true" />
         <textarea
           ref={taRef}
-          data-ps-input=""
+          data-an-input=""
           aria-label="Your notes for this section. Type anywhere; Escape goes back to reading."
           defaultValue={initial}
           spellCheck
@@ -855,7 +855,7 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
           onActive={setActive}
         />
       )}
-      <div className="mx-auto mt-2 flex max-w-[78ch] flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground" data-ps-chrome="">
+      <div className="mx-auto mt-2 flex max-w-[78ch] flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground" data-an-chrome="">
         {busy ? (
           <span className="flex items-center gap-1.5">
             <Loader2 className="size-3 animate-spin" /> Saving…

@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 function usePref(key: string, initial: boolean) {
   const [value, setValue] = useState(() => {
     try {
-      const raw = localStorage.getItem(`ps-pref:${key}`);
+      const raw = localStorage.getItem(`an-pref:${key}`);
       return raw == null ? initial : raw === "1";
     } catch {
       return initial;
@@ -26,7 +26,7 @@ function usePref(key: string, initial: boolean) {
   const set = (next: boolean) => {
     setValue(next);
     try {
-      localStorage.setItem(`ps-pref:${key}`, next ? "1" : "0");
+      localStorage.setItem(`an-pref:${key}`, next ? "1" : "0");
     } catch {
       /* private mode */
     }

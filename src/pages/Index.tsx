@@ -236,7 +236,7 @@ export default function Index() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-60">Start here</p>
                 <h2 className="font-display mt-2 text-[30px] leading-tight md:text-[34px]">Turn your notes into a game</h2>
                 <p className="mt-1.5 max-w-md text-sm opacity-70">
-                  Paste text, drop a PDF, or connect the place your notes already live. PlayStudy builds the topics and questions.
+                  Paste text, drop a PDF, or connect the place your notes already live. AnotherNotes builds the topics and questions.
                 </p>
               </div>
               <Button className="shrink-0 bg-background text-foreground hover:bg-background/90" onClick={() => setShowCreateSession(true)}>
@@ -386,7 +386,7 @@ export default function Index() {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your notes</p>
-                <p className="mt-1 text-sm text-muted-foreground">Connect where your notes live and PlayStudy reads them from there.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Connect where your notes live and AnotherNotes reads them from there.</p>
               </div>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
