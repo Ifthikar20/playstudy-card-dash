@@ -10,18 +10,22 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { GuideVisual, VISUAL_FENCE, parseVisualFence } from "@/components/guide/GuideVisual";
+import { HEADING_COLORS, newTagRe } from "@/lib/notes/units";
 
 /** Keep only <mark> raw HTML in AI notes; drop every other tag so rehype-raw is
  *  safe to run. Text and Markdown are left untouched. */
 export function sanitizeNotes(md: string): string {
-  return md.replace(/<\/?([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g, (m, tag: string) =>
+  // The pattern is shared with `sanitizeWithMap` in units.ts, which records the
+  // copy/replace runs that map a rendered offset back to the stored bytes. Two
+  // literal copies of it would be silent offset corruption the day they drift.
+  return md.replace(newTagRe(), (m, tag: string) =>
     /^mark$/i.test(tag) ? (m.startsWith("</") ? "</mark>" : "<mark>") : "",
   );
 }
 
-/** Soft, readable highlighter hues for section headings — cycled so consecutive
- *  headings differ. Mid-tone so they read on both light and dark backgrounds. */
-export const HEADING_COLORS = ["#7C3AED", "#2563EB", "#0D9488", "#D97706", "#DB2777", "#0EA5E9"];
+/* Re-exported so every existing importer keeps one import site; the array
+   itself lives in units.ts, which has no React dependency. */
+export { HEADING_COLORS };
 
 /* CSSProperties has no index signature for custom properties, so widen it
    rather than casting each key through `any`. */

@@ -21,7 +21,31 @@ import remarkMath from "remark-math";
  * 1. sanitizeNotes(), plus a map from sanitized offsets back to source
  * ------------------------------------------------------------------ */
 
-const TAG_RE = /<\/?([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g;
+/**
+ * ONE definition of the tag pattern. `sanitizeNotes()` in render.tsx used to
+ * hold a second literal copy of this regex; the two had to stay byte-identical
+ * or `toSrc` would map offsets into a string the renderer never produced —
+ * silent corruption with nothing to catch it. render.tsx now imports this.
+ */
+export const TAG_RE_SOURCE = "<\\/?([a-zA-Z][a-zA-Z0-9-]*)\\b[^>]*>";
+export const newTagRe = () => new RegExp(TAG_RE_SOURCE, "g");
+
+/**
+ * ONE definition of the remark-math options. This app parses the notes in four
+ * places and every one of them must agree: with `singleDollarTextMath` left at
+ * its default, `$$E = mc^2$$` is read as `$…$` text math and a round trip can
+ * quietly demote it. Import this; never re-type the object literal.
+ */
+export const MATH_OPTS = { singleDollarTextMath: false } as const;
+
+/**
+ * Soft, readable highlighter hues for section headings — cycled so consecutive
+ * headings differ. Lives here rather than in render.tsx so the pure parsing
+ * layer can stamp the same hue the renderer paints without importing React.
+ */
+export const HEADING_COLORS = ["#7C3AED", "#2563EB", "#0D9488", "#D97706", "#DB2777", "#0EA5E9"];
+
+const TAG_RE = newTagRe();
 
 interface Run {
   o: number; // offset in the sanitized string
@@ -95,7 +119,7 @@ export type UnitKind = "paragraph" | "heading" | "item" | "atom";
  * student could break by deleting a `$`. Verified against the installed
  * remark-math with `singleDollarTextMath: false`.
  */
-const LONE_DISPLAY = /^\$\$[\s\S]*\$\$$/;
+export const LONE_DISPLAY = /^\$\$[\s\S]*\$\$$/;
 
 /** Block types the caret may never enter: fences, tables, rules, block HTML. */
 const ATOMIC = new Set(["code", "thematicBreak", "html", "table"]);
@@ -205,7 +229,7 @@ export function stampUnits(src: string) {
  * 3. The ink layer — per-character styling of the editing buffer
  * ------------------------------------------------------------------ */
 
-const inlineProc = unified().use(remarkParse).use(remarkGfm).use(remarkMath, { singleDollarTextMath: false });
+const inlineProc = unified().use(remarkParse).use(remarkGfm).use(remarkMath, MATH_OPTS);
 
 export interface InkRun {
   text: string;
@@ -313,44 +337,16 @@ export function renderedToBuf(buf: string, rendered: number): number {
   return buf.length;
 }
 
-/** The buffer with all Markdown syntax removed — what a sticky note should keep. */
-export function strippedText(buf: string): string {
-  return inkRuns(buf)
-    .filter((r) => !r.syntax)
-    .map((r) => r.text)
-    .join("");
-}
-
 /* ------------------------------------------------------------------ *
- * 4. Commit — a splice, never a serialisation
+ * 4. Concurrency — find an edited region again after another writer landed
  * ------------------------------------------------------------------ */
-
-/**
- * A soft-wrapped unit becomes one line while it is being edited, so the text
- * flows exactly like the rendered text. Continuation lines shed their
- * blockquote `>` and list indentation, which the splice range already excludes
- * on the first line.
- */
-export const unwrapUnit = (s: string): string =>
-  s
-    .split("\n")
-    .map((l, i) => (i ? l.replace(/^[ \t]*(?:>[ \t]?)*/, "") : l))
-    .join(" ")
-    .replace(/[ \t]+$/g, "");
-
-/** The buffer is always exactly one logical line, so a paste can't restructure. */
-export const flattenLine = (s: string): string => s.replace(/[\r\n]+/g, " ");
-
-/** The whole commit: the document outside [start,end) is never read or rewritten. */
-export const spliceUnit = (md: string, start: number, end: number, next: string): string =>
-  md.slice(0, start) + next + md.slice(end);
 
 /**
  * Another writer (TeachMode.pinVisual, the guide/ask `notes_updated` stream,
  * reviseTopicNotes) changed the notes under us. Because an edit is an ADDRESSED
- * splice against a known base, we can find the unit again instead of clobbering
- * the whole body the way a stale full-document PATCH does today. Ambiguous or
- * missing → null, and the caller shows a conflict bar rather than guessing.
+ * change against a known base, we can find the region again instead of
+ * clobbering the whole body the way a stale full-document PATCH does. Ambiguous
+ * or missing → null, and the caller shows a conflict bar rather than guessing.
  */
 export function reanchor(fresh: string, was: string): [number, number] | null {
   if (!was) return null;
@@ -363,7 +359,7 @@ export function reanchor(fresh: string, was: string): [number, number] | null {
  * 5. The guard — refuse any splice we cannot prove safe
  * ------------------------------------------------------------------ */
 
-const guardProc = unified().use(remarkParse).use(remarkGfm).use(remarkMath, { singleDollarTextMath: false });
+const guardProc = unified().use(remarkParse).use(remarkGfm).use(remarkMath, MATH_OPTS);
 
 const MARK_TAG = /<(\/?)mark\b[^>]*>/gi;
 const MARK_OPEN = /<mark\b[^>]*>/gi;
@@ -386,7 +382,7 @@ export function marksWellFormed(md: string): boolean {
 }
 
 /** Every atom in the document, by content — the thing an edit must never change. */
-export function atomSignature(md: string): { sig: string; blocks: number } {
+export function atomSignature(md: string): { sig: string; parts: string[]; blocks: number } {
   const tree = guardProc.parse(md) as unknown as MdNode;
   const parts: string[] = [];
   let blocks = 0;
@@ -416,28 +412,13 @@ export function atomSignature(md: string): { sig: string; blocks: number } {
     (n.children || []).forEach(walk);
   };
   walk(tree);
-  return { sig: parts.join("\n"), blocks };
+  // `parts` lets a caller compare atoms one by one against a DECLARED intent
+  // instead of only asking "did the whole set change?", which is what makes
+  // "delete this one pinned diagram" provable rather than merely refused.
+  return { sig: parts.join("\n"), parts, blocks };
 }
 
 export interface GuardResult {
   ok: boolean;
   why?: string;
-}
-
-/**
- * Runs on the candidate document BEFORE it is accepted. Proven by test to
- * reject: an unclosed `<mark>`; a ``` typed at the start of a line (which would
- * swallow a pinned visual); a deleted fence; anything that changes a table,
- * a `$$…$$` block or a code fence.
- */
-export function guardSplice(before: string, after: string, oldBuf: string, newBuf: string): GuardResult {
-  const a = atomSignature(before);
-  const b = atomSignature(after);
-  if (a.sig !== b.sig) return { ok: false, why: "that would change a pinned diagram, formula, table or code block" };
-  if (!marksWellFormed(after)) return { ok: false, why: "a highlight is left unclosed" };
-  const delta = markCount(after) - markCount(before);
-  const want = markCount(newBuf) - markCount(oldBuf);
-  if (delta !== want) return { ok: false, why: "that would change a highlight elsewhere in the notes" };
-  if (Math.abs(b.blocks - a.blocks) > 1) return { ok: false, why: "that would restructure the notes" };
-  return { ok: true };
 }

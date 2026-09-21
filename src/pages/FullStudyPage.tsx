@@ -24,6 +24,7 @@ import {
   ListChecks,
   Loader2,
   Moon,
+  Palette,
   Pencil,
   Plus,
   RotateCcw,
@@ -53,7 +54,11 @@ import { StickySelection, StickySessionDialog, keyIdeasOf } from "@/components/S
 import { useStickyStore } from "@/store/stickyStore";
 import { LoadingFacts } from "@/components/LoadingFacts";
 import { BASE_NOTE_COMPONENTS, HEADING_COLORS, headingFactory, sanitizeNotes } from "@/lib/notes/render";
+import { MATH_OPTS } from "@/lib/notes/units";
 import { PaperNotes, type PaperNotesHandle } from "@/components/notes/PaperNotes";
+import { ShellTrigger } from "@/components/AppShell";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SHEETS, setSheet, useSheet } from "@/lib/studySurface";
 
 /*
   Full Study — the one way to study. A session is a single scrolling note:
@@ -100,7 +105,7 @@ function Markdown({ md }: { md: string }) {
   const components = { ...BASE_NOTE_COMPONENTS, h2: heading("h2"), h3: heading("h3") };
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+      remarkPlugins={[remarkGfm, [remarkMath, MATH_OPTS]]}
       rehypePlugins={[rehypeRaw, rehypeKatex]}
       components={components as any}
     >
@@ -227,17 +232,80 @@ function ReadMode({
   );
 }
 
-/* A calm reading backdrop: a warm wash, a soft purple glow and a faint dot
-   grid. Uses theme tokens so it works in light and dark. */
-const BACKDROP_STYLE: React.CSSProperties = {
-  backgroundColor: "hsl(var(--background))",
-  backgroundImage: [
-    "radial-gradient(1100px 560px at 84% -12%, hsl(var(--chart-1) / 0.10), transparent 60%)",
-    "radial-gradient(820px 520px at -10% 2%, hsl(32 95% 60% / 0.08), transparent 55%)",
-    "radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.05) 1px, transparent 0)",
-  ].join(", "),
-  backgroundSize: "auto, auto, 22px 22px",
-};
+/*
+  The page used to paint its own backdrop here: a base fill, a purple glow, a
+  faint dot grid and — the reason light mode looked cream while dark mode did
+  not — a HARD-CODED `hsl(32 95% 60% / 0.08)` amber that is not a token and
+  never adapted to the theme. Because this div is `absolute inset-0` INSIDE the
+  scrollport, it could never reach up behind the top strip, which is what made
+  the page read as three stacked materials.
+
+  The colour now comes from the chosen sheet, declared once on the content card
+  and on <html> (index.css, `.ps-sheet-surface` / `html[data-ps-sheet]`), so it
+  runs unbroken from the top of the card through overscroll. All that is left
+  here is the grain, keyed off the sheet's OWN ink so it works on every swatch.
+*/
+
+/**
+ * The background picker. The student's choice of paper, kept where they are
+ * looking at it — in the page's own control row next to Read mode, not buried
+ * in Profile & Settings, because it is a property of THIS page.
+ */
+function BackgroundPicker() {
+  const sheet = useSheet();
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Background — the paper these notes are written on"
+          aria-label="Choose the background"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
+        >
+          <Palette className="size-3.5" />
+          Background
+        </button>
+      </PopoverTrigger>
+      {/* The popover portals to <body>, outside the surface that carries the
+          swatch tokens, so it is given them directly — otherwise the menu would
+          be the only thing on screen still wearing the app palette. */}
+      <PopoverContent align="end" data-ps-sheet={sheet} className="ps-sheet-surface w-60 p-1.5">
+        <p className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Background
+        </p>
+        {SHEETS.map((sw) => (
+          <button
+            key={sw.id}
+            type="button"
+            onClick={() => setSheet(sw.id)}
+            aria-pressed={sheet === sw.id}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+              sheet === sw.id && "bg-muted",
+            )}
+          >
+            <span
+              aria-hidden
+              className="size-5 shrink-0 rounded-full border border-border"
+              style={{
+                background: sw.css ?? "linear-gradient(135deg, #ffffff 0 50%, #111111 50% 100%)",
+              }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium">{sw.label}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{sw.hint}</span>
+            </span>
+            {sheet === sw.id && <Check className="size-3.5 shrink-0" />}
+          </button>
+        ))}
+        <p className="px-2 pb-1 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+          Changes this page only, and is kept on this device — like Read mode's paper. Use the
+          theme switch in the sidebar for the whole app.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function FullStudyPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -433,17 +501,38 @@ export default function FullStudyPage() {
 
   return (
     <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
-      {/* full-bleed reading backdrop */}
-      <div aria-hidden className="pointer-events-none absolute inset-0" style={BACKDROP_STYLE} />
+      {/* Grain only — the colour is the sheet, which reaches the top of the
+          content card and the overscroll beyond it. */}
+      <div aria-hidden className="ps-sheet-grain pointer-events-none absolute inset-0" />
       <div className="guide-shift relative p-4 md:p-6">
         <div className="fade-in mx-auto w-full max-w-[76rem]">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Full Study</p>
+          {/* What the removed top strip carried, in the page itself: the
+              sidebar trigger (the only touch affordance for navigation, and
+              therefore for search, on a phone or a collapsed rail — it still
+              renders NOTHING on a hover-capable desktop with the sidebar open)
+              and a real link back to the dashboard. Both are in normal flow, so
+              they cost nothing at 360px and overlap nothing. */}
+          <div className="-ml-1 flex items-center gap-0.5">
+            <ShellTrigger />
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+            >
+              <ChevronLeft className="size-3.5" />
+              Dashboard
+            </Link>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+              / Full Study
+            </span>
+          </div>
           <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight md:text-[28px]">{session.title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        {/* Wraps: this cluster gained a control and a 360px phone cannot
+            hold the modes, the picker and the progress meter on one line. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
             onClick={() => {
@@ -466,7 +555,7 @@ export default function FullStudyPage() {
                 "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                 boardOn
                   ? "border-pink-500/40 bg-pink-500/10 text-pink-700 dark:text-pink-300"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted",
+                  : "border-border bg-foreground/[0.04] text-muted-foreground hover:bg-foreground/[0.08]",
               )}
             >
               <Presentation className="size-3.5" />
@@ -477,11 +566,12 @@ export default function FullStudyPage() {
             type="button"
             onClick={() => setReadMode(true)}
             title="Distraction-free reading"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
           >
             <BookText className="size-3.5" />
             Read mode
           </button>
+          <BackgroundPicker />
           {/* Where these notes came from: a link, not a banner across the page. */}
           {session.sourceKind === "youtube" && session.sourceUrl && (
             <a
@@ -490,7 +580,7 @@ export default function FullStudyPage() {
               rel="noopener noreferrer"
               title={`Built from this video's transcript — ${session.sourceUrl}`}
               aria-label="Open the video these notes were built from"
-              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-600"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-foreground/[0.04] text-muted-foreground transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-600"
             >
               <Youtube className="size-4" />
             </a>
@@ -500,7 +590,7 @@ export default function FullStudyPage() {
               type="button"
               onClick={() => setShowStickies(true)}
               title="Everything you've kept from this session"
-              className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              className="flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
             >
               <StickyNote className="size-3.5" />
               Sticky notes
@@ -522,7 +612,7 @@ export default function FullStudyPage() {
               </span>
             </button>
           )}
-          <div className="w-44 sm:w-56">
+          <div className="w-full min-w-0 sm:w-56">
             <div className="flex items-baseline justify-between text-xs text-muted-foreground">
               <span className="tabular-nums">
                 {done} of {sections.length} sections
@@ -560,7 +650,7 @@ export default function FullStudyPage() {
             />
           ))}
 
-          <div id="session-end" className="rounded-2xl border border-border bg-card p-6 text-center">
+          <div id="session-end" className="rounded-2xl border border-border bg-foreground/[0.03] p-6 text-center">
             {pct >= 100 ? (
               <>
                 <p className="text-sm font-semibold">You've finished every section.</p>
@@ -698,7 +788,6 @@ function StudySection({
 
   // Notes editing
   const notesRef = useRef<PaperNotesHandle>(null);
-  const [notesArmed, setNotesArmed] = useState(false);
   const [editing, setEditing] = useState<null | "head" | "notes">(null);
   const [draftTitle, setDraftTitle] = useState(topic.title);
   const [draftDesc, setDraftDesc] = useState(topic.description ?? "");
@@ -885,10 +974,13 @@ function StudySection({
         )}
       </div>
 
-      {/* Notes — a page, not a card. No border, no radius, no shadow and no
-          toolbar rail: the text sits on paper with a real page margin, and the
-          78ch measure is centred so the slack falls on both sides. */}
-      <div className="group/notes relative mt-5 bg-[hsl(var(--paper))] px-6 py-5 sm:px-12 sm:py-8 lg:px-16">
+      {/* Notes — a page, not a card. No border, no radius, no shadow, no
+          toolbar rail AND NO FILL OF ITS OWN: this block used to paint
+          `bg-[hsl(var(--paper))]`, which punched an opaque rectangle through the
+          page's grain and read as a third material. The text now sits directly
+          on the chosen sheet, with a real page margin, and the 78ch measure is
+          centred so the slack falls on both sides. */}
+      <div className="group/notes relative mt-5 px-6 py-5 sm:px-12 sm:py-8 lg:px-16">
         {topic.db_id && topic.notes && (
           <div
             data-ps-chrome=""
@@ -917,24 +1009,20 @@ function StudySection({
               <Wand2 className="size-3.5" />
               Ask AI to change
             </Button>
+            {/* There is no edit MODE any more, so this is not a toggle: writing
+                starts wherever you click or tap, on a mouse and on touch alike.
+                The button stays as the keyboard route in — it just puts the
+                caret at the top of the section. */}
             <Button
               variant="ghost"
               size="sm"
               className="h-7 text-xs text-muted-foreground"
               disabled={guideOpen}
-              title={guideOpen ? "Editing pauses while PlayStudy is teaching" : "Write on the page — click any line"}
-              onClick={() => {
-                if (notesArmed) {
-                  setNotesArmed(false);
-                  notesRef.current?.stopEditing();
-                } else {
-                  setNotesArmed(true);
-                  notesRef.current?.startEditing();
-                }
-              }}
+              title={guideOpen ? "Writing pauses while PlayStudy is teaching" : "Put the caret in these notes (or just click where you want to write)"}
+              onClick={() => notesRef.current?.startEditing()}
             >
-              {notesArmed ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
-              {notesArmed ? "Done" : "Edit notes"}
+              <Pencil className="size-3.5" />
+              Write
             </Button>
           </div>
         )}
@@ -992,10 +1080,9 @@ function StudySection({
                 variant="outline"
                 disabled={!topic.db_id || writing}
                 onClick={async () => {
-                  // Seed one editable line, then put the caret in it. There is no
-                  // raw-Markdown mode to fall back to any more.
+                  // Seed one line so there is something to put a caret in, then
+                  // put it there. There is no raw-Markdown mode to fall back to.
                   await saveNotes("Write your notes for this section here.");
-                  setNotesArmed(true);
                   window.setTimeout(() => notesRef.current?.startEditing(), 0);
                 }}
               >
@@ -1010,7 +1097,7 @@ function StudySection({
       <SectionFlashcards session={session} topic={topic} />
 
       {/* Quiz */}
-      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/50 bg-card">
+      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/50 bg-foreground/[0.03]">
         {!quizIdle && (
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quiz</p>
@@ -1180,7 +1267,7 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
 
   if (!open) {
     return (
-      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/50 bg-card/40 px-3.5 py-2">
+      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/50 bg-foreground/[0.02] px-3.5 py-2">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
           <Layers className="size-3.5 text-chart-1" />
         </span>
@@ -1198,7 +1285,7 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
 
   const card = cards[idx];
   return (
-    <div className="mt-4 rounded-2xl border border-border/50 bg-card p-5">
+    <div className="mt-4 rounded-2xl border border-border/50 bg-foreground/[0.03] p-5">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Flashcards <span className="ml-1 normal-case tracking-normal">· {idx + 1} / {cards.length}</span>

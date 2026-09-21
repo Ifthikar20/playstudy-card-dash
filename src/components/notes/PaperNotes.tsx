@@ -1,38 +1,45 @@
 /**
  * PaperNotes — the study notes as a page you can write on.
  *
- * There is no "edit mode" and no raw-Markdown textarea. The notes render
- * exactly as they always have; clicking a line turns THAT line into a
- * transparent <textarea> sitting on top of a painted copy of its own Markdown,
- * in the same font, size, colour, measure and x-position. Everything above and
- * below stays fully rendered.
+ * TWO STATES, ONE FILE, NO MODE BUTTON.
+ *
+ *  READING   The notes render exactly as they always have and as Read mode
+ *            still does: real <h2>s at 18px with their colour chip, real list
+ *            indentation, real blockquote borders, live KaTeX, live GFM tables
+ *            and live pinned `playstudy-visual` diagrams.
+ *
+ *  WRITING   Click (or tap) anywhere in them and the WHOLE SECTION becomes one
+ *            continuous writing surface with the caret exactly where you
+ *            clicked — see OneSheet. From there every gesture is the browser's
+ *            own: type anywhere, arrow across paragraphs with the column
+ *            preserved, select from the middle of one paragraph to the middle
+ *            of another and delete it, Enter for a new paragraph or bullet
+ *            anywhere, Backspace at the start to merge into the paragraph
+ *            above, one undo stack for the whole section, and a debounced
+ *            autosave instead of a network write per line. Escape, or clicking
+ *            away, goes back to reading.
  *
  * WHY IT CANNOT CORRUPT NOTES
- *  - A commit is `notes.slice(0,start) + edited + notes.slice(end)` at offsets
- *    produced by the SAME remark pipeline that rendered the page. Nothing
- *    outside the edited line is ever read, parsed or rewritten. There is no
- *    DOM -> Markdown serialiser anywhere in this file.
- *  - Pinned `playstudy-visual` fences, tables, code blocks, `$$…$$` math
- *    (including the one-line `$$…$$` form `visualToMarkdown` writes) and any
- *    line holding a hard break are ATOMS: the caret cannot enter them.
- *  - Every candidate document goes through `guardSplice` before it is sent.
+ *  - While writing, `textarea.value` IS the stored Markdown, byte for byte.
+ *    There is no DOM → Markdown serialiser anywhere in this feature, so a save
+ *    cannot emit a byte the student did not type: `<mark class="hi">`, `\ce{}`
+ *    chemistry, KaTeX, GFM tables and pinned fences survive because they are
+ *    never read.
+ *  - Those blocks are FROZEN: `beforeinput` refuses any input that touches one,
+ *    the caret steps over them rather than into them, and `guardDoc` re-proves
+ *    it on the candidate document before anything is sent.
  *
  * WHAT STAYS COUPLED
- *  - `data-guide-notes` never leaves the DOM, so TeachMode, the sticky-note
- *    watcher and the sticky-jump deep link keep working — including while a
- *    line is open, which is more than today's editor manages.
- *  - No chrome is ever rendered inside a block: no placeholder text node, no
- *    line number, no drag handle, no per-block toolbar. `findQuoteRange`'s
- *    TreeWalker and `sel.toString()` therefore see exactly what they see today.
+ *  - `data-guide-notes` never leaves the DOM in either state.
+ *  - Teach mode (`locked`) always renders the READING state, so `indexBlocks`,
+ *    `findBlockEl` and `findQuoteRange` see exactly the DOM they see today.
  */
 
 import {
   type ComponentProps,
-  createContext,
   forwardRef,
   type ReactNode,
   useCallback,
-  useContext,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -45,67 +52,59 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
-import { Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { BASE_NOTE_COMPONENTS, HEADING_COLORS, headingVars } from "@/lib/notes/render";
 import {
   HUE_ATTR,
   KIND_ATTR,
-  TOP_ATTR,
+  MATH_OPTS,
   UNIT_ATTR,
-  flattenLine,
-  guardSplice,
-  inkRuns,
-  reanchor,
   renderedToBuf,
   sanitizeWithMap,
-  spliceUnit,
   stampUnits,
-  unwrapUnit,
-  type InkRun,
   type UnitKind,
 } from "@/lib/notes/units";
+import { OneSheet, type OneSheetHandle } from "@/components/notes/OneSheet";
 
 export interface PaperNotesHandle {
-  /** Open the first editable line — the keyboard and touch entry point. */
+  /** Put the caret in the notes — the toolbar and keyboard entry point. */
   startEditing: () => void;
   stopEditing: () => void;
   isEditing: () => boolean;
 }
 
-interface Focus {
-  sanStart: number; // start offset in the sanitized string — identifies the element
-  start: number; // start offset in the stored markdown
-  end: number;
-  kind: UnitKind;
-  was: string; // the exact stored bytes this unit had when it was opened
-  top: boolean; // a top-level paragraph: Enter may split it
+/* react-markdown passes the mdast node plus the hast properties as loose props.
+   `node` is destructured out so it never reaches the DOM. */
+type MdComponentProps = { node?: unknown; children?: ReactNode } & Record<string, unknown>;
+
+const REMARK_PLUGINS = (src: string): ComponentProps<typeof ReactMarkdown>["remarkPlugins"] => [
+  remarkGfm,
+  [remarkMath, MATH_OPTS],
+  stampUnits(src),
+];
+
+function Heading({ Tag, rest, children }: { Tag: "h2" | "h3"; rest: Record<string, unknown>; children: ReactNode }) {
+  const hue = Number(rest[HUE_ATTR] ?? 0);
+  return (
+    <Tag {...rest} style={headingVars(HEADING_COLORS[hue % HEADING_COLORS.length])}>
+      <span className="ps-h-chip box-decoration-clone rounded-md px-1.5 py-0.5">{children}</span>
+    </Tag>
+  );
 }
 
-interface BufValue {
-  buf: string;
-  caret: number;
-  refocus: number;
-  setBuf: (v: string) => void;
-  commit: (v: string) => void;
-  cancel: () => void;
-  move: (delta: number) => void;
-  split: (at: number) => void;
-}
-
-const FocusCtx = createContext<Focus | null>(null);
-const BufCtx = createContext<BufValue | null>(null);
-
-const inkClass = (r: InkRun) =>
-  cn(
-    r.syntax && "ps-syntax",
-    r.strong && "ps-strong",
-    r.em && "ps-em",
-    r.code && "ps-code",
-    r.mark && "ps-mark",
-    r.link && !r.syntax && "ps-link",
-  ) || undefined;
+const READ_COMPONENTS = {
+  ...BASE_NOTE_COMPONENTS,
+  h2: ({ node, children, ...rest }: MdComponentProps) => (
+    <Heading Tag="h2" rest={rest}>
+      {children}
+    </Heading>
+  ),
+  h3: ({ node, children, ...rest }: MdComponentProps) => (
+    <Heading Tag="h3" rest={rest}>
+      {children}
+    </Heading>
+  ),
+};
 
 /** Rendered-text offset of a DOM position inside a unit element. */
 function renderedOffsetAt(el: HTMLElement, node: Node | null, offset: number): number {
@@ -118,161 +117,21 @@ function renderedOffsetAt(el: HTMLElement, node: Node | null, offset: number): n
   return seen;
 }
 
-/* ------------------------------------------------------------------ *
- * The editing surface for one line
- * ------------------------------------------------------------------ */
-
-function UnitEditor({ kind }: { kind: UnitKind }) {
-  const ctx = useContext(BufCtx)!;
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const runs = useMemo(() => inkRuns(ctx.buf), [ctx.buf]);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus({ preventScroll: true });
-    const at = Math.min(ctx.caret, el.value.length);
-    el.setSelectionRange(at, at);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.refocus]);
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const el = e.currentTarget;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation(); // don't let Teach mode's window handler close the lesson
-      ctx.cancel();
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (kind === "paragraph" && el.selectionStart === el.selectionEnd && el.selectionStart > 0 && el.selectionStart < el.value.length) {
-        ctx.split(el.selectionStart);
-      } else {
-        ctx.commit(el.value);
-      }
-      return;
-    }
-    if (e.key === "Tab") {
-      e.preventDefault();
-      ctx.commit(el.value);
-      ctx.move(e.shiftKey ? -1 : 1);
-      return;
-    }
-    if (e.key === "ArrowUp" && el.selectionStart === 0 && el.selectionEnd === 0) {
-      e.preventDefault();
-      ctx.commit(el.value);
-      ctx.move(-1);
-      return;
-    }
-    if (e.key === "ArrowDown" && el.selectionStart === el.value.length && el.selectionEnd === el.value.length) {
-      e.preventDefault();
-      ctx.commit(el.value);
-      ctx.move(1);
-    }
-  };
-
-  return (
-    <>
-      <span
-        data-ps-ink=""
-        aria-hidden="true"
-        className={kind === "heading" ? "ps-h-chip box-decoration-clone rounded-md px-1.5 py-0.5" : undefined}
-      >
-        {runs.map((r, i) => (
-          <span key={i} className={inkClass(r)}>
-            {r.text}
-          </span>
-        ))}
-      </span>
-      <textarea
-        ref={ref}
-        data-ps-input=""
-        aria-label="Edit this line of your notes. Escape cancels, Enter saves."
-        value={ctx.buf}
-        spellCheck
-        rows={1}
-        autoCapitalize="sentences"
-        onChange={(e) => ctx.setBuf(flattenLine(e.target.value))}
-        onBlur={(e) => ctx.commit(e.currentTarget.value)}
-        onKeyDown={onKeyDown}
-      />
-    </>
-  );
+/** The scroller the notes live in — the inset content frame at md+, the document
+ *  below it. Used to hold the clicked line still while the surface swaps. */
+function scrollerOf(el: HTMLElement | null): HTMLElement | Window {
+  for (let p = el?.parentElement; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return window;
 }
-
-/* ------------------------------------------------------------------ *
- * Unit-aware renderers. Only the focused unit re-renders per keystroke,
- * because `buf` lives in its own context and nothing else consumes it.
- * ------------------------------------------------------------------ */
-
-/* react-markdown passes the mdast node plus the hast properties as loose
-   props. `node` is destructured out so it never reaches the DOM. */
-type MdComponentProps = { node?: unknown; children?: ReactNode } & Record<string, unknown>;
-
-/* Built once per source string. Extracted so the plugin tuple is typed in one
-   place rather than cast at the call site. */
-const REMARK_PLUGINS = (src: string): ComponentProps<typeof ReactMarkdown>["remarkPlugins"] => [
-  remarkGfm,
-  [remarkMath, { singleDollarTextMath: false }],
-  stampUnits(src),
-];
-
-function makeUnit(Tag: "p" | "li") {
-  return function Unit({ node, children, ...rest }: MdComponentProps) {
-    const focus = useContext(FocusCtx);
-    const raw = rest[UNIT_ATTR] as string | undefined;
-    const kind = rest[KIND_ATTR] as UnitKind | undefined;
-    const mine = !!raw && !!focus && kind !== "atom" && focus.sanStart === Number(raw.split(":")[0]);
-    if (!mine) return <Tag {...rest}>{children}</Tag>;
-    return (
-      <Tag {...rest} data-ps-editing={kind}>
-        <UnitEditor kind={kind!} />
-      </Tag>
-    );
-  };
-}
-
-function makeHeading(Tag: "h2" | "h3") {
-  return function Heading({ node, children, ...rest }: MdComponentProps) {
-    const focus = useContext(FocusCtx);
-    const raw = rest[UNIT_ATTR] as string | undefined;
-    const kind = rest[KIND_ATTR] as UnitKind | undefined;
-    const hue = Number(rest[HUE_ATTR] ?? 0);
-    const style = headingVars(HEADING_COLORS[hue % HEADING_COLORS.length]);
-    const mine = !!raw && !!focus && kind !== "atom" && focus.sanStart === Number(raw.split(":")[0]);
-    if (!mine) {
-      return (
-        <Tag {...rest} style={style}>
-          <span className="ps-h-chip box-decoration-clone rounded-md px-1.5 py-0.5">{children}</span>
-        </Tag>
-      );
-    }
-    return (
-      <Tag {...rest} style={style} data-ps-editing="heading">
-        <UnitEditor kind="heading" />
-      </Tag>
-    );
-  };
-}
-
-const UNIT_COMPONENTS = {
-  ...BASE_NOTE_COMPONENTS,
-  p: makeUnit("p"),
-  li: makeUnit("li"),
-  h2: makeHeading("h2"),
-  h3: makeHeading("h3"),
-};
-
-/* ------------------------------------------------------------------ *
- * PaperNotes
- * ------------------------------------------------------------------ */
 
 export interface PaperNotesProps {
   md: string;
   /** topic.db_id — the value TeachMode and the sticky notes resolve sections by. */
   guideKey?: number;
-  /** The prose class string. Identical in the reading and editing states. */
+  /** The prose class string. Identical in the reading state and in Read mode. */
   prose: string;
   canEdit: boolean;
   /** True while Teach mode is open: the notes are read-only so the guide's
@@ -286,203 +145,80 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
   { md, guideKey, prose, canEdit, locked, onCommit },
   handleRef,
 ) {
-  const { toast } = useToast();
   const rootRef = useRef<HTMLDivElement>(null);
-  const [focus, setFocus] = useState<Focus | null>(null);
-  const [buf, setBuf] = useState("");
-  const [caret, setCaret] = useState(0);
-  const [refocus, setRefocus] = useState(0);
-  const [armed, setArmed] = useState(false);
-  const [conflict, setConflict] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const sheetRef = useRef<OneSheetHandle>(null);
+  const [writing, setWriting] = useState<{ caret: number; at: number } | null>(null);
 
-  const mdRef = useRef(md);
-  mdRef.current = md;
-  const focusRef = useRef<Focus | null>(null);
-  focusRef.current = focus;
-
-  const coarse = useMemo(
-    () => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(pointer: coarse)").matches,
-    [],
-  );
-
+  const live = canEdit && !locked;
   const { sanitized, toSrc } = useMemo(() => sanitizeWithMap(md), [md]);
 
-  /* Offsets are into the SANITIZED string the renderer parses, so they are
-     mapped back before any splice. That is what keeps `<mark class="hi">` and
-     other render-stripped markup intact around an edited line. */
-  const editableEls = useCallback(
-    () =>
-      Array.from(rootRef.current?.querySelectorAll<HTMLElement>(`[${UNIT_ATTR}]`) ?? []).filter(
-        (el) => el.getAttribute(KIND_ATTR) !== "atom",
-      ),
-    [],
-  );
-
-  const openEl = useCallback(
-    (el: HTMLElement, renderedCaret?: number) => {
+  /* A click in the rendered prose → the exact source offset under the pointer.
+     Offsets are into the SANITIZED string the renderer parses, so they are
+     mapped back before they are ever used against the stored bytes. */
+  const sourceOffsetAt = useCallback(
+    (el: HTMLElement, node: Node | null, offset: number): number => {
       const raw = el.getAttribute(UNIT_ATTR);
-      const kind = el.getAttribute(KIND_ATTR) as UnitKind | null;
-      if (!raw || !kind || kind === "atom") return;
+      if (!raw) return 0;
       const [a, b] = raw.split(":").map(Number);
       const start = toSrc(a);
-      const end = toSrc(b, true);
-      const was = mdRef.current.slice(start, end);
-      const next = unwrapUnit(was);
-      setFocus({ sanStart: a, start, end, kind, was, top: el.hasAttribute(TOP_ATTR) });
-      setBuf(next);
-      setCaret(renderedCaret == null ? next.length : renderedToBuf(next, renderedCaret));
-      setRefocus((n) => n + 1);
+      if ((el.getAttribute(KIND_ATTR) as UnitKind | null) === "atom") return start;
+      const src = md.slice(start, toSrc(b, true));
+      return start + renderedToBuf(src, renderedOffsetAt(el, node, offset));
     },
-    [toSrc],
+    [md, toSrc],
   );
 
-  /** Persist a candidate document, but only if it provably changed nothing else. */
-  const persist = useCallback(
-    async (f: Focus, nextBuf: string): Promise<boolean> => {
-      const base = mdRef.current;
-      let start = f.start;
-      let end = f.end;
-      if (base.slice(start, end) !== f.was) {
-        // Another writer (pinVisual, the guide/ask stream, revise) landed while
-        // this line was open. Find the line again instead of clobbering the body.
-        const at = reanchor(base, f.was);
-        if (!at) {
-          setConflict(true);
-          return false;
-        }
-        [start, end] = at;
-      }
-      const next = spliceUnit(base, start, end, nextBuf);
-      if (!next.trim()) {
-        toast({
-          title: "Notes can't be emptied",
-          description: "An empty body would be rewritten by the AI on your next visit.",
-          variant: "destructive",
-        });
-        return false;
-      }
-      const g = guardSplice(base, next, f.was, nextBuf);
-      if (!g.ok) {
-        toast({ title: "That change wasn't saved", description: g.why, variant: "destructive" });
-        return false;
-      }
-      setBusy(true);
-      try {
-        await onCommit(next);
-        return true;
-      } catch (e) {
-        toast({
-          title: "Couldn't save that line",
-          description: e instanceof Error ? e.message : undefined,
-          variant: "destructive",
-        });
-        return false;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [onCommit, toast],
-  );
-
-  const commit = useCallback(
-    (value: string) => {
-      const f = focusRef.current;
-      if (!f) return;
-      const nextBuf = flattenLine(value);
-      if (nextBuf === f.was || (nextBuf === unwrapUnit(f.was) && nextBuf.indexOf("\n") < 0 && f.was.indexOf("\n") < 0)) {
-        setFocus(null);
-        return;
-      }
-      setFocus(null);
-      void persist(f, nextBuf).then((ok) => {
-        if (ok) return;
-        // Keep the student's words: reopen the line with what they typed.
-        setFocus(f);
-        setBuf(nextBuf);
-        setCaret(nextBuf.length);
-        setRefocus((n) => n + 1);
-      });
-    },
-    [persist],
-  );
-
-  const cancel = useCallback(() => {
-    setFocus(null);
-    setArmed(false);
+  /** Swap prose → sheet without the page jumping under the student's finger. */
+  const open = useCallback((caret: number) => {
+    const root = rootRef.current;
+    const at = root ? root.getBoundingClientRect().top : 0;
+    setWriting({ caret, at });
   }, []);
 
-  const move = useCallback(
-    (delta: number) => {
-      const f = focusRef.current;
-      const els = editableEls();
-      if (!els.length) return;
-      const i = f ? els.findIndex((el) => Number((el.getAttribute(UNIT_ATTR) || "").split(":")[0]) === f.sanStart) : -1;
-      const target = els[Math.max(0, Math.min(els.length - 1, (i < 0 ? 0 : i) + delta))];
-      if (target) window.setTimeout(() => openEl(target, delta < 0 ? Number.MAX_SAFE_INTEGER : 0), 0);
-    },
-    [editableEls, openEl],
-  );
+  useLayoutEffect(() => {
+    if (!writing || !rootRef.current) return;
+    const delta = rootRef.current.getBoundingClientRect().top - writing.at;
+    if (!delta) return;
+    const sc = scrollerOf(rootRef.current);
+    if (sc === window) window.scrollBy(0, delta);
+    else (sc as HTMLElement).scrollTop += delta;
+  }, [writing]);
 
-  /** Enter mid-paragraph: split one top-level paragraph into two. */
-  const split = useCallback(
-    (at: number) => {
-      const f = focusRef.current;
-      if (!f) return;
-      if (!f.top || f.kind !== "paragraph") {
-        commit(buf);
-        return;
-      }
-      const head = buf.slice(0, at).replace(/\s+$/, "");
-      const tail = buf.slice(at).replace(/^\s+/, "");
-      if (!head || !tail) {
-        commit(buf);
-        return;
-      }
-      setFocus(null);
-      void persist(f, `${head}\n\n${tail}`);
-    },
-    [buf, commit, persist],
-  );
+  const close = useCallback(() => setWriting(null), []);
+
+  // Teach mode takes over, or editing is withdrawn: leave the writing surface so
+  // nothing can reflow under the guide's already-measured pointer rects.
+  useEffect(() => {
+    if (!live) setWriting(null);
+  }, [live]);
+
+  // Another writer landed a new copy under an open surface.
+  useEffect(() => {
+    if (writing) sheetRef.current?.external(md);
+  }, [md, writing]);
 
   useImperativeHandle(
     handleRef,
     () => ({
-      startEditing: () => {
-        setArmed(true);
-        const first = editableEls()[0];
-        if (first) openEl(first, 0);
-      },
-      stopEditing: cancel,
-      isEditing: () => !!focusRef.current || armed,
+      startEditing: () => open(0),
+      stopEditing: close,
+      isEditing: () => !!writing,
     }),
-    [armed, cancel, editableEls, openEl],
+    [close, open, writing],
   );
 
-  // Teach mode takes over: close the editor so nothing can reflow under the
-  // guide's already-measured pointer rects.
-  useEffect(() => {
-    if (locked && focusRef.current) {
-      setFocus(null);
-      setArmed(false);
-    }
-  }, [locked]);
-
   const onClick = (e: React.MouseEvent) => {
-    if (locked || !canEdit) return;
+    if (!live || writing) return;
     const t = e.target as HTMLElement | null;
-    if (!t || t.closest("[data-ps-input],[data-ps-ink],a,button,input,textarea")) return;
+    if (!t || t.closest("a,button,input,textarea,[data-ps-chrome]")) return;
     const sel = window.getSelection();
     // A drag-select belongs to the sticky-note flow, not to the editor.
     if (sel && !sel.isCollapsed) return;
     const el = t.closest<HTMLElement>(`[${UNIT_ATTR}]`);
-    if (!el || el.getAttribute(KIND_ATTR) === "atom" || !rootRef.current?.contains(el)) return;
-    if (coarse && !armed) return; // on touch, tapping reads; the Edit button arms editing
-    const rendered =
-      sel && sel.anchorNode && el.contains(sel.anchorNode)
-        ? renderedOffsetAt(el, sel.anchorNode, sel.anchorOffset)
-        : undefined;
-    openEl(el, rendered);
+    if (!el || !rootRef.current?.contains(el)) return;
+    // No arming, no "Edit notes" gate, no coarse-pointer bail: a tap on a phone
+    // places the caret and raises the keyboard, which is what a document does.
+    open(sourceOffsetAt(el, sel?.anchorNode ?? null, sel?.anchorOffset ?? 0));
   };
 
   const tree = useMemo(
@@ -490,7 +226,7 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS(sanitized)}
         rehypePlugins={[rehypeRaw, rehypeKatex]}
-        components={UNIT_COMPONENTS as ComponentProps<typeof ReactMarkdown>["components"]}
+        components={READ_COMPONENTS as ComponentProps<typeof ReactMarkdown>["components"]}
       >
         {sanitized}
       </ReactMarkdown>
@@ -498,37 +234,30 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     [sanitized],
   );
 
-  const bufValue = useMemo<BufValue>(
-    () => ({ buf, caret, refocus, setBuf, commit, cancel, move, split }),
-    [buf, caret, refocus, commit, cancel, move, split],
-  );
-
+  /* One stable outer element across BOTH states: the scroll anchor measures it
+     while the surface underneath is being replaced, and it carries nothing of
+     its own — no text node, no id — so every TreeWalker in the app is unaffected. */
   return (
-    <>
-      {conflict && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-ps-chrome="">
-          <span>These notes changed somewhere else while you were writing.</span>
-          <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => setConflict(false)}>
-            Show me the new version
-          </button>
+    <div ref={rootRef}>
+      {writing ? (
+        <OneSheet
+          ref={sheetRef}
+          initial={md}
+          caret={writing.caret}
+          guideKey={guideKey}
+          onCommit={onCommit}
+          onClose={close}
+        />
+      ) : (
+        <div
+          className={cn(prose, live && "cursor-text")}
+          data-guide-notes={guideKey}
+          {...(live ? { "data-ps-live": "" } : {})}
+          onClick={onClick}
+        >
+          {tree}
         </div>
       )}
-      <div
-        ref={rootRef}
-        className={cn(prose, canEdit && !locked && "cursor-text")}
-        data-guide-notes={guideKey}
-        {...(canEdit && !locked ? { "data-ps-live": "" } : {})}
-        onClick={onClick}
-      >
-        <FocusCtx.Provider value={focus}>
-          <BufCtx.Provider value={bufValue}>{tree}</BufCtx.Provider>
-        </FocusCtx.Provider>
-      </div>
-      {busy && (
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground" data-ps-chrome="">
-          <Loader2 className="size-3 animate-spin" /> Saving…
-        </p>
-      )}
-    </>
+    </div>
   );
 });

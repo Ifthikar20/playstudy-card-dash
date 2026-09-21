@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { strippedText } from "@/lib/notes/units";
+import { sheetPlain } from "@/lib/notes/sheet";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ArrowUpRight, Check, Palette, Pencil, Plus, StickyNote as StickyNoteIcon, Trash2, X } from "lucide-react";
@@ -32,11 +32,14 @@ export function clipForSticky(text: string): string {
 /**
  * The phrases the AI marked as the point of a section — `<mark>…</mark>` in the
  * notes' Markdown — which is exactly what a student would want on a sticky note.
+ * Matches the OPENING TAG WITH ITS ATTRIBUTES: `sanitizeWithMap` exists
+ * precisely so a stored `<mark class="hi">` survives an edit, and a bare-tag-only
+ * pattern here would silently find nothing in notes that carry one.
  */
 export function keyIdeasOf(markdown: string | null | undefined): string[] {
   if (!markdown) return [];
   const out: string[] = [];
-  for (const m of markdown.matchAll(/<mark>([\s\S]*?)<\/mark>/gi)) {
+  for (const m of markdown.matchAll(/<mark\b[^>]*>([\s\S]*?)<\/mark>/gi)) {
     const text = clipForSticky(
       m[1]
         .replace(/<[^>]+>/g, "")
@@ -279,16 +282,19 @@ export function StickySelection({
 
   useEffect(() => {
     const read = () => {
-      // A line of notes open for editing is a <textarea>, and getSelection()
-      // does not reach inside one — so read the offsets off it directly and
-      // measure against the ink layer, whose layout is identical by design.
+      // The writing surface is a <textarea>, and getSelection() does not reach
+      // inside one — so read the offsets off it directly and measure against the
+      // ink layer, whose layout is identical by design. `sheetPlain` replaces
+      // the old `strippedText`, which walked only the FIRST parsed block: a
+      // phrase spanning two paragraphs used to come back silently truncated,
+      // and inline `$$…$$` disappeared from it entirely.
       const active = document.activeElement as HTMLTextAreaElement | null;
       if (active?.tagName === "TEXTAREA" && active.hasAttribute("data-ps-input")) {
         const root = active.closest("[data-guide-notes]") as HTMLElement | null;
         const s0 = active.selectionStart ?? 0;
         const e0 = active.selectionEnd ?? 0;
         if (!root || e0 - s0 < 3) return setAt(null);
-        const kept = clipForSticky(strippedText(active.value.slice(s0, e0)).trim());
+        const kept = clipForSticky(sheetPlain(active.value.slice(s0, e0)).trim());
         if (kept.length < 3) return setAt(null);
         const rect = inkRectOf(active, s0, e0) ?? active.getBoundingClientRect();
         return setAt({

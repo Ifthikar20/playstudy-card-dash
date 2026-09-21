@@ -35,6 +35,7 @@ import { parentalKeys } from "@/services/parental";
 import { useAppStore } from "@/store/appStore";
 import { startPresenceTracking } from "@/store/presenceStore";
 import { cn } from "@/lib/utils";
+import { applySheetAttr, useSheet } from "@/lib/studySurface";
 
 /*
   App shell — sidebar + framed content card. The content floats as a rounded,
@@ -46,7 +47,29 @@ import { cn } from "@/lib/utils";
   the sidebar (header row / footer shelf). The only control the strip still
   renders is the sidebar trigger, and only in the modes where it is the user's
   real route back to navigation — see ShellTrigger.
+
+  EXCEPT ON THE STUDY SURFACE (`BARE_ROUTE`), where the strip is not rendered at
+  all. That page is a document, and a white band above a cream page above a
+  third block behind the notes was the whole complaint: the strip could never be
+  covered by the page's own backdrop, because it is a SIBLING of the scrollport
+  rather than inside it. Removing it hands those 42/49px to the scrollport and
+  lets one material reach the top of the card.
+
+  Scoped to that one route on purpose. Everywhere else the breadcrumb is the
+  only visible way back — /dashboard/folder/:id, /dashboard/family/:childId and
+  the profile page have no in-page back link at all — so removing it app-wide
+  would strand those pages. On the study surface the two things the strip
+  carried both have homes in the page's own header row: `ShellTrigger` is
+  exported from here and rendered there (it is the ONLY touch affordance for
+  navigation, and therefore for search, on a phone and on a collapsed rail), and
+  the breadcrumb's job is done by a real back link beside the `<h1>`, which
+  already prints the session title.
 */
+
+/** The routes that render without the top strip. Both spellings of the study
+ *  page: with a session id, and the session-less entry that keeps old links
+ *  working (App.tsx). Anything added here MUST render <ShellTrigger /> itself. */
+const BARE_ROUTE = /^\/dashboard\/(?:[^/]+\/)?full-study\/?$/;
 
 const SIDEBAR_WIDTH = "13.75rem"; // 220px expanded (narrower than stock shadcn)
 const SIDEBAR_WIDTH_ICON = "3rem"; // 48px icon rail
@@ -112,7 +135,7 @@ function useHoverPointer() {
   It also fixes a live a11y bug: `state` only tracks the desktop rail, so on a
   phone aria-expanded used to report `true` while the Sheet was shut.
 */
-function ShellTrigger() {
+export function ShellTrigger() {
   const { state, toggleSidebar, isMobile, openMobile } = useSidebar();
   const hoverPointer = useHoverPointer();
   const collapsed = state === "collapsed";
@@ -265,6 +288,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const crumbs = useCrumbs();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const userId = useAppStore((s) => s.userProfile?.id);
+  const bare = BARE_ROUTE.test(useLocation().pathname);
+  const sheet = useSheet();
+
+  // The chosen sheet goes on <html>, not on the content card, because below md
+  // the DOCUMENT scrolls: a background that stops at the content box leaves
+  // overscroll — and the 8px gutter the inset card floats in — showing the app
+  // palette underneath. Same problem, same fix, as `html:has(.lp)` in index.css.
+  useEffect(() => {
+    applySheetAttr(bare ? sheet : null);
+    return () => applySheetAttr(null);
+  }, [bare, sheet]);
 
   // Presence tracking lives for as long as the signed-in shell is mounted.
   useEffect(() => {
@@ -298,7 +332,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           navigation (and therefore into search) — so there it sticks. z-30 sits
           under every floating layer already in the app: toasts z-100, ReadMode
           z-120, GuideDock z-130, the sticky-selection bubble z-140. */}
-      <SidebarInset className="md:h-[calc(100svh-1rem)] md:overflow-hidden md:rounded-xl md:border md:border-border md:shadow-sm">
+      <SidebarInset
+        data-ps-sheet={bare ? sheet : undefined}
+        className={cn(
+          "md:h-[calc(100svh-1rem)] md:overflow-hidden md:rounded-xl",
+          // One material: with the gutter painted the same colour, a hairline
+          // and a shadow would be the only thing left drawing a seam.
+          bare ? "ps-sheet-surface" : "md:border md:border-border md:shadow-sm",
+        )}
+      >
+        {!bare && (
         <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-background/90 px-4 backdrop-blur-sm md:static md:z-auto md:h-14 md:bg-transparent md:px-6 md:backdrop-blur-none">
           <ShellTrigger />
           <Breadcrumb className="min-w-0">
@@ -333,6 +376,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </BreadcrumbList>
           </Breadcrumb>
         </header>
+        )}
 
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">{children}</div>
       </SidebarInset>

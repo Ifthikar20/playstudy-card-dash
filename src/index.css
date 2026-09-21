@@ -1164,24 +1164,36 @@ html:has(.lp) #root {
 }
 
 /* ---------------------------------------------------------------------------
-   In-place notes editing (src/components/notes/PaperNotes.tsx).
+   The writing surface (src/components/notes/OneSheet.tsx).
 
-   The focused line keeps its own element, its own prose margins and its own
-   data-guide-block id. Its children are swapped for an in-flow "ink" span that
-   paints the Markdown source, plus a transparent <textarea> stretched over it.
-   The ink span drives the height, so the textarea never auto-grows and the page
-   never reflows on focus — which is what keeps the guide's already-measured
-   pointer rects valid.
+   The whole section is ONE transparent <textarea> over ONE painted copy of its
+   own value. Both layers are one box, one font, one line-height and one
+   measure, so they agree character for character by construction — there is no
+   drift to correct because nothing varies. The ink drives the height, so the
+   textarea never scrolls internally and the page never reflows as you type.
 
-   HARD RULE: nothing in here may change text metrics. No font-size, no
-   font-weight, no font-family, no padding on inline runs — or the caret stops
-   sitting on its glyph. Bold is a hairline stroke for exactly that reason.
+   HARD RULE, and at document scale it is free rather than a constraint: nothing
+   in here may change text metrics. No font-size, no font-weight, no
+   font-family, no padding, no letter-spacing on a run — or the caret stops
+   sitting on its glyph. Bold is a hairline stroke for exactly that reason, and
+   everything else is colour, background, opacity or text-decoration, all of
+   which are metric-free.
 --------------------------------------------------------------------------- */
-[data-ps-editing] { position: relative; }
-[data-ps-ink] { white-space: pre-wrap; overflow-wrap: anywhere; }
-/* Generated content, so an empty line keeps its line box WITHOUT adding a text
-   node that findQuoteRange's TreeWalker or getSelection() could pick up. */
-[data-ps-ink]::after { content: "\200B"; }
+.ps-sheet {
+  font-size: 16px;
+  line-height: 1.75;
+  color: hsl(var(--foreground) / 0.92);
+}
+[data-ps-ink] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+/* Generated content, so the last line keeps its line box — and one blank line
+   of slack below it — WITHOUT adding a text node that findQuoteRange's
+   TreeWalker or getSelection() could pick up. The slack is also what makes
+   clicking below the last paragraph put the caret at the end of the notes. */
+[data-ps-ink]::after { content: "\200B\A\200B"; }
 [data-ps-input] {
   position: absolute; inset: 0; width: 100%; height: 100%;
   margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden;
@@ -1190,21 +1202,48 @@ html:has(.lp) #root {
   font: inherit; letter-spacing: inherit; line-height: inherit;
   text-align: inherit; text-indent: inherit;
   white-space: pre-wrap; overflow-wrap: anywhere;
+  tab-size: 2;
 }
 [data-ps-input]::selection { background: hsl(var(--chart-1) / 0.24); color: transparent; }
-/* The heading chip's own 5.25px inset, mirrored on the textarea so the caret
-   lines up with the first glyph inside the chip. */
-[data-ps-editing="heading"] [data-ps-input] { padding: 0 5.25px; }
 
-.ps-syntax { opacity: 0.38; }
+.ps-syntax { opacity: 0.26; }
 .ps-strong { -webkit-text-stroke: 0.3px currentColor; }
+.ps-em     { color: hsl(var(--foreground) / 0.72); }
+.ps-del    { text-decoration: line-through; opacity: 0.6; }
 .ps-mark   { background: rgb(253 230 138 / 0.8); color: #451a03; border-radius: 3px; }
 .ps-code   { background: hsl(var(--muted)); border-radius: 3.5px; }
-.ps-link   { color: hsl(var(--chart-1)); }
+.ps-link   { color: hsl(var(--chart-1)); text-decoration: underline; text-underline-offset: 2px; }
 .ps-h-chip { background-color: var(--ps-h-bg); color: var(--ps-h); }
+/* The highlight's own tag bytes. Frozen as a pair, so a selection-delete can
+   never leave one half behind — the dominant way marksWellFormed used to fail. */
+.ps-tag    { opacity: 0.3; background: rgb(253 230 138 / 0.35); border-radius: 3px; }
+/* A heading while you are writing it: its real colour, its real chip tint and a
+   heavier stroke. NOT a larger font — a textarea has exactly one. */
+.ps-head {
+  color: var(--ps-h);
+  background: var(--ps-h-bg);
+  -webkit-text-stroke: 0.4px currentColor;
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* Blockquote body: the bar and padding are block boxes a textarea cannot make,
+   so the quote is carried by a tint instead. */
+.ps-quote  { background: hsl(var(--chart-1) / 0.07); }
+/* A locked block — a table, a code fence, a pinned diagram, a formula. Its
+   SOURCE is shown, dimmed and banded, because it is exactly the bytes that are
+   being protected; the caret steps over it and no input may touch it. */
+.ps-atom {
+  background: hsl(var(--foreground) / 0.05);
+  color: hsl(var(--foreground) / 0.5);
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
 
-/* Hover affordance: background + spread shadow only, so it costs no layout. */
-[data-ps-live] [data-ps-kind]:not([data-ps-kind="atom"]):not([data-ps-editing]):hover {
+/* Reading state: a hover affordance that costs no layout, so clicking to write
+   is discoverable without a toolbar or an "Edit notes" button. */
+[data-ps-live] [data-ps-kind]:not([data-ps-kind="atom"]):hover {
   background: hsl(var(--foreground) / 0.04);
   border-radius: 6px;
   box-shadow: 0 0 0 5px hsl(var(--foreground) / 0.04);
@@ -1214,4 +1253,155 @@ html:has(.lp) #root {
 }
 @media (prefers-reduced-motion: reduce) {
   [data-ps-live] [data-ps-kind]:hover { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   The study sheet — ONE material for the whole study surface.
+
+   Before this there were three stacked surfaces on the Full Study page: a white
+   header band; a cream page carrying a dot texture and two gradients, one of
+   them a hard-coded non-token amber that never adapted to dark mode; and a
+   third `--paper` block behind the notes. They are now a single background the
+   student chooses.
+
+   HOW IT IS SCOPED, and why in two pieces:
+     `.ps-sheet-surface[data-ps-sheet="x"]` REDECLARES the shadcn tokens on the
+     inset content card. That is the pattern `.lp` above already uses to give
+     the marketing page its own palette, and it means everything inside moves
+     with it — prose, muted text, hairlines, and the quiz / flashcard / session
+     cards — instead of each one needing its own override.
+
+     `html[data-ps-sheet="x"]` sets ONE colour, used to paint html / body /
+     #root and the 8px gutter the inset card floats in. Below md the DOCUMENT
+     scrolls, so without this overscroll would flash the app background; that is
+     the same problem, and the same fix, as `html:has(.lp)` above. The sidebar
+     keeps its own `--sidebar-*` tokens and is deliberately NOT re-skinned —
+     navigation should not change colour because a student picked a writing
+     background.
+
+   `auto` is the default and simply follows the app theme, so nothing changes
+   for a student who never opens the picker.
+--------------------------------------------------------------------------- */
+html[data-ps-sheet],
+html[data-ps-sheet] body,
+html[data-ps-sheet] #root,
+html[data-ps-sheet] .group\/sidebar-wrapper {
+  background: var(--ps-sheet-bg);
+}
+html[data-ps-sheet="auto"] { --ps-sheet-bg: hsl(var(--paper)); }
+.ps-sheet-surface[data-ps-sheet="auto"] {
+  --background: var(--paper);
+  --card: var(--paper);
+  --popover: var(--paper);
+}
+html[data-ps-sheet="paper"] { --ps-sheet-bg: hsl(44 42% 96%); }
+.ps-sheet-surface[data-ps-sheet="paper"] {
+  --background: 44 42% 96%;
+  --foreground: 30 12% 13%;
+  --card: 44 40% 97%;
+  --card-foreground: 30 12% 13%;
+  --popover: 44 40% 97%;
+  --popover-foreground: 30 12% 13%;
+  --muted: 42 26% 91%;
+  --muted-foreground: 34 8% 40%;
+  --secondary: 42 26% 91%;
+  --secondary-foreground: 30 12% 13%;
+  --accent: 42 30% 92%;
+  --accent-foreground: 30 12% 13%;
+  --border: 40 18% 87%;
+  --input: 40 16% 82%;
+  color-scheme: light;
+}
+html[data-ps-sheet="sand"] { --ps-sheet-bg: hsl(32 30% 93%); }
+.ps-sheet-surface[data-ps-sheet="sand"] {
+  --background: 32 30% 93%;
+  --foreground: 28 16% 15%;
+  --card: 32 30% 95%;
+  --card-foreground: 28 16% 15%;
+  --popover: 32 30% 95%;
+  --popover-foreground: 28 16% 15%;
+  --muted: 30 22% 88%;
+  --muted-foreground: 28 10% 38%;
+  --secondary: 30 22% 88%;
+  --secondary-foreground: 28 16% 15%;
+  --accent: 30 24% 89%;
+  --accent-foreground: 28 16% 15%;
+  --border: 30 16% 84%;
+  --input: 30 14% 79%;
+  color-scheme: light;
+}
+html[data-ps-sheet="sage"] { --ps-sheet-bg: hsl(140 14% 94%); }
+.ps-sheet-surface[data-ps-sheet="sage"] {
+  --background: 140 14% 94%;
+  --foreground: 160 14% 13%;
+  --card: 140 14% 96%;
+  --card-foreground: 160 14% 13%;
+  --popover: 140 14% 96%;
+  --popover-foreground: 160 14% 13%;
+  --muted: 140 12% 89%;
+  --muted-foreground: 155 8% 37%;
+  --secondary: 140 12% 89%;
+  --secondary-foreground: 160 14% 13%;
+  --accent: 140 14% 90%;
+  --accent-foreground: 160 14% 13%;
+  --border: 140 10% 85%;
+  --input: 140 10% 80%;
+  color-scheme: light;
+}
+html[data-ps-sheet="slate"] { --ps-sheet-bg: hsl(215 20% 13%); }
+.ps-sheet-surface[data-ps-sheet="slate"] {
+  --background: 215 20% 13%;
+  --foreground: 210 16% 90%;
+  --card: 215 20% 16%;
+  --card-foreground: 210 16% 90%;
+  --popover: 215 20% 16%;
+  --popover-foreground: 210 16% 90%;
+  --muted: 215 16% 21%;
+  --muted-foreground: 213 10% 66%;
+  --secondary: 215 16% 21%;
+  --secondary-foreground: 210 16% 90%;
+  --accent: 215 18% 23%;
+  --accent-foreground: 210 16% 90%;
+  --border: 215 14% 25%;
+  --input: 215 14% 30%;
+  --chart-1: 255 88% 78%;
+  color-scheme: dark;
+}
+html[data-ps-sheet="ink"] { --ps-sheet-bg: hsl(240 6% 5%); }
+.ps-sheet-surface[data-ps-sheet="ink"] {
+  --background: 240 6% 5%;
+  --foreground: 44 11% 90%;
+  --card: 240 6% 8%;
+  --card-foreground: 44 11% 90%;
+  --popover: 240 6% 8%;
+  --popover-foreground: 44 11% 90%;
+  --muted: 240 5% 13%;
+  --muted-foreground: 40 6% 62%;
+  --secondary: 240 5% 13%;
+  --secondary-foreground: 44 11% 90%;
+  --accent: 240 5% 15%;
+  --accent-foreground: 44 11% 90%;
+  --border: 240 5% 17%;
+  --input: 240 5% 22%;
+  --chart-1: 255 88% 78%;
+  color-scheme: dark;
+}
+
+/* The study surface itself: the chosen sheet, edge to edge, with the faint dot
+   grid keyed off the sheet's OWN ink rather than a hard-coded amber, so one
+   material runs from the top of the content card to the bottom of the page. */
+.ps-sheet-surface {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  /* The inset variant carries its own `shadow` from the sidebar primitive. With
+     the gutter painted the same colour, that shadow is the last thing drawing a
+     seam around the card — the third surface all over again, in soft focus.
+     !important because the primitive's utility is `peer-data-[variant=inset]:shadow`,
+     a compound selector no single class can outrank, and this file must not
+     reach into ui/sidebar.tsx to switch it off for one route. */
+  box-shadow: none !important;
+}
+.ps-sheet-grain {
+  background-image: radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.05) 1px, transparent 0);
+  background-size: 22px 22px;
 }
