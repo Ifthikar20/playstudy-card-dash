@@ -214,9 +214,7 @@ export function AppSidebar({ onSearch }: { onSearch: () => void }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="AnotherNotes">
               <Link to="/dashboard" onClick={() => { setCurrentSession(null); closeOnNav(); }}>
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <img src="/an-logo.svg" alt="" className="size-6 object-contain" />
-                </div>
+                <img src="/an-logo.svg" alt="" className="size-8 shrink-0" />
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-semibold tracking-tight">AnotherNotes</span>
                   <span className="truncate text-xs text-muted-foreground tabular-nums">

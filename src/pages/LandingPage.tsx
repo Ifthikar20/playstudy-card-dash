@@ -101,7 +101,7 @@ const LandingPage = () => {
       <header className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
         <nav className="flex w-full max-w-4xl items-center gap-2 rounded-full bg-[var(--ink)] py-2 pl-2.5 pr-2 text-[var(--on-ink)] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
           <Link to="/" className="flex items-center gap-2.5 pr-2">
-            <img src="/an-logo.svg" alt="" className="size-7 rounded-full" />
+            <img src="/an-logo.svg" alt="" className="size-7" />
             <span className="text-[15px] font-semibold tracking-tight">AnotherNotes</span>
             <span className="rounded-full border border-[var(--hair-ink-2)] px-2 py-px text-[10px] font-semibold uppercase tracking-wider text-[var(--on-ink-mut)]">
               Beta
@@ -471,7 +471,7 @@ const LandingPage = () => {
       <footer className="border-t border-[var(--hair)] px-6 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
           <div className="flex items-center gap-3">
-            <img src="/an-logo.svg" alt="" className="size-6 rounded-full" />
+            <img src="/an-logo.svg" alt="" className="size-6" />
             <span className="text-[13px] text-[var(--muted-2)]">© 2026 AnotherNotes</span>
           </div>
           <div className="flex gap-6 text-[13px] text-[var(--muted-2)]">

@@ -155,7 +155,7 @@ export default function AuthPage() {
         </Link>
 
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
-          <img src="/an-logo.svg" alt="" className="mx-auto mb-6 size-10 rounded-full" />
+          <img src="/an-logo.svg" alt="" className="mx-auto mb-6 size-10" />
           <h1 className="lp-serif text-center text-[2.25rem] leading-[1.1] md:text-[2.5rem]">
             {mode === "signin" && (
               <>

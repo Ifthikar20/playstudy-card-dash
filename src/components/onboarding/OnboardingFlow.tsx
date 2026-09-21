@@ -175,7 +175,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
     <div className="lp flex min-h-screen flex-col">
       <header className="flex items-center justify-between px-6 py-5 sm:px-10">
         <div className="flex items-center gap-2.5">
-          <img src="/an-logo.svg" alt="" className="size-7 rounded-full" />
+          <img src="/an-logo.svg" alt="" className="size-7" />
           <span className="text-[15px] font-semibold tracking-tight">AnotherNotes</span>
         </div>
         <button type="button" onClick={logout} className={ghostLink}>

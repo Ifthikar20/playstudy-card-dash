@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="AnotherNotes">
+  <!--
+    The tab icon. Same mark as an-logo.svg, drawn for 16px: less padding around
+    the page and thicker rules, because at a 1x tab the 22px rules of the full
+    badge land on two thirds of a pixel and grey out.
+
+    Editors: no double hyphen in this comment. XML forbids it and a malformed
+    SVG renders nothing at all, silently.
+  -->
+  <rect width="512" height="512" rx="108" fill="#1E1E1E"/>
+  <path fill="#FFFFFF" d="M108 96a24 24 0 0 1 24-24h152l96 96v248a24 24 0 0 1-24 24H132a24 24 0 0 1-24-24V96Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.45" d="M284 72l96 96h-74a22 22 0 0 1-22-22V72Z"/>
+  <g fill="#1E1E1E">
+    <rect x="154" y="226" width="204" height="30" rx="15"/>
+    <rect x="154" y="290" width="204" height="30" rx="15"/>
+    <rect x="154" y="354" width="122" height="30" rx="15"/>
+  </g>
+</svg>
