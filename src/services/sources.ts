@@ -1,6 +1,6 @@
 /**
  * Connected note sources (Google Docs, OneNote, Notion, …).
- * Mirrors playstudy-backend/app/api/sources.py.
+ * Mirrors anothernotes-backend/app/api/sources.py.
  */
 import { authService } from "./authService";
 

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="AnotherNotes">
+  <!--
+    AnotherNotes mark.
+
+    The plainest possible notes glyph, on purpose: a page with lines on it. The
+    product is called "another notes app" with a straight face, so the icon says
+    the same thing and lets the app do the contradicting. A white page on a dark
+    square, because white alone is invisible on the cream landing page and on the
+    sidebar chip, which is dark in light mode and white in dark mode.
+
+    Editors: no double hyphen anywhere in this comment. XML forbids it, and a
+    malformed SVG renders nothing at all when used as an img, silently.
+  -->
+  <rect width="512" height="512" rx="116" fill="#1E1E1E"/>
+  <!-- The page, with its top-right corner turned down. -->
+  <path fill="#FFFFFF" d="M136 116a26 26 0 0 1 26-26h136l78 78v228a26 26 0 0 1-26 26H162a26 26 0 0 1-26-26V116Z"/>
+  <path fill="#FFFFFF" fill-opacity="0.45" d="M298 90l78 78h-60a18 18 0 0 1-18-18V90Z"/>
+  <!-- Ruled lines, knocked out of the page. -->
+  <g fill="#1E1E1E">
+    <rect x="176" y="212" width="160" height="22" rx="11"/>
+    <rect x="176" y="264" width="160" height="22" rx="11"/>
+    <rect x="176" y="316" width="98" height="22" rx="11"/>
+  </g>
+</svg>

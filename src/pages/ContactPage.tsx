@@ -15,7 +15,7 @@ const ContactPage = () => {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <Brain className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold text-white">PlayStudy.ai</span>
+          <span className="text-xl font-bold text-white">AnotherNotes</span>
         </Link>
       </nav>
 
@@ -57,9 +57,9 @@ const ContactPage = () => {
           
           <div className="mt-12 pt-8 border-t border-white/10">
             <p className="text-white/40 text-sm mb-2">Or email us directly</p>
-            <a href="mailto:hello@playstudy.ai" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
+            <a href="mailto:hello@anothernotes.com" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
               <Mail className="w-4 h-4" />
-              hello@playstudy.ai
+              hello@anothernotes.com
             </a>
           </div>
         </div>

@@ -9,22 +9,25 @@ import {
   FileText,
   Flame,
   Folder,
-  Gamepad2,
   GraduationCap,
+  KeyRound,
   Layers,
   LayoutDashboard,
+  Link2,
   ListChecks,
   Mic,
   RotateCcw,
-  Sparkles,
   Timer,
   Upload,
+  UserPlus,
+  Users,
   Wand2,
   Youtube,
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AgentCursors from "@/components/landing/AgentCursors";
 
 /*
   Marketing landing — the "editorial" world from the reference: cream ground,
@@ -40,7 +43,7 @@ const creamPill =
   "inline-flex items-center gap-2 rounded-full bg-[var(--cream)] px-4 py-2 text-[14px] font-medium text-[var(--ink)] transition-opacity hover:opacity-85";
 const eyebrow = "text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]";
 
-/* The Features mega-menu — PlayStudy's real capabilities, grouped. */
+/* The Features mega-menu — AnotherNotes's real capabilities, grouped. */
 type Feat = { icon: LucideIcon; title: string; desc: string; tint: string; badge?: string };
 const FEATURE_GROUPS: { label: string; items: Feat[] }[] = [
   {
@@ -77,6 +80,15 @@ const FEATURE_GROUPS: { label: string; items: Feat[] }[] = [
       { icon: LayoutDashboard, title: "Progress", desc: "See exactly where you stand", tint: "#DBEAFE" },
     ],
   },
+  {
+    label: "Family",
+    items: [
+      { icon: Users, title: "Family page", desc: "Every learner you follow, in one list", tint: "#DBEAFE", badge: "New" },
+      { icon: UserPlus, title: "Add a child", desc: "A name and a PIN, no email needed", tint: "#DCFCE7" },
+      { icon: KeyRound, title: "PIN sign-in", desc: "Kids sign in at /kids, no password", tint: "#FEF3C7" },
+      { icon: Link2, title: "Connect by code", desc: "An older learner shares a code with you", tint: "#EDE9FE" },
+    ],
+  },
 ];
 
 const LandingPage = () => {
@@ -88,8 +100,8 @@ const LandingPage = () => {
       <header className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
         <nav className="flex w-full max-w-4xl items-center gap-2 rounded-full bg-[var(--ink)] py-2 pl-2.5 pr-2 text-[var(--on-ink)] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
           <Link to="/" className="flex items-center gap-2.5 pr-2">
-            <img src="/ps-logo.png" alt="" className="size-7 rounded-full" />
-            <span className="text-[15px] font-semibold tracking-tight">Playstudy</span>
+            <img src="/an-logo.svg" alt="" className="size-7" />
+            <span className="text-[15px] font-semibold tracking-tight">AnotherNotes</span>
             <span className="rounded-full border border-[var(--hair-ink-2)] px-2 py-px text-[10px] font-semibold uppercase tracking-wider text-[var(--on-ink-mut)]">
               Beta
             </span>
@@ -108,7 +120,7 @@ const LandingPage = () => {
             </button>
             {[
               ["#how", "How it works"],
-              ["#why", "Why PlayStudy"],
+              ["#why", "Why AnotherNotes"],
               ["#manifesto", "Manifesto"],
             ].map(([href, label]) => (
               <a
@@ -143,8 +155,8 @@ const LandingPage = () => {
               onClick={() => setFeaturesOpen(false)}
             />
             <div className="fade-in absolute inset-x-0 top-[calc(100%+0.5rem)] z-50 flex justify-center px-4">
-              <div className="w-full max-w-5xl rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6 shadow-[0_28px_70px_rgba(0,0,0,0.16)] md:p-8">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:grid-cols-4">
+              <div className="w-full max-w-5xl rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6 shadow-[0_28px_70px_rgba(0,0,0,0.16)] md:p-8 xl:max-w-6xl">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:grid-cols-3 xl:grid-cols-5">
                   {FEATURE_GROUPS.map((group) => (
                     <div key={group.label}>
                       <p className={eyebrow}>{group.label}</p>
@@ -186,58 +198,66 @@ const LandingPage = () => {
 
       {/* Hero */}
       <section className="mx-auto max-w-5xl px-6 pb-16 pt-36 text-center md:pt-44">
-        <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-[var(--hair)] bg-[var(--cream-alt)] px-3 py-1 text-[12px] font-medium text-[var(--muted)]">
-          <Sparkles className="size-3.5" />
-          AI study games for students and teachers
-        </p>
-        <h1 className="lp-serif mx-auto mt-6 max-w-4xl text-[3.25rem] md:text-[4.5rem] lg:text-[5.5rem]">
-          Study smarter. <em>Play harder.</em>
-        </h1>
-        <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
-          Drop in your notes, slides or a PDF. PlayStudy turns them into topics, questions and games you'll actually
-          want to finish.
-        </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <Link to="/auth" className={inkPill}>
-            Start free
-            <ArrowRight className="size-4" />
-          </Link>
-          <a
-            href="#how"
-            className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[15px] font-medium text-[var(--ink)] underline-offset-4 transition-opacity hover:opacity-70"
-          >
-            See how it works
-            <ArrowUpRight className="size-4" />
-          </a>
-        </div>
+        {/* The four study modes, drifting around the headline as collaborators.
+            The showcase card below stays OUTSIDE this wrapper so no cursor is
+            ever positioned inside its clipped interior. */}
+        <AgentCursors>
+          <h1 className="lp-serif mx-auto max-w-4xl text-[3.25rem] md:text-[4.5rem] lg:text-[5.5rem]">
+            Your notes, <em>in motion.</em>
+          </h1>
+          <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
+            Drop in your notes, slides or a PDF. They come back written up section by section — then read back to you,
+            a line at a time.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <Link to="/auth" className={inkPill}>
+              Start free
+              <ArrowRight className="size-4" />
+            </Link>
+            <a
+              href="#how"
+              className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[15px] font-medium text-[var(--ink)] underline-offset-4 transition-opacity hover:opacity-70"
+            >
+              See how it works
+              <ArrowUpRight className="size-4" />
+            </a>
+          </div>
+        </AgentCursors>
 
         {/* Hero showcase — the product in motion, framed as a cinematic card
-            with the copy and the numbers set over a dimmed video. */}
-        <div className="relative mx-auto mt-16 max-w-5xl overflow-hidden rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--ink)] text-left shadow-[0_28px_70px_rgba(0,0,0,0.12)]">
+            with the copy and the numbers set over a dimmed video.
+
+            Below md the copy and the numbers sit in NORMAL FLOW under a
+            shorter video instead of being absolutely positioned over it. On a
+            360px phone the old layout gave the video its 360px minimum height
+            while the top copy and the three stacked stats each needed ~200px,
+            so they overlapped into an unreadable pile. Overlaying only works
+            when the card is wider than it is tall. */}
+        <div className="relative mx-auto mt-16 md:mt-0 max-w-5xl overflow-hidden rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--ink)] text-left shadow-[0_28px_70px_rgba(0,0,0,0.12)]">
           <video
             src="/vid-1.mp4"
             autoPlay
             muted
             loop
             playsInline
-            className="h-[clamp(360px,54vh,580px)] w-full object-cover"
+            className="h-[clamp(200px,28vh,580px)] w-full object-cover md:h-[clamp(360px,54vh,580px)]"
           />
           {/* darken top + bottom so overlaid text stays legible, video shows through the middle */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/75 via-black/15 to-black/80" />
+          <div aria-hidden className="pointer-events-none absolute inset-0 hidden bg-gradient-to-b from-black/75 via-black/15 to-black/80 md:block" />
 
           {/* Copy — top */}
-          <div className="absolute inset-x-0 top-0 flex flex-col items-start justify-between gap-4 p-6 md:flex-row md:p-8">
+          <div className="flex flex-col items-start justify-between gap-4 p-6 md:absolute md:inset-x-0 md:top-0 md:flex-row md:p-8">
             <p className="lp-serif max-w-md text-[1.9rem] leading-[1.05] text-white md:text-[2.5rem]">
-              Your notes, in motion.
+              Notes you don't have to reread.
             </p>
             <p className="max-w-sm text-[14px] leading-relaxed text-white/80 md:text-[15px]">
-              You forget most of what you read within a day. PlayStudy turns your notes into active recall and games — the
-              two things the research below says actually make it stick.
+              You forget most of what you read within a day. So your notes get taught back to you, you get asked about
+              them, and someone who cares can see how it went.
             </p>
           </div>
 
           {/* Numbers — bottom. Real, cited study-science, not vanity metrics. */}
-          <dl className="absolute inset-x-0 bottom-0 grid grid-cols-1 gap-4 p-6 sm:grid-cols-3 md:p-8">
+          <dl className="grid grid-cols-1 gap-4 p-6 pt-0 sm:grid-cols-3 md:absolute md:inset-x-0 md:bottom-0 md:p-8 md:pt-8">
             {[
               {
                 v: "67%",
@@ -252,10 +272,15 @@ const LandingPage = () => {
                 href: "https://journals.sagepub.com/doi/10.1111/j.1467-9280.2006.01693.x",
               },
               {
-                v: "g = 0.49",
-                l: "boost to learning from gamification (meta-analysis, 19 studies)",
-                src: "Sailer & Homner, 2020",
-                href: "https://eric.ed.gov/?id=EJ1245270",
+                // Replaced the gamification meta-analysis: the product no longer
+                // leads on games, and three of the four "modes" it supported were
+                // never built. Hedged to "about", because the abstract reports a
+                // range (roughly 0.46 to 0.55 depending on the outcome measure)
+                // rather than one figure.
+                v: "≈ 0.5 SD",
+                l: "higher achievement for secondary students whose parents are involved (52 studies)",
+                src: "Jeynes, 2007",
+                href: "https://eric.ed.gov/?id=EJ748034",
               },
             ].map((s) => (
               <div key={s.src} className="min-w-0">
@@ -279,59 +304,67 @@ const LandingPage = () => {
       <section id="how" className="scroll-mt-24 border-t border-[var(--hair)] px-6 py-20 md:py-28">
         <div className="mx-auto max-w-6xl">
           <p className={eyebrow}>How it works</p>
+          {/* The heading undersells and the three cards refuse to. The name is
+              a straight-faced joke about being another notes app, so the copy
+              tells it once, here, and then never winks again. */}
           <h2 className="lp-serif mt-3 max-w-2xl text-[2.5rem] md:text-[3rem]">
-            Three steps to <em>smarter</em> studying
+            It's a notes app. <em>Mostly.</em>
           </h2>
           <div className="mt-12 grid gap-4 md:grid-cols-3">
             <StepCard
               n="01"
-              icon={<Upload className="size-5" />}
-              title="Upload anything"
-              body="PDFs, slides, notes or pasted text. Key concepts are extracted into a topic tree in seconds."
+              icon={<FileText className="size-5" />}
+              title="Notes get written"
+              body="Drop in a PDF, slides or pasted text. Notes come back for every section, and you click any line to write in them yourself."
               art="upload"
             />
             <StepCard
               n="02"
-              icon={<Gamepad2 className="size-5" />}
-              title="Pick your mode"
-              body="Full study, speed runs, an AI mentor that talks you through it, or a game. Learning becomes play."
-              art="game"
+              icon={<Mic className="size-5" />}
+              title="Then it teaches"
+              body="It reads a section aloud, pointing at the line it's on. Ask a question halfway through and the answer is written into your notes."
+              art="teach"
             />
             <StepCard
               n="03"
-              icon={<Zap className="size-5" />}
-              title="Watch it stick"
-              body="Every answer earns XP, every topic mastered is a level up, and your dashboard shows exactly where you stand."
+              icon={<Users className="size-5" />}
+              title="And parents know"
+              body="A parent who set up the account sees what's studied, the time, the accuracy and every question answered. The child cannot unlink them."
               art="progress"
             />
           </div>
         </div>
       </section>
 
-      {/* Why PlayStudy — ink band */}
+      {/* Why AnotherNotes — ink band */}
       <section id="why" className="on-ink scroll-mt-24 bg-[var(--ink)] px-6 py-20 text-[var(--on-ink)] md:py-28">
         <div className="mx-auto max-w-6xl">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--on-ink-dim)]">Why PlayStudy</p>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--on-ink-dim)]">Why AnotherNotes</p>
           <h2 className="lp-serif mt-3 max-w-2xl text-[2.5rem] md:text-[3rem]">
             Built for the way you <em>actually</em> study
           </h2>
 
           <div className="mt-12 grid gap-4 md:grid-cols-3">
-            <InkTile className="overflow-hidden p-0 md:col-start-1 md:row-start-1">
-              <img src="/image-card-1.png" alt="New game added every week" className="h-full w-full object-cover" />
+            <InkTile className="md:col-start-1 md:row-start-1">
+              <Mic className="size-5 text-[var(--on-ink-mut)]" />
+              <h3 className="lp-serif mt-4 text-[1.5rem]">It reads them to you</h3>
+              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
+                A voice works through a section, pointing at the line it's on. Interrupt with a question and the answer
+                is written into the notes.
+              </p>
             </InkTile>
 
             <InkTile className="md:col-start-2 md:row-span-2">
-              <h3 className="lp-serif text-[1.75rem]">Four ways to learn the same thing</h3>
+              <h3 className="lp-serif text-[1.75rem]">One page, four things to do on it</h3>
               <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
-                Switch modes without losing your place. Progress follows the session, not the screen.
+                All of it happens in the same scrolling note. Nothing to switch to, nothing to lose your place in.
               </p>
               <ul className="mt-6 divide-y divide-[var(--hair-ink)] border-y border-[var(--hair-ink)]">
                 {[
-                  [GraduationCap, "Full study", "Topic by topic, with explanations after every answer."],
-                  [Zap, "Speed run", "Flashcards or rapid multiple choice against the clock."],
-                  [Mic, "Mentor mode", "An AI voice that teaches, then quizzes you on what it said."],
-                  [Gamepad2, "Game zone", "Memory match, platformers and a new game every week."],
+                  [GraduationCap, "Write on it", "Click any line and type. It saves itself as you go."],
+                  [Mic, "Be taught it", "A voice reads a section aloud and points as it goes."],
+                  [Layers, "Flip it", "Flashcards drawn from the section you are reading."],
+                  [ListChecks, "Be asked about it", "A short quiz per section, with an explanation after every answer."],
                 ].map(([Icon, t, d]) => {
                   const I = Icon as typeof GraduationCap;
                   return (
@@ -363,8 +396,24 @@ const LandingPage = () => {
               <Timer className="size-5 text-[var(--on-ink-mut)]" />
               <h3 className="lp-serif mt-4 text-[1.5rem]">Time that's honest</h3>
               <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
-                PlayStudy only counts the minutes you're really reading and writing, so your study time means something.
+                AnotherNotes only counts the minutes you're really reading and writing, so your study time means something.
               </p>
+            </InkTile>
+
+            {/* Closing band — spans all three columns on a third row, so the
+                parent story reads as its own note rather than a fourth card. */}
+            <InkTile className="min-h-[200px] justify-center md:col-span-3 md:col-start-1 md:row-start-3">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:gap-12">
+                <div className="md:w-[18rem] md:shrink-0">
+                  <Users className="size-5 text-[var(--on-ink-mut)]" />
+                  <h3 className="lp-serif mt-4 text-[1.5rem]">Parents can follow along</h3>
+                </div>
+                <p className="max-w-2xl text-[14px] text-[var(--on-ink-mut)]">
+                  Make a profile for a child and they sign in with a name and a six-digit PIN — no email, no inbox to
+                  manage. A learner who already has an account hands you a code instead, and then you see the progress —
+                  streak, time studied, accuracy — not their written work.
+                </p>
+              </div>
             </InkTile>
           </div>
         </div>
@@ -375,38 +424,43 @@ const LandingPage = () => {
         <div className="mx-auto max-w-2xl">
           <p className={eyebrow}>Our manifesto</p>
           <h2 className="lp-serif mt-3 text-[2.5rem] md:text-[3rem]">
-            Learning shouldn't feel like a <em>chore.</em>
+            Notes are where the <em>learning</em> is.
           </h2>
           <div className="mt-8 space-y-5 text-[17px] leading-relaxed text-[var(--muted)]">
             <p>
-              We believe the best learning happens when you're having fun. When curiosity takes over and studying feels
-              like playing your favourite game.
+              Everyone keeps notes. Almost nobody goes back to them. They get written once, read twice, and then sit in
+              a folder being quietly forgotten while the exam gets closer.
             </p>
             <p>
-              Traditional studying is broken. Highlighting textbooks. Rereading notes. Hoping it sticks. We knew there
-              had to be a better way.
+              The problem was never the notes. It was that a page of writing cannot do anything. It cannot explain the
+              bit you skimmed, or notice you have not opened it in a fortnight, or tell anyone you are struggling.
             </p>
             <p>
-              So we built PlayStudy: a place where your notes become quizzes, your slides become flashcards and your
-              textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning
-              becomes something you actually want to do.
+              So we built notes that can. Yours are written up for you, read back to you out loud, and turned into
+              questions that find the gaps. If a parent set the account up, they see the progress — not the writing.
             </p>
-            <p className="text-[var(--ink)]">This is studying, reimagined. This is PlayStudy.</p>
+            <p className="text-[var(--ink)]">
+              It is another notes app. That is the joke, and then it is not.
+            </p>
           </div>
           <p className="lp-serif mt-10 border-t border-[var(--hair)] pt-6 text-[1.25rem] italic text-[var(--muted)]">
-            — The PlayStudy team
+            — The AnotherNotes team
           </p>
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Four things that are true by construction, where there were four
+          unsourced performance claims — a retention rate nothing measures, a
+          speed comparison against nothing, a topic count and a store rating for
+          a product whose own nav still says BETA. The cited band above says of
+          itself "not vanity metrics"; this is what that has to mean. */}
       <section className="border-y border-[var(--hair)] px-6 py-14">
         <dl className="mx-auto grid max-w-5xl grid-cols-2 gap-y-10 md:grid-cols-4 md:divide-x md:divide-[var(--hair)]">
           {[
-            ["95%", "retention rate"],
-            ["3×", "faster learning"],
-            ["50K+", "topics covered"],
-            ["4.9", "user rating"],
+            ["0", "emails needed for a child account"],
+            ["0", "ways a child can unlink a parent"],
+            ["6", "digits in a child's PIN"],
+            ["1", "page per session, start to finish"],
           ].map(([v, l]) => (
             <div key={l} className="text-center md:px-6">
               <dt className="lp-serif text-[3rem] md:text-[3.5rem]">{v}</dt>
@@ -419,10 +473,10 @@ const LandingPage = () => {
       {/* CTA */}
       <section className="px-6 py-24 text-center md:py-32">
         <h2 className="lp-serif mx-auto max-w-2xl text-[2.5rem] md:text-[3.5rem]">
-          Ready to change how you <em>study?</em>
+          Bring your <em>notes.</em>
         </h2>
         <p className="mx-auto mt-4 max-w-md text-[16px] text-[var(--muted)]">
-          Join thousands of students who've made learning fun again. Free to start, no card needed.
+          Free to start, no card needed. Add a child from the same account, or send a code to a learner who already has one.
         </p>
         <Link to="/auth" className={cn(inkPill, "mt-8")}>
           Get started free
@@ -434,8 +488,8 @@ const LandingPage = () => {
       <footer className="border-t border-[var(--hair)] px-6 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
           <div className="flex items-center gap-3">
-            <img src="/ps-logo.png" alt="" className="size-6 rounded-full" />
-            <span className="text-[13px] text-[var(--muted-2)]">© 2026 PlayStudy</span>
+            <img src="/an-logo.svg" alt="" className="size-6" />
+            <span className="text-[13px] text-[var(--muted-2)]">© 2026 AnotherNotes</span>
           </div>
           <div className="flex gap-6 text-[13px] text-[var(--muted-2)]">
             <Link to="/privacy" className="transition-opacity hover:opacity-70">Privacy</Link>
@@ -472,7 +526,7 @@ function StepCard({
   icon: React.ReactNode;
   title: string;
   body: string;
-  art: "upload" | "game" | "progress";
+  art: "upload" | "teach" | "progress";
 }) {
   return (
     <div className="flex flex-col rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6">
@@ -492,7 +546,7 @@ function StepCard({
 }
 
 /* Quiet monochrome illustrations — ink on cream, gentle motion only. */
-function StepArt({ kind }: { kind: "upload" | "game" | "progress" }) {
+function StepArt({ kind }: { kind: "upload" | "teach" | "progress" }) {
   if (kind === "upload") {
     return (
       <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -504,17 +558,24 @@ function StepArt({ kind }: { kind: "upload" | "game" | "progress" }) {
       </svg>
     );
   }
-  if (kind === "game") {
+  if (kind === "teach") {
+    // A page being read to: the rule under the line it is on draws itself
+    // across, and the voice arcs breathe on the same 2.4s as everything else on
+    // the page. One clock, or the mouth pulses twice per pass of the underline.
     return (
       <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="38" y="50" width="124" height="60" rx="30" opacity="0.9" />
-        <path d="M60 80h22M71 69v22" strokeLinecap="round" opacity="0.5" />
-        <circle cx="128" cy="72" r="5" opacity="0.5" />
-        <circle cx="144" cy="80" r="5" opacity="0.5" />
-        <circle cx="128" cy="88" r="5" opacity="0.5" />
-        <circle cx="112" cy="80" r="5" fill="currentColor" stroke="none">
-          <animate attributeName="opacity" values="1;0.25;1" dur="2.4s" repeatCount="indefinite" />
-        </circle>
+        <rect x="46" y="26" width="84" height="98" rx="8" opacity="0.9" />
+        <path d="M58 48h56M58 62h40M58 90h52M58 104h34" strokeLinecap="round" opacity="0.35" />
+        <path d="M58 76h56" strokeLinecap="round" opacity="0.35" />
+        <path d="M58 80h56" strokeLinecap="round" strokeWidth="3" opacity="0.45" strokeDasharray="56">
+          <animate attributeName="stroke-dashoffset" values="56;0;0;56" keyTimes="0;0.45;0.8;1" dur="2.4s" repeatCount="indefinite" />
+        </path>
+        <path d="M144 66a13 13 0 0 1 0 20" strokeLinecap="round" opacity="0.5">
+          <animate attributeName="opacity" values="0.5;0.12;0.5" dur="2.4s" repeatCount="indefinite" />
+        </path>
+        <path d="M154 58a24 24 0 0 1 0 36" strokeLinecap="round" opacity="0.28">
+          <animate attributeName="opacity" values="0.28;0.06;0.28" dur="2.4s" begin="0.3s" repeatCount="indefinite" />
+        </path>
       </svg>
     );
   }

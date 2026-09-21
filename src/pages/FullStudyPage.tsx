@@ -24,6 +24,7 @@ import {
   ListChecks,
   Loader2,
   Moon,
+  Palette,
   Pencil,
   Plus,
   RotateCcw,
@@ -51,8 +52,13 @@ import { cn } from "@/lib/utils";
 import { TeachMode, type TeachSection } from "@/components/guide/TeachMode";
 import { StickySelection, StickySessionDialog, keyIdeasOf } from "@/components/StickyNotes";
 import { useStickyStore } from "@/store/stickyStore";
-import { GuideVisual, VISUAL_FENCE, parseVisualFence } from "@/components/guide/GuideVisual";
 import { LoadingFacts } from "@/components/LoadingFacts";
+import { BASE_NOTE_COMPONENTS, HEADING_COLORS, headingFactory, sanitizeNotes } from "@/lib/notes/render";
+import { MATH_OPTS } from "@/lib/notes/units";
+import { PaperNotes, type PaperNotesHandle } from "@/components/notes/PaperNotes";
+import { ShellTrigger } from "@/components/AppShell";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SHEETS, setSheet, useSheet } from "@/lib/studySurface";
 
 /*
   Full Study — the one way to study. A session is a single scrolling note:
@@ -89,65 +95,17 @@ function flattenSections(topics: Topic[] | undefined): Section[] {
   return out;
 }
 
-/* Keep only <mark> raw HTML in AI notes; drop every other tag so rehype-raw is
-   safe to run. Text and Markdown are left untouched. */
-function sanitizeNotes(md: string): string {
-  return md.replace(/<\/?([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g, (m, tag: string) =>
-    /^mark$/i.test(tag) ? (m.startsWith("</") ? "</mark>" : "<mark>") : "",
-  );
-}
-
-/* Soft, readable highlighter hues for section headings — cycled so consecutive
-   headings differ. Mid-tone so they read on both light and dark backgrounds. */
-const HEADING_COLORS = ["#7C3AED", "#2563EB", "#0D9488", "#D97706", "#DB2777", "#0EA5E9"];
-
-/* A visual the student pinned from the Teach mode whiteboard. It's stored in the
-   notes as a fenced `playstudy-visual` block, and drawn here by the same component
-   that drew it on the board, so it looks exactly like what they were shown. */
-function PinnedOrPre(props: any) {
-  const child = Array.isArray(props.children) ? props.children[0] : props.children;
-  const className: string = child?.props?.className ?? "";
-  if (className.includes(`language-${VISUAL_FENCE}`)) {
-    const spec = parseVisualFence(String(child?.props?.children ?? ""));
-    if (spec) {
-      return (
-        <div className="guide-pinned not-prose">
-          <GuideVisual spec={spec} />
-        </div>
-      );
-    }
-  }
-  return <pre {...props} />;
-}
-
-const BASE_NOTE_COMPONENTS = {
-  // Highlighter: a light amber chip with dark ink — reads on any background
-  // (app light/dark and both Read-mode themes), like a real highlighter.
-  mark: (props: any) => <mark className="rounded bg-amber-200/80 px-1 py-0.5 text-amber-950" {...props} />,
-  a: (props: any) => <a {...props} target="_blank" rel="noopener noreferrer" />,
-  pre: PinnedOrPre,
-};
-
 /* Shared Markdown renderer: pastel-highlighted headings (cycled in document
    order), <mark> highlights, and safe raw HTML (mark only). Used by both the
    notes card and Read mode so they render identically. */
 function Markdown({ md }: { md: string }) {
   const counter = useRef(0);
   counter.current = 0;
-  const heading = (Tag: "h2" | "h3") => (props: any) => {
-    const c = HEADING_COLORS[counter.current++ % HEADING_COLORS.length];
-    return (
-      <Tag>
-        <span className="box-decoration-clone rounded-md px-1.5 py-0.5" style={{ backgroundColor: `${c}22`, color: c }}>
-          {props.children}
-        </span>
-      </Tag>
-    );
-  };
+  const heading = headingFactory(counter);
   const components = { ...BASE_NOTE_COMPONENTS, h2: heading("h2"), h3: heading("h3") };
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+      remarkPlugins={[remarkGfm, [remarkMath, MATH_OPTS]]}
       rehypePlugins={[rehypeRaw, rehypeKatex]}
       components={components as any}
     >
@@ -157,7 +115,7 @@ function Markdown({ md }: { md: string }) {
 }
 
 const NOTE_PROSE =
-  "prose prose-base max-w-[78ch] text-[15.5px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-lg prose-h3:mt-5 prose-h3:text-base prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-4 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.07] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-foreground";
+  "prose prose-base mx-auto max-w-[78ch] text-[16px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-[18px] prose-h2:leading-[1.4] prose-h3:mt-5 prose-h3:text-[16px] prose-h3:leading-[1.5] prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-4 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.07] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-foreground";
 
 // Book-like reading measure for Read mode; `prose`/`prose-invert` is added per theme.
 const READ_PROSE =
@@ -274,17 +232,80 @@ function ReadMode({
   );
 }
 
-/* A calm reading backdrop: a warm wash, a soft purple glow and a faint dot
-   grid. Uses theme tokens so it works in light and dark. */
-const BACKDROP_STYLE: React.CSSProperties = {
-  backgroundColor: "hsl(var(--background))",
-  backgroundImage: [
-    "radial-gradient(1100px 560px at 84% -12%, hsl(var(--chart-1) / 0.10), transparent 60%)",
-    "radial-gradient(820px 520px at -10% 2%, hsl(32 95% 60% / 0.08), transparent 55%)",
-    "radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.05) 1px, transparent 0)",
-  ].join(", "),
-  backgroundSize: "auto, auto, 22px 22px",
-};
+/*
+  The page used to paint its own backdrop here: a base fill, a purple glow, a
+  faint dot grid and — the reason light mode looked cream while dark mode did
+  not — a HARD-CODED `hsl(32 95% 60% / 0.08)` amber that is not a token and
+  never adapted to the theme. Because this div is `absolute inset-0` INSIDE the
+  scrollport, it could never reach up behind the top strip, which is what made
+  the page read as three stacked materials.
+
+  The colour now comes from the chosen sheet, declared once on the content card
+  and on <html> (index.css, `.an-sheet-surface` / `html[data-an-sheet]`), so it
+  runs unbroken from the top of the card through overscroll. All that is left
+  here is the grain, keyed off the sheet's OWN ink so it works on every swatch.
+*/
+
+/**
+ * The background picker. The student's choice of paper, kept where they are
+ * looking at it — in the page's own control row next to Read mode, not buried
+ * in Profile & Settings, because it is a property of THIS page.
+ */
+function BackgroundPicker() {
+  const sheet = useSheet();
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Background — the paper these notes are written on"
+          aria-label="Choose the background"
+          className="flex items-center gap-1.5 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
+        >
+          <Palette className="size-3.5" />
+          Background
+        </button>
+      </PopoverTrigger>
+      {/* The popover portals to <body>, outside the surface that carries the
+          swatch tokens, so it is given them directly — otherwise the menu would
+          be the only thing on screen still wearing the app palette. */}
+      <PopoverContent align="end" data-an-sheet={sheet} className="an-sheet-surface w-60 p-1.5">
+        <p className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Background
+        </p>
+        {SHEETS.map((sw) => (
+          <button
+            key={sw.id}
+            type="button"
+            onClick={() => setSheet(sw.id)}
+            aria-pressed={sheet === sw.id}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+              sheet === sw.id && "bg-muted",
+            )}
+          >
+            <span
+              aria-hidden
+              className="size-5 shrink-0 rounded-full border border-border"
+              style={{
+                background: sw.css ?? "linear-gradient(135deg, #ffffff 0 50%, #111111 50% 100%)",
+              }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium">{sw.label}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{sw.hint}</span>
+            </span>
+            {sheet === sw.id && <Check className="size-3.5 shrink-0" />}
+          </button>
+        ))}
+        <p className="px-2 pb-1 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+          Changes this page only, and is kept on this device — like Read mode's paper. Use the
+          theme switch in the sidebar for the whole app.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function FullStudyPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -312,7 +333,7 @@ export default function FullStudyPage() {
   const pageRef = useRef<HTMLDivElement>(null);
   const [readTheme, setReadTheme] = useState<"paper" | "night">(() => {
     try {
-      return (localStorage.getItem("ps-read-theme") as "paper" | "night") || "paper";
+      return (localStorage.getItem("an-read-theme") as "paper" | "night") || "paper";
     } catch {
       return "paper";
     }
@@ -321,7 +342,7 @@ export default function FullStudyPage() {
     setReadTheme((t) => {
       const next = t === "paper" ? "night" : "paper";
       try {
-        localStorage.setItem("ps-read-theme", next);
+        localStorage.setItem("an-read-theme", next);
       } catch {
         /* private mode */
       }
@@ -464,7 +485,7 @@ export default function FullStudyPage() {
       <div className="mx-auto w-full max-w-2xl">
         <h1 className="text-2xl font-semibold tracking-tight">{currentSession.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This session has no content yet. Paste your material and PlayStudy will build the sections and quizzes.
+          This session has no content yet. Paste your material and AnotherNotes will build the sections and quizzes.
         </p>
         <div className="mt-6">
           <StudyContentUpload onContentSubmit={(c) => processStudyContent(currentSession.id, c)} isProcessing={false} />
@@ -480,24 +501,45 @@ export default function FullStudyPage() {
 
   return (
     <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
-      {/* full-bleed reading backdrop */}
-      <div aria-hidden className="pointer-events-none absolute inset-0" style={BACKDROP_STYLE} />
+      {/* Grain only — the colour is the sheet, which reaches the top of the
+          content card and the overscroll beyond it. */}
+      <div aria-hidden className="an-sheet-grain pointer-events-none absolute inset-0" />
       <div className="guide-shift relative p-4 md:p-6">
         <div className="fade-in mx-auto w-full max-w-[76rem]">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Full Study</p>
+          {/* What the removed top strip carried, in the page itself: the
+              sidebar trigger (the only touch affordance for navigation, and
+              therefore for search, on a phone or a collapsed rail — it still
+              renders NOTHING on a hover-capable desktop with the sidebar open)
+              and a real link back to the dashboard. Both are in normal flow, so
+              they cost nothing at 360px and overlap nothing. */}
+          <div className="-ml-1 flex items-center gap-0.5">
+            <ShellTrigger />
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+            >
+              <ChevronLeft className="size-3.5" />
+              Dashboard
+            </Link>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+              / Full Study
+            </span>
+          </div>
           <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight md:text-[28px]">{session.title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        {/* Wraps: this cluster gained a control and a 360px phone cannot
+            hold the modes, the picker and the progress meter on one line. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
             onClick={() => {
               primeSpeechAudio();
               setGuideOpen(true);
             }}
-            title="Teach mode: PlayStudy AI scrolls, points and explains these notes out loud"
+            title="Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
             className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98]"
           >
             <GraduationCap className="size-3.5" />
@@ -513,7 +555,7 @@ export default function FullStudyPage() {
                 "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                 boardOn
                   ? "border-pink-500/40 bg-pink-500/10 text-pink-700 dark:text-pink-300"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted",
+                  : "border-border bg-foreground/[0.04] text-muted-foreground hover:bg-foreground/[0.08]",
               )}
             >
               <Presentation className="size-3.5" />
@@ -524,11 +566,12 @@ export default function FullStudyPage() {
             type="button"
             onClick={() => setReadMode(true)}
             title="Distraction-free reading"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
           >
             <BookText className="size-3.5" />
             Read mode
           </button>
+          <BackgroundPicker />
           {/* Where these notes came from: a link, not a banner across the page. */}
           {session.sourceKind === "youtube" && session.sourceUrl && (
             <a
@@ -537,7 +580,7 @@ export default function FullStudyPage() {
               rel="noopener noreferrer"
               title={`Built from this video's transcript — ${session.sourceUrl}`}
               aria-label="Open the video these notes were built from"
-              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-600"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-foreground/[0.04] text-muted-foreground transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-600"
             >
               <Youtube className="size-4" />
             </a>
@@ -547,7 +590,7 @@ export default function FullStudyPage() {
               type="button"
               onClick={() => setShowStickies(true)}
               title="Everything you've kept from this session"
-              className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              className="flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
             >
               <StickyNote className="size-3.5" />
               Sticky notes
@@ -569,7 +612,7 @@ export default function FullStudyPage() {
               </span>
             </button>
           )}
-          <div className="w-44 sm:w-56">
+          <div className="w-full min-w-0 sm:w-56">
             <div className="flex items-baseline justify-between text-xs text-muted-foreground">
               <span className="tabular-nums">
                 {done} of {sections.length} sections
@@ -596,6 +639,7 @@ export default function FullStudyPage() {
               total={sections.length}
               session={session}
               notesLoading={notesPending.has(s.topic.id)}
+              guideOpen={guideOpen}
               onWrong={addWrong}
               onRight={clearWrong}
               onNext={() => {
@@ -606,7 +650,7 @@ export default function FullStudyPage() {
             />
           ))}
 
-          <div id="session-end" className="rounded-2xl border border-border bg-card p-6 text-center">
+          <div id="session-end" className="rounded-2xl border border-border bg-foreground/[0.03] p-6 text-center">
             {pct >= 100 ? (
               <>
                 <p className="text-sm font-semibold">You've finished every section.</p>
@@ -689,6 +733,7 @@ function StudySection({
   total,
   session,
   notesLoading,
+  guideOpen,
   onWrong,
   onRight,
   onNext,
@@ -697,6 +742,7 @@ function StudySection({
   total: number;
   session: StudySession;
   notesLoading: boolean;
+  guideOpen: boolean;
   onWrong: (e: WrongEntry) => void;
   onRight: (key: string) => void;
   onNext: () => void;
@@ -741,6 +787,7 @@ function StudySection({
   };
 
   // Notes editing
+  const notesRef = useRef<PaperNotesHandle>(null);
   const [editing, setEditing] = useState<null | "head" | "notes">(null);
   const [draftTitle, setDraftTitle] = useState(topic.title);
   const [draftDesc, setDraftDesc] = useState(topic.description ?? "");
@@ -769,8 +816,10 @@ function StudySection({
     setSaving(true);
     try {
       const patch = editing === "head" ? { title: draftTitle.trim() || topic.title, description: draftDesc.trim() } : { notes: draftNotes };
-      await updateTopicDetails(session.id, topic.db_id, patch);
-      updateTopic(session.id, topic.id, patch);
+      const res = await updateTopicDetails(session.id, topic.db_id, patch);
+      // Adopt the server's copy so any normalisation it does is visible now
+      // rather than appearing to change the notes on their own at the next fetch.
+      updateTopic(session.id, topic.id, editing === "head" ? patch : { notes: typeof res?.notes === "string" ? res.notes : draftNotes });
       setEditing(null);
     } catch (e) {
       toast({ title: "Couldn't save", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
@@ -778,6 +827,20 @@ function StudySection({
       setSaving(false);
     }
   };
+
+  /** One line of the notes changed: persist the whole body, adopt the server's
+   *  copy. The candidate document has already been proven safe by guardSplice. */
+  const saveNotes = useCallback(
+    async (next: string) => {
+      if (!topic.db_id) return;
+      const res = await updateTopicDetails(session.id, topic.db_id, { notes: next });
+      const adopted = typeof res?.notes === "string" ? res.notes : next;
+      updateTopic(session.id, topic.id, { notes: adopted });
+      setDraftNotes(adopted);
+      return adopted;
+    },
+    [session.id, topic.db_id, topic.id, updateTopic],
+  );
 
   const writeNotes = async (force = false) => {
     if (!topic.db_id) return;
@@ -911,10 +974,18 @@ function StudySection({
         )}
       </div>
 
-      {/* Notes */}
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border/70 bg-[#FCFBF6] shadow-sm dark:bg-card">
-        {editing !== "notes" && topic.db_id && topic.notes && (
-          <div className="flex items-center justify-end gap-1 border-b border-border/70 px-3 py-1.5">
+      {/* Notes — a page, not a card. No border, no radius, no shadow, no
+          toolbar rail AND NO FILL OF ITS OWN: this block used to paint
+          `bg-[hsl(var(--paper))]`, which punched an opaque rectangle through the
+          page's grain and read as a third material. The text now sits directly
+          on the chosen sheet, with a real page margin, and the 78ch measure is
+          centred so the slack falls on both sides. */}
+      <div className="group/notes relative mt-5 px-6 py-5 sm:px-12 sm:py-8 lg:px-16">
+        {topic.db_id && topic.notes && (
+          <div
+            data-an-chrome=""
+            className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center justify-end gap-1 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover/notes:opacity-100"
+          >
             {keyIdeas.length > 0 && (
               <Button
                 variant="ghost"
@@ -938,22 +1009,25 @@ function StudySection({
               <Wand2 className="size-3.5" />
               Ask AI to change
             </Button>
+            {/* There is no edit MODE any more, so this is not a toggle: writing
+                starts wherever you click or tap, on a mouse and on touch alike.
+                The button stays as the keyboard route in — it just puts the
+                caret at the top of the section. */}
             <Button
               variant="ghost"
               size="sm"
               className="h-7 text-xs text-muted-foreground"
-              onClick={() => {
-                setDraftNotes(topic.notes ?? "");
-                setEditing("notes");
-              }}
+              disabled={guideOpen}
+              title={guideOpen ? "Writing pauses while AnotherNotes is teaching" : "Put the caret in these notes (or just click where you want to write)"}
+              onClick={() => notesRef.current?.startEditing()}
             >
               <Pencil className="size-3.5" />
-              Edit
+              Write
             </Button>
           </div>
         )}
-        {asking && topic.notes && editing !== "notes" && (
-          <div className="border-b border-border/70 bg-muted/40 px-4 py-2.5">
+        {asking && topic.notes && (
+          <div className="mx-auto mb-4 max-w-[78ch]" data-an-chrome="">
             <div className="flex items-center gap-2">
               <Wand2 className="size-4 shrink-0 text-chart-1" />
               <input
@@ -972,70 +1046,58 @@ function StudySection({
             </div>
           </div>
         )}
-        <div className="px-6 py-5 sm:px-7">
-          {editing === "notes" ? (
-            <div className="space-y-2">
-              <Textarea
-                value={draftNotes}
-                onChange={(e) => setDraftNotes(e.target.value)}
-                rows={Math.min(26, Math.max(10, draftNotes.split("\n").length + 2))}
-                placeholder="Write the notes for this section. Markdown works: **bold**, - lists, ## headings, <mark>highlight</mark>."
-                className="font-mono text-[13px] leading-relaxed"
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={save} disabled={saving}>
-                  {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                  Save notes
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
-                  Cancel
-                </Button>
-              </div>
+        {topic.notes ? (
+          <PaperNotes
+            ref={notesRef}
+            md={topic.notes}
+            guideKey={topic.db_id}
+            prose={NOTE_PROSE}
+            canEdit={!!topic.db_id}
+            locked={guideOpen}
+            onCommit={saveNotes}
+          />
+        ) : notesLoading || writing ? (
+          <div className="mx-auto max-w-[78ch] space-y-2.5 py-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" /> Writing readable notes from your material…
             </div>
-          ) : topic.notes ? (
-            <RichNotes md={topic.notes} guideKey={topic.db_id} />
-          ) : notesLoading || writing ? (
-            <div className="space-y-2.5 py-1">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" /> Writing readable notes from your material…
-              </div>
-              <Skeleton className="h-3.5 w-11/12" />
-              <Skeleton className="h-3.5 w-full" />
-              <Skeleton className="h-3.5 w-4/5" />
-              <Skeleton className="h-3.5 w-10/12" />
-              <LoadingFacts compact className="pt-1" />
+            <Skeleton className="h-3.5 w-11/12" />
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-4/5" />
+            <Skeleton className="h-3.5 w-10/12" />
+            <LoadingFacts compact className="pt-1" />
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-[78ch] flex-col items-start gap-3 py-2">
+            <p className="text-sm text-muted-foreground">Notes couldn't be written automatically.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => writeNotes(false)} disabled={!topic.db_id}>
+                <Sparkles className="size-3.5" />
+                Write notes with AI
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!topic.db_id || writing}
+                onClick={async () => {
+                  // Seed one line so there is something to put a caret in, then
+                  // put it there. There is no raw-Markdown mode to fall back to.
+                  await saveNotes("Write your notes for this section here.");
+                  window.setTimeout(() => notesRef.current?.startEditing(), 0);
+                }}
+              >
+                <Pencil className="size-3.5" />
+                Write them myself
+              </Button>
             </div>
-          ) : (
-            <div className="flex flex-col items-start gap-3 py-2">
-              <p className="text-sm text-muted-foreground">Notes couldn't be written automatically.</p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => writeNotes(false)} disabled={!topic.db_id}>
-                  <Sparkles className="size-3.5" />
-                  Write notes with AI
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setDraftNotes("");
-                    setEditing("notes");
-                  }}
-                  disabled={!topic.db_id}
-                >
-                  <Pencil className="size-3.5" />
-                  Write them myself
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <SectionFlashcards session={session} topic={topic} />
 
       {/* Quiz */}
-      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/50 bg-foreground/[0.03]">
         {!quizIdle && (
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quiz</p>
@@ -1205,7 +1267,7 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
 
   if (!open) {
     return (
-      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/70 bg-card/40 px-3.5 py-2">
+      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/50 bg-foreground/[0.02] px-3.5 py-2">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
           <Layers className="size-3.5 text-chart-1" />
         </span>
@@ -1223,7 +1285,7 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
 
   const card = cards[idx];
   return (
-    <div className="mt-4 rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
+    <div className="mt-4 rounded-2xl border border-border/50 bg-foreground/[0.03] p-5">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Flashcards <span className="ml-1 normal-case tracking-normal">· {idx + 1} / {cards.length}</span>
@@ -1484,7 +1546,7 @@ function SessionPicker({
           <BookOpen className="mx-auto size-6 text-muted-foreground" />
           <p className="mt-3 text-sm font-semibold">No sessions yet</p>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-            Paste notes, drop a PDF, or add a YouTube link and PlayStudy writes the sections and quizzes.
+            Paste notes, drop a PDF, or add a YouTube link and AnotherNotes writes the sections and quizzes.
           </p>
           <Button size="sm" className="mt-4" onClick={onCreate}>
             <Plus className="size-3.5" />

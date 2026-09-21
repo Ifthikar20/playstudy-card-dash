@@ -1,11 +1,12 @@
 /**
  * Unified API service for making a single call to fetch all application data
  */
+import { clearCachedUserData } from '@/lib/localData';
 
 // Browser storage keys
 const STORAGE_KEYS = {
-  SESSIONS: 'playstudy_sessions',
-  SESSIONS_TIMESTAMP: 'playstudy_sessions_timestamp',
+  SESSIONS: 'anothernotes_sessions',
+  SESSIONS_TIMESTAMP: 'anothernotes_sessions_timestamp',
   SESSION_CACHE_DURATION: 5 * 60 * 1000, // 5 minutes
 };
 
@@ -46,7 +47,7 @@ const BrowserStorage = {
 
   saveSession: (sessionId: string, session: StudySession) => {
     try {
-      const key = `playstudy_session_${sessionId}`;
+      const key = `anothernotes_session_${sessionId}`;
       localStorage.setItem(key, JSON.stringify(session));
       localStorage.setItem(`${key}_timestamp`, Date.now().toString());
       console.log(`💾 Saved session ${sessionId} to browser storage`);
@@ -57,7 +58,7 @@ const BrowserStorage = {
 
   loadSession: (sessionId: string): StudySession | null => {
     try {
-      const key = `playstudy_session_${sessionId}`;
+      const key = `anothernotes_session_${sessionId}`;
       const timestamp = localStorage.getItem(`${key}_timestamp`);
 
       if (!timestamp) return null;
@@ -84,7 +85,7 @@ const BrowserStorage = {
     try {
       const keys = Object.keys(localStorage);
       keys.forEach(key => {
-        if (key.startsWith('playstudy_')) {
+        if (key.startsWith('anothernotes_')) {
           localStorage.removeItem(key);
         }
       });
@@ -138,7 +139,8 @@ export interface StudySession {
 export interface UserProfile {
   id: string;
   name: string;
-  email: string;
+  /** null on a guardian-created child profile, which has no email. */
+  email: string | null;
   /** Progress XP plus read-time XP - the number shown on the dashboard. */
   xp: number;
   /** Measured reading seconds, all time. */
@@ -198,6 +200,7 @@ export const removeAuthToken = (): void => {
  */
 export const logout = (): void => {
   removeAuthToken();
+  clearCachedUserData();
   window.location.href = '/auth';
 };
 
@@ -1055,7 +1058,7 @@ const getMockAppData = (): AppData => {
     userProfile: {
       id: 'user-1',
       name: 'Student User',
-      email: 'student@playstudy.ai',
+      email: 'student@anothernotes.com',
       xp: 2450,
       studySeconds: 64800,
       studyXp: 2160,

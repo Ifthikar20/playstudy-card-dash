@@ -66,7 +66,7 @@ function dayKey(d = new Date()) {
 }
 
 function storageKey(userId: string, day: string) {
-  return `ps-presence:${userId}:${day}`;
+  return `an-presence:${userId}:${day}`;
 }
 
 function load(userId: string, day: string) {

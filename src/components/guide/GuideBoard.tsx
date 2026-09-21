@@ -39,7 +39,7 @@ interface BoardItem {
 
 const ERASE_MS = 500;
 const HISTORY_MAX = 8;
-const POS_KEY = "ps-guide-board-pos";
+const POS_KEY = "an-guide-board-pos";
 
 export const GuideBoard = forwardRef<
   BoardHandle,

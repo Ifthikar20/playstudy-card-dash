@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
-  PlayStudy design tokens — ported from the Cansee UI design guide.
+  AnotherNotes design tokens — ported from the Cansee UI design guide.
 
   Warm off-white surfaces, near-black ink, one purple accent (#7232e0) used
   sparingly, hairline borders instead of shadows, compact Inter typography.
@@ -50,6 +50,11 @@
     --chart-5: 38 63% 42%;              /* #b07d28 warning */
 
     --radius: 0.625rem;
+
+    /* The sheet the study notes are written on. Light is the warm #FCFBF6 the
+       notes card used to carry; dark is a hair above pure black, matching Read
+       mode's night theme, so the page still reads as paper rather than as void. */
+    --paper: 48 33% 98%;
 
     --sidebar-background: 60 11% 96%;   /* #f7f7f5 */
     --sidebar-foreground: 60 4% 10%;
@@ -115,6 +120,8 @@
     --success: 142 69% 58%;             /* #4ade80 */
     --warning: 43 96% 56%;              /* #fbbf24 */
     --brand-accent: 255 92% 76%;        /* #a78bfa */
+
+    --paper: 240 4% 6%;
 
     color-scheme: dark;
   }
@@ -269,7 +276,7 @@ html:has(.lp) #root {
 }
 
 /* ---------------------------------------------------------------------------
-   PlayStudy AI guide — the pink pointer, its click ripple, phrase underlines,
+   AnotherNotes AI guide — the pink pointer, its click ripple, phrase underlines,
    and the floating dock. See src/components/guide/.
 --------------------------------------------------------------------------- */
 .guide-cursor {
@@ -317,6 +324,8 @@ html:has(.lp) #root {
   animation: guide-underline 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .guide-driving, .guide-driving * { cursor: none !important; }
+/* ...except an open line of notes, which must keep its I-beam and caret. */
+.guide-driving [data-an-input] { cursor: text !important; }
 .guide-pop { animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1); }
 .guide-glow { animation: guide-glow 1.6s ease-in-out infinite; }
 .guide-mic-live { animation: guide-mic 1.2s ease-in-out infinite; }
@@ -1109,3 +1118,290 @@ html:has(.lp) #root {
   100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); background: transparent; }
 }
 @media (prefers-reduced-motion: reduce) { .sticky-jump { animation: none; } }
+
+/* ---------------------------------------------------------------------------
+   Hero agent cursors — see src/components/landing/AgentCursors.tsx.
+   The four study modes drift around the hero headline like collaborators in a
+   shared document. This block is ONLY the ambient drift: the on-air state
+   (ink fill vs. hairline outline) and the voice meter are handled in the
+   component with Tailwind transitions and SVG <animate>, so there is nothing
+   here to keep in sync with it.
+
+   Slow by design — 9.6s / 12s / 14.4s are all multiples of the page's 2.4s
+   ambient beat, and every keyframe travels at most 3px across and 6px down,
+   which is the smallest amount of motion that still reads as "live". Transform only, so each cursor
+   stays on the compositor and never dirties layout next to display type.
+   Deliberately no `will-change`: at 3px of travel it buys nothing and would
+   pin four permanent layers.
+--------------------------------------------------------------------------- */
+.lp .lp-agent-drift-a { animation: lp-agent-drift-a 9.6s ease-in-out infinite; }
+.lp .lp-agent-drift-b { animation: lp-agent-drift-b 12s ease-in-out infinite; }
+.lp .lp-agent-drift-c { animation: lp-agent-drift-c 14.4s ease-in-out infinite; }
+
+@keyframes lp-agent-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  33%      { transform: translate3d(3px, -6px, 0); }
+  66%      { transform: translate3d(-2px, 4px, 0); }
+}
+@keyframes lp-agent-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  40%      { transform: translate3d(-3px, 5px, 0); }
+  70%      { transform: translate3d(2px, -4px, 0); }
+}
+@keyframes lp-agent-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  30%      { transform: translate3d(2px, 5px, 0); }
+  65%      { transform: translate3d(-3px, -5px, 0); }
+}
+
+/* A CSS-level stop, independent of React state, so the component's motion is
+   never 100% JS-dependent. The component ALSO reads the preference and never
+   starts its timer; this is the backstop. */
+@media (prefers-reduced-motion: reduce) {
+  .lp .lp-agent-drift-a,
+  .lp .lp-agent-drift-b,
+  .lp .lp-agent-drift-c { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   The writing surface (src/components/notes/OneSheet.tsx).
+
+   The whole section is ONE transparent <textarea> over ONE painted copy of its
+   own value. Both layers are one box, one font, one line-height and one
+   measure, so they agree character for character by construction — there is no
+   drift to correct because nothing varies. The ink drives the height, so the
+   textarea never scrolls internally and the page never reflows as you type.
+
+   HARD RULE, and at document scale it is free rather than a constraint: nothing
+   in here may change text metrics. No font-size, no font-weight, no
+   font-family, no padding, no letter-spacing on a run — or the caret stops
+   sitting on its glyph. Bold is a hairline stroke for exactly that reason, and
+   everything else is colour, background, opacity or text-decoration, all of
+   which are metric-free.
+--------------------------------------------------------------------------- */
+.an-sheet {
+  font-size: 16px;
+  line-height: 1.75;
+  color: hsl(var(--foreground) / 0.92);
+}
+[data-an-ink] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+/* Generated content, so the last line keeps its line box — and one blank line
+   of slack below it — WITHOUT adding a text node that findQuoteRange's
+   TreeWalker or getSelection() could pick up. The slack is also what makes
+   clicking below the last paragraph put the caret at the end of the notes. */
+[data-an-ink]::after { content: "\200B\A\200B"; }
+[data-an-input] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden;
+  background: transparent; color: transparent;
+  caret-color: hsl(var(--foreground));
+  font: inherit; letter-spacing: inherit; line-height: inherit;
+  text-align: inherit; text-indent: inherit;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  tab-size: 2;
+}
+[data-an-input]::selection { background: hsl(var(--chart-1) / 0.24); color: transparent; }
+
+.an-syntax { opacity: 0.26; }
+.an-strong { -webkit-text-stroke: 0.3px currentColor; }
+.an-em     { color: hsl(var(--foreground) / 0.72); }
+.an-del    { text-decoration: line-through; opacity: 0.6; }
+.an-mark   { background: rgb(253 230 138 / 0.8); color: #451a03; border-radius: 3px; }
+.an-code   { background: hsl(var(--muted)); border-radius: 3.5px; }
+.an-link   { color: hsl(var(--chart-1)); text-decoration: underline; text-underline-offset: 2px; }
+.an-h-chip { background-color: var(--an-h-bg); color: var(--an-h); }
+/* The highlight's own tag bytes. Frozen as a pair, so a selection-delete can
+   never leave one half behind — the dominant way marksWellFormed used to fail. */
+.an-tag    { opacity: 0.3; background: rgb(253 230 138 / 0.35); border-radius: 3px; }
+/* A heading while you are writing it: its real colour, its real chip tint and a
+   heavier stroke. NOT a larger font — a textarea has exactly one. */
+.an-head {
+  color: var(--an-h);
+  background: var(--an-h-bg);
+  -webkit-text-stroke: 0.4px currentColor;
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* Blockquote body: the bar and padding are block boxes a textarea cannot make,
+   so the quote is carried by a tint instead. */
+.an-quote  { background: hsl(var(--chart-1) / 0.07); }
+/* A locked block — a table, a code fence, a pinned diagram, a formula. Its
+   SOURCE is shown, dimmed and banded, because it is exactly the bytes that are
+   being protected; the caret steps over it and no input may touch it. */
+.an-atom {
+  background: hsl(var(--foreground) / 0.05);
+  color: hsl(var(--foreground) / 0.5);
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Reading state: a hover affordance that costs no layout, so clicking to write
+   is discoverable without a toolbar or an "Edit notes" button. */
+[data-an-live] [data-an-kind]:not([data-an-kind="atom"]):hover {
+  background: hsl(var(--foreground) / 0.04);
+  border-radius: 6px;
+  box-shadow: 0 0 0 5px hsl(var(--foreground) / 0.04);
+}
+@media (pointer: coarse) {
+  [data-an-live] [data-an-kind]:hover { background: none; box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-an-live] [data-an-kind]:hover { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   The study sheet — ONE material for the whole study surface.
+
+   Before this there were three stacked surfaces on the Full Study page: a white
+   header band; a cream page carrying a dot texture and two gradients, one of
+   them a hard-coded non-token amber that never adapted to dark mode; and a
+   third `--paper` block behind the notes. They are now a single background the
+   student chooses.
+
+   HOW IT IS SCOPED, and why in two pieces:
+     `.an-sheet-surface[data-an-sheet="x"]` REDECLARES the shadcn tokens on the
+     inset content card. That is the pattern `.lp` above already uses to give
+     the marketing page its own palette, and it means everything inside moves
+     with it — prose, muted text, hairlines, and the quiz / flashcard / session
+     cards — instead of each one needing its own override.
+
+     `html[data-an-sheet="x"]` sets ONE colour, used to paint html / body /
+     #root and the 8px gutter the inset card floats in. Below md the DOCUMENT
+     scrolls, so without this overscroll would flash the app background; that is
+     the same problem, and the same fix, as `html:has(.lp)` above. The sidebar
+     keeps its own `--sidebar-*` tokens and is deliberately NOT re-skinned —
+     navigation should not change colour because a student picked a writing
+     background.
+
+   `auto` is the default and simply follows the app theme, so nothing changes
+   for a student who never opens the picker.
+--------------------------------------------------------------------------- */
+html[data-an-sheet],
+html[data-an-sheet] body,
+html[data-an-sheet] #root,
+html[data-an-sheet] .group\/sidebar-wrapper {
+  background: var(--an-sheet-bg);
+}
+html[data-an-sheet="auto"] { --an-sheet-bg: hsl(var(--paper)); }
+.an-sheet-surface[data-an-sheet="auto"] {
+  --background: var(--paper);
+  --card: var(--paper);
+  --popover: var(--paper);
+}
+html[data-an-sheet="paper"] { --an-sheet-bg: hsl(44 42% 96%); }
+.an-sheet-surface[data-an-sheet="paper"] {
+  --background: 44 42% 96%;
+  --foreground: 30 12% 13%;
+  --card: 44 40% 97%;
+  --card-foreground: 30 12% 13%;
+  --popover: 44 40% 97%;
+  --popover-foreground: 30 12% 13%;
+  --muted: 42 26% 91%;
+  --muted-foreground: 34 8% 40%;
+  --secondary: 42 26% 91%;
+  --secondary-foreground: 30 12% 13%;
+  --accent: 42 30% 92%;
+  --accent-foreground: 30 12% 13%;
+  --border: 40 18% 87%;
+  --input: 40 16% 82%;
+  color-scheme: light;
+}
+html[data-an-sheet="sand"] { --an-sheet-bg: hsl(32 30% 93%); }
+.an-sheet-surface[data-an-sheet="sand"] {
+  --background: 32 30% 93%;
+  --foreground: 28 16% 15%;
+  --card: 32 30% 95%;
+  --card-foreground: 28 16% 15%;
+  --popover: 32 30% 95%;
+  --popover-foreground: 28 16% 15%;
+  --muted: 30 22% 88%;
+  --muted-foreground: 28 10% 38%;
+  --secondary: 30 22% 88%;
+  --secondary-foreground: 28 16% 15%;
+  --accent: 30 24% 89%;
+  --accent-foreground: 28 16% 15%;
+  --border: 30 16% 84%;
+  --input: 30 14% 79%;
+  color-scheme: light;
+}
+html[data-an-sheet="sage"] { --an-sheet-bg: hsl(140 14% 94%); }
+.an-sheet-surface[data-an-sheet="sage"] {
+  --background: 140 14% 94%;
+  --foreground: 160 14% 13%;
+  --card: 140 14% 96%;
+  --card-foreground: 160 14% 13%;
+  --popover: 140 14% 96%;
+  --popover-foreground: 160 14% 13%;
+  --muted: 140 12% 89%;
+  --muted-foreground: 155 8% 37%;
+  --secondary: 140 12% 89%;
+  --secondary-foreground: 160 14% 13%;
+  --accent: 140 14% 90%;
+  --accent-foreground: 160 14% 13%;
+  --border: 140 10% 85%;
+  --input: 140 10% 80%;
+  color-scheme: light;
+}
+html[data-an-sheet="slate"] { --an-sheet-bg: hsl(215 20% 13%); }
+.an-sheet-surface[data-an-sheet="slate"] {
+  --background: 215 20% 13%;
+  --foreground: 210 16% 90%;
+  --card: 215 20% 16%;
+  --card-foreground: 210 16% 90%;
+  --popover: 215 20% 16%;
+  --popover-foreground: 210 16% 90%;
+  --muted: 215 16% 21%;
+  --muted-foreground: 213 10% 66%;
+  --secondary: 215 16% 21%;
+  --secondary-foreground: 210 16% 90%;
+  --accent: 215 18% 23%;
+  --accent-foreground: 210 16% 90%;
+  --border: 215 14% 25%;
+  --input: 215 14% 30%;
+  --chart-1: 255 88% 78%;
+  color-scheme: dark;
+}
+html[data-an-sheet="ink"] { --an-sheet-bg: hsl(240 6% 5%); }
+.an-sheet-surface[data-an-sheet="ink"] {
+  --background: 240 6% 5%;
+  --foreground: 44 11% 90%;
+  --card: 240 6% 8%;
+  --card-foreground: 44 11% 90%;
+  --popover: 240 6% 8%;
+  --popover-foreground: 44 11% 90%;
+  --muted: 240 5% 13%;
+  --muted-foreground: 40 6% 62%;
+  --secondary: 240 5% 13%;
+  --secondary-foreground: 44 11% 90%;
+  --accent: 240 5% 15%;
+  --accent-foreground: 44 11% 90%;
+  --border: 240 5% 17%;
+  --input: 240 5% 22%;
+  --chart-1: 255 88% 78%;
+  color-scheme: dark;
+}
+
+/* The study surface itself: the chosen sheet, edge to edge, with the faint dot
+   grid keyed off the sheet's OWN ink rather than a hard-coded amber, so one
+   material runs from the top of the content card to the bottom of the page. */
+.an-sheet-surface {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  /* The inset variant carries its own `shadow` from the sidebar primitive. With
+     the gutter painted the same colour, that shadow is the last thing drawing a
+     seam around the card — the third surface all over again, in soft focus.
+     !important because the primitive's utility is `peer-data-[variant=inset]:shadow`,
+     a compound selector no single class can outrank, and this file must not
+     reach into ui/sidebar.tsx to switch it off for one route. */
+  box-shadow: none !important;
+}
+.an-sheet-grain {
+  background-image: radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.05) 1px, transparent 0);
+  background-size: 22px 22px;
+}

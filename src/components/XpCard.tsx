@@ -59,7 +59,7 @@ export function XpCard({ xp, studySeconds = 0, className }: { xp: number; studyS
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>How experience works</DialogTitle>
-            <DialogDescription>XP is the only score in PlayStudy. Every point comes from one of these.</DialogDescription>
+            <DialogDescription>XP is the only score in AnotherNotes. Every point comes from one of these.</DialogDescription>
           </DialogHeader>
           <dl className="divide-y divide-border rounded-lg border border-border">
             {XP_RULE_LABELS.map((r) => (

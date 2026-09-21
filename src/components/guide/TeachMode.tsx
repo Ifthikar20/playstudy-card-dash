@@ -50,7 +50,7 @@ import { prefetchGuideImage } from "./GuideImage";
 import { visualToMarkdown } from "./GuideVisual";
 
 /*
-  Teach mode — PlayStudy AI takes the wheel and teaches you your own notes.
+  Teach mode — AnotherNotes AI takes the wheel and teaches you your own notes.
 
   Open it from the "Teach mode" button. For the section you're looking at it
   asks the backend for a spoken, step-by-step script (streamed, so it starts
@@ -89,8 +89,8 @@ interface ScriptEntry {
   waiters: Array<() => void>;
 }
 
-const RATE_KEY = "ps-guide-rate";
-const VOICE_KEY = "ps-guide-voice2"; // { id: "server:<voice id>" | "browser:<voice name>", gender }
+const RATE_KEY = "an-guide-rate";
+const VOICE_KEY = "an-guide-voice2"; // { id: "server:<voice id>" | "browser:<voice name>", gender }
 const RATES = [0.85, 1, 1.15, 1.3];
 const NOT_READY = new Set(["notes-missing", "notes-empty"]);
 const QUIZ_ATTR = "data-guide-quiz";
@@ -279,7 +279,7 @@ export function TeachMode({
         wake(entry);
       })
       .catch((err: unknown) => {
-        entry.error = err instanceof Error ? err.message : "PlayStudy AI couldn't prepare this section.";
+        entry.error = err instanceof Error ? err.message : "AnotherNotes AI couldn't prepare this section.";
         entry.done = true;
         scripts.current.delete(sec.dbId); // so pressing play tries again
         wake(entry);
@@ -781,7 +781,7 @@ ${visualToMarkdown(spec)}`.trimStart();
       play(si, k ?? entry.steps.length); // pick the walkthrough back up
     } catch (e) {
       if (abort.signal.aborted || cancelled(run)) return;
-      setError(e instanceof Error ? e.message : "PlayStudy AI couldn't answer that.");
+      setError(e instanceof Error ? e.message : "AnotherNotes AI couldn't answer that.");
       setPhase("paused");
     }
   };
@@ -1046,6 +1046,9 @@ ${visualToMarkdown(spec)}`.trimStart();
     if (!host) return;
     const onClick = (e: MouseEvent) => {
       const target = e.target as Element | null;
+      // A click inside an open line of notes is the student placing a caret,
+      // not asking the lesson to continue from there.
+      if (target?.closest?.("[data-an-input],[data-an-ink],[data-an-chrome]")) return;
       const root = target?.closest?.(`[${BLOCKS_ROOT_ATTR}]`) as HTMLElement | null;
       if (!root) return;
       let blockEl = target?.closest(`[${BLOCK_ATTR}]`) as HTMLElement | null;

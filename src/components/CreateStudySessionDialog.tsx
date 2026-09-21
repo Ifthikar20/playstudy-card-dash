@@ -283,8 +283,8 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
           {step === "upload" && (
             <p className="text-sm text-muted-foreground">
               {isProcessing
-                ? "PlayStudy is reading your material and writing the notes and quizzes. Keep this open — it usually takes under a minute."
-                : "Paste text, upload a file, or add a YouTube link — PlayStudy writes the notes and quizzes."}
+                ? "AnotherNotes is reading your material and writing the notes and quizzes. Keep this open — it usually takes under a minute."
+                : "Paste text, upload a file, or add a YouTube link — AnotherNotes writes the notes and quizzes."}
             </p>
           )}
         </DialogHeader>
@@ -360,7 +360,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                   />
                 </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  PlayStudy reads the video's captions and builds the same sections, notes and quizzes as a document.
+                  AnotherNotes reads the video's captions and builds the same sections, notes and quizzes as a document.
                   Works with videos that have subtitles — processing a longer video can take a minute.
                 </p>
               </div>

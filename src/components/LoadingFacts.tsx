@@ -3,7 +3,7 @@ import { ChevronRight, Lightbulb, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /*
-  Something worth reading while PlayStudy writes notes.
+  Something worth reading while AnotherNotes writes notes.
 
   Shows a live stage + progress bar (time-based: the API is one long call) and a
   card of facts that changes every few seconds — facts about the student's own

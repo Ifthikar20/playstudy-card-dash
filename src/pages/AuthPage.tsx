@@ -134,7 +134,7 @@ export default function AuthPage() {
   };
 
   const fillDemo = () => {
-    setEmail("student@playstudy.ai");
+    setEmail("student@anothernotes.com");
     setPassword("password123");
     setMode("signin");
     setNotice("Demo credentials filled in. Press Login to continue.");
@@ -155,18 +155,18 @@ export default function AuthPage() {
         </Link>
 
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
-          <img src="/ps-logo.png" alt="" className="mx-auto mb-6 size-10 rounded-full" />
+          <img src="/an-logo.svg" alt="" className="mx-auto mb-6 size-10" />
           <h1 className="lp-serif text-center text-[2.25rem] leading-[1.1] md:text-[2.5rem]">
             {mode === "signin" && (
               <>
                 Welcome back to <br />
-                PlayStudy
+                AnotherNotes
               </>
             )}
             {mode === "register" && (
               <>
                 Create your <br />
-                PlayStudy account
+                AnotherNotes account
               </>
             )}
             {mode === "sso" && (
@@ -432,7 +432,14 @@ function AuthShowcaseMedia() {
       id="auth-showcase-media"
       className="my-10 flex aspect-[4/3] w-full max-w-lg items-center justify-center rounded-[var(--r-card)] border border-[var(--hair-soft)] bg-[var(--cream)]"
     >
-      <img src="/logo-new.png" alt="PlayStudy" className="w-3/4 max-w-xs object-contain" />
+      {/* A typographic lockup rather than an image. The raster that was here
+          was the old wordmark with "Playstudy.ai" drawn into it, so it could not
+          be renamed by editing code — and a sign-in page still showing the old
+          name is the one place a rename cannot be half-done. */}
+      <div className="flex flex-col items-center gap-4">
+        <img src="/an-logo.svg" alt="" className="size-20" />
+        <span className="text-3xl font-semibold tracking-tight text-[var(--ink)]">AnotherNotes</span>
+      </div>
     </div>
   );
 }

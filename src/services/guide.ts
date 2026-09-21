@@ -1,5 +1,5 @@
 /**
- * PlayStudy AI Guide — API client.
+ * AnotherNotes AI Guide — API client.
  *
  * Both AI calls stream Server-Sent Events over a POST (EventSource can't POST
  * or send an Authorization header, so this is a small fetch-based SSE reader).
@@ -388,7 +388,7 @@ export async function streamGuideScript(
     } else if (event === "done") {
       cached = Boolean(JSON.parse(data).cached);
     } else if (event === "error") {
-      error = JSON.parse(data).message ?? "PlayStudy AI couldn't prepare this section.";
+      error = JSON.parse(data).message ?? "AnotherNotes AI couldn't prepare this section.";
     }
   });
   if (!steps.length && error) throw new Error(error);
@@ -431,7 +431,7 @@ export async function streamGuideAnswer(
       const u = JSON.parse(data);
       handlers.onNotesUpdated?.({ notes: String(u.notes ?? ""), addition: String(u.addition ?? "") });
     } else if (event === "done") answer = String(JSON.parse(data).answer ?? "");
-    else if (event === "error") error = JSON.parse(data).message ?? "PlayStudy AI couldn't answer that.";
+    else if (event === "error") error = JSON.parse(data).message ?? "AnotherNotes AI couldn't answer that.";
   });
   if (!collected && error) throw new Error(error);
   return answer || collected;

@@ -12,7 +12,7 @@ const TermsPage = () => {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <Brain className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold text-white">PlayStudy.ai</span>
+          <span className="text-xl font-bold text-white">AnotherNotes</span>
         </Link>
       </nav>
 
@@ -30,7 +30,7 @@ const TermsPage = () => {
             
             <section className="space-y-3">
               <h2 className="text-white font-medium text-base">Acceptance of Terms</h2>
-              <p>By using PlayStudy.ai, you agree to these terms. If you don't agree, please don't use our service.</p>
+              <p>By using AnotherNotes, you agree to these terms. If you don't agree, please don't use our service.</p>
             </section>
             
             <section className="space-y-3">

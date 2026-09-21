@@ -274,7 +274,8 @@ export default function CalendarPage() {
       </aside>
 
       {/* Main calendar */}
-      <Card className="flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-none lg:h-[calc(100svh-8rem)]">
+      {/* 7.5rem = 1rem inset margin + 3rem of the shell's p-6 + the 3.5rem top strip */}
+      <Card className="flex min-h-[70vh] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl shadow-none lg:h-[calc(100svh-7.5rem)]">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
           <Button variant="outline" size="sm" onClick={() => setFocus(new Date())}>
             Today

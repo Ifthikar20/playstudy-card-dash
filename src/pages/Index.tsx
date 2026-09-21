@@ -34,6 +34,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 import { CreateFolderDialog } from "@/components/CreateFolderDialog";
+import { StatRail } from "@/components/StatRail";
 import { XpCard } from "@/components/XpCard";
 import { StreakCard } from "@/components/StreakCard";
 import { SourceLogo } from "@/components/SourceLogo";
@@ -235,7 +236,7 @@ export default function Index() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-60">Start here</p>
                 <h2 className="font-display mt-2 text-[30px] leading-tight md:text-[34px]">Turn your notes into a game</h2>
                 <p className="mt-1.5 max-w-md text-sm opacity-70">
-                  Paste text, drop a PDF, or connect the place your notes already live. PlayStudy builds the topics and questions.
+                  Paste text, drop a PDF, or connect the place your notes already live. AnotherNotes builds the topics and questions.
                 </p>
               </div>
               <Button className="shrink-0 bg-background text-foreground hover:bg-background/90" onClick={() => setShowCreateSession(true)}>
@@ -385,7 +386,7 @@ export default function Index() {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your notes</p>
-                <p className="mt-1 text-sm text-muted-foreground">Connect where your notes live and PlayStudy reads them from there.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Connect where your notes live and AnotherNotes reads them from there.</p>
               </div>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -443,24 +444,7 @@ export default function Index() {
             becomes a two-up row under it rather than three stacked full-width
             cards you have to scroll past. */}
         <aside className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-          <div className="rounded-2xl border border-border bg-card p-5">
-            {!isInitialized ? (
-              <div className="space-y-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-8 w-32" />
-                ))}
-              </div>
-            ) : (
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-3.5 xl:grid-cols-1">
-                {statItems.map((s) => (
-                  <div key={s.label} className="flex items-baseline gap-2.5">
-                    <dt className="font-display text-[30px] leading-none tabular-nums">{s.value}</dt>
-                    <dd className="text-sm text-muted-foreground">{s.label}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </div>
+          <StatRail items={statItems} loading={!isInitialized} />
           {isInitialized ? <XpCard xp={xp} studySeconds={userProfile?.studySeconds ?? 0} /> : <Skeleton className="h-28 rounded-2xl" />}
           <div className="sm:col-span-2 xl:col-span-1">
             <StreakCard />

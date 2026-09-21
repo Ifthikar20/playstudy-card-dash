@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { sheetPlain } from "@/lib/notes/sheet";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ArrowUpRight, Check, Palette, Pencil, Plus, StickyNote as StickyNoteIcon, Trash2, X } from "lucide-react";
@@ -31,11 +32,14 @@ export function clipForSticky(text: string): string {
 /**
  * The phrases the AI marked as the point of a section — `<mark>…</mark>` in the
  * notes' Markdown — which is exactly what a student would want on a sticky note.
+ * Matches the OPENING TAG WITH ITS ATTRIBUTES: `sanitizeWithMap` exists
+ * precisely so a stored `<mark class="hi">` survives an edit, and a bare-tag-only
+ * pattern here would silently find nothing in notes that carry one.
  */
 export function keyIdeasOf(markdown: string | null | undefined): string[] {
   if (!markdown) return [];
   const out: string[] = [];
-  for (const m of markdown.matchAll(/<mark>([\s\S]*?)<\/mark>/gi)) {
+  for (const m of markdown.matchAll(/<mark\b[^>]*>([\s\S]*?)<\/mark>/gi)) {
     const text = clipForSticky(
       m[1]
         .replace(/<[^>]+>/g, "")
@@ -233,6 +237,37 @@ function StickyComposer({ onSave, onCancel }: { onSave: (text: string, color: St
  * section's notes) and floats a save button over it. `resolve` turns the block's
  * id into the section it belongs to, so the note remembers where it came from.
  */
+/** A rect for [start,end) of an open line, measured on its painted ink layer. */
+function inkRectOf(input: HTMLTextAreaElement, start: number, end: number): DOMRect | null {
+  const ink = input.parentElement?.querySelector<HTMLElement>("[data-an-ink]");
+  if (!ink) return null;
+  const walker = document.createTreeWalker(ink, NodeFilter.SHOW_TEXT);
+  const nodes: Text[] = [];
+  const offs: number[] = [];
+  let seen = 0;
+  for (let t = walker.nextNode() as Text | null; t; t = walker.nextNode() as Text | null) {
+    nodes.push(t);
+    offs.push(seen);
+    seen += t.data.length;
+  }
+  const locate = (off: number) => {
+    for (let i = nodes.length - 1; i >= 0; i--) if (offs[i] <= off) return { node: nodes[i], offset: Math.min(off - offs[i], nodes[i].data.length) };
+    return nodes.length ? { node: nodes[0], offset: 0 } : null;
+  };
+  const a = locate(start);
+  const b = locate(end);
+  if (!a || !b) return null;
+  try {
+    const r = document.createRange();
+    r.setStart(a.node, a.offset);
+    r.setEnd(b.node, b.offset);
+    const rect = r.getBoundingClientRect();
+    return rect.width || rect.height ? rect : null;
+  } catch {
+    return null;
+  }
+}
+
 export function StickySelection({
   sessionId,
   resolve,
@@ -247,6 +282,28 @@ export function StickySelection({
 
   useEffect(() => {
     const read = () => {
+      // The writing surface is a <textarea>, and getSelection() does not reach
+      // inside one — so read the offsets off it directly and measure against the
+      // ink layer, whose layout is identical by design. `sheetPlain` replaces
+      // the old `strippedText`, which walked only the FIRST parsed block: a
+      // phrase spanning two paragraphs used to come back silently truncated,
+      // and inline `$$…$$` disappeared from it entirely.
+      const active = document.activeElement as HTMLTextAreaElement | null;
+      if (active?.tagName === "TEXTAREA" && active.hasAttribute("data-an-input")) {
+        const root = active.closest("[data-guide-notes]") as HTMLElement | null;
+        const s0 = active.selectionStart ?? 0;
+        const e0 = active.selectionEnd ?? 0;
+        if (!root || e0 - s0 < 3) return setAt(null);
+        const kept = clipForSticky(sheetPlain(active.value.slice(s0, e0)).trim());
+        if (kept.length < 3) return setAt(null);
+        const rect = inkRectOf(active, s0, e0) ?? active.getBoundingClientRect();
+        return setAt({
+          x: Math.min(window.innerWidth - 90, Math.max(90, rect.left + rect.width / 2)),
+          y: rect.top > 60 ? rect.top - 10 : rect.bottom + 34,
+          text: kept,
+          notesKey: root.getAttribute("data-guide-notes") ?? "",
+        });
+      }
       const sel = window.getSelection();
       const text = sel?.toString().trim() ?? "";
       if (!sel || sel.isCollapsed || text.length < 3) return setAt(null);

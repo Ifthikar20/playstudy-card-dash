@@ -83,7 +83,7 @@ export function AnimatedXP() {
           <div className="flex items-center gap-1 text-[#97E35C] font-bold text-sm animate-pulse">
             <span>+{Math.floor(10 / particles.length)}</span>
             <img
-              src="/ps-logo.png"
+              src="/an-logo.svg"
               alt="XP"
               className="h-3 w-3 object-contain"
             />
@@ -99,7 +99,7 @@ export function AnimatedXP() {
       >
         {displayXP.toLocaleString()}
         <img
-          src="/ps-logo.png"
+          src="/an-logo.svg"
           alt="XP"
           className="h-4 w-4 object-contain"
         />

@@ -9,13 +9,16 @@ import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/apiClient";
+import { migrateLocalKeys } from "@/lib/localData";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import StandardAccountRoute from "@/components/StandardAccountRoute";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useAuth } from "@/contexts/AuthContext";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
+import ChildSignInPage from "./pages/ChildSignInPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import TermsPage from "./pages/TermsPage";
 import ContactPage from "./pages/ContactPage";
@@ -24,11 +27,20 @@ import StudyFolders from "./pages/StudyFolders";
 import CalendarPage from "./pages/CalendarPage";
 import FolderDetailPage from "./pages/FolderDetailPage";
 import ProfilePage from "./pages/ProfilePage";
+import FamilyPage from "./pages/FamilyPage";
+import ChildDetailPage from "./pages/ChildDetailPage";
 import FullStudyPage from "./pages/FullStudyPage";
 import NotFound from "./pages/NotFound";
 import DevLoginPage from "./pages/DevLoginPage";
 
 const queryClient = new QueryClient();
+
+// Carry a returning person's stored preferences across the rename to
+// AnotherNotes. Idempotent, and studySurface.ts calls it too — that one reads
+// its key during module evaluation, which happens BEFORE this file's body runs,
+// so it cannot wait for this call. This is the catch-all for every other key,
+// and the place the migration is visible from the app's entry point.
+migrateLocalKeys();
 
 // Initialize API client on app startup
 apiClient.initialize().catch((error) => {
@@ -43,6 +55,8 @@ const AppContent = () => {
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        {/* Kids sign in with a username and PIN, not an email */}
+        <Route path="/kids" element={<ChildSignInPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/contact" element={<ContactPage />} />
@@ -63,6 +77,25 @@ const AppContent = () => {
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="folder/:folderId" element={<FolderDetailPage />} />
           <Route path="profile" element={<ProfilePage />} />
+
+          {/* Family — guardian-only. A profile a guardian created is bounced
+              back to the dashboard rather than shown something it cannot use. */}
+          <Route
+            path="family"
+            element={
+              <StandardAccountRoute>
+                <FamilyPage />
+              </StandardAccountRoute>
+            }
+          />
+          <Route
+            path="family/:childId"
+            element={
+              <StandardAccountRoute>
+                <ChildDetailPage />
+              </StandardAccountRoute>
+            }
+          />
           <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
 
           {/* Study (the only mode: one scrolling note with a quiz per section) */}

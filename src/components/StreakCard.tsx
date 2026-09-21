@@ -42,14 +42,39 @@ function fmtMinutes(seconds: number) {
   return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
-export function StreakCard({ className }: { className?: string }) {
-  const [data, setData] = useState<{ days: ActivityDayRow[]; currentStreak: number; longestStreak: number } | null>(null);
+export interface StreakData {
+  days: ActivityDayRow[];
+  currentStreak: number;
+  longestStreak: number;
+}
+
+interface StreakCardProps {
+  className?: string;
+  /**
+   * Pre-fetched rows. Omit and the card fetches the signed-in user's own
+   * history, which is what the dashboard does. Pass it to render someone
+   * else's — a guardian viewing a child — since that data must come from the
+   * guardian-scoped endpoint and must not touch this user's caches.
+   */
+  data?: StreakData | null;
+  /** Only meaningful with `data`: show skeleton chrome while it loads. */
+  loading?: boolean;
+}
+
+export function StreakCard({ className, data: provided, loading }: StreakCardProps) {
+  const controlled = provided !== undefined;
+  const [fetched, setFetched] = useState<StreakData | null>(null);
   const [offsetWeeks, setOffsetWeeks] = useState(0); // 0 = window ends this week
 
   useEffect(() => {
-    fetchActivityDays(400).then((d) => setData(d ?? { days: [], currentStreak: 0, longestStreak: 0 }));
-  }, []);
+    if (controlled) return;
+    fetchActivityDays(400).then((d) => setFetched(d ?? { days: [], currentStreak: 0, longestStreak: 0 }));
+  }, [controlled]);
 
+  const data = useMemo<StreakData | null>(
+    () => (controlled ? (loading ? null : provided ?? { days: [], currentStreak: 0, longestStreak: 0 }) : fetched),
+    [controlled, loading, provided, fetched],
+  );
   const byDay = useMemo(() => new Map((data?.days ?? []).map((d) => [d.day, d])), [data]);
 
   // window: WEEKS columns ending at the current week (shifted by offset)
