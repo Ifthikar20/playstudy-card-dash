@@ -51,6 +51,11 @@
 
     --radius: 0.625rem;
 
+    /* The sheet the study notes are written on. Light is the warm #FCFBF6 the
+       notes card used to carry; dark is a hair above pure black, matching Read
+       mode's night theme, so the page still reads as paper rather than as void. */
+    --paper: 48 33% 98%;
+
     --sidebar-background: 60 11% 96%;   /* #f7f7f5 */
     --sidebar-foreground: 60 4% 10%;
     --sidebar-primary: 0 0% 12%;        /* #1e1e1e */
@@ -115,6 +120,8 @@
     --success: 142 69% 58%;             /* #4ade80 */
     --warning: 43 96% 56%;              /* #fbbf24 */
     --brand-accent: 255 92% 76%;        /* #a78bfa */
+
+    --paper: 240 4% 6%;
 
     color-scheme: dark;
   }
@@ -317,6 +324,8 @@ html:has(.lp) #root {
   animation: guide-underline 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .guide-driving, .guide-driving * { cursor: none !important; }
+/* ...except an open line of notes, which must keep its I-beam and caret. */
+.guide-driving [data-ps-input] { cursor: text !important; }
 .guide-pop { animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1); }
 .guide-glow { animation: guide-glow 1.6s ease-in-out infinite; }
 .guide-mic-live { animation: guide-mic 1.2s ease-in-out infinite; }
@@ -1152,4 +1161,57 @@ html:has(.lp) #root {
   .lp .lp-agent-drift-a,
   .lp .lp-agent-drift-b,
   .lp .lp-agent-drift-c { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   In-place notes editing (src/components/notes/PaperNotes.tsx).
+
+   The focused line keeps its own element, its own prose margins and its own
+   data-guide-block id. Its children are swapped for an in-flow "ink" span that
+   paints the Markdown source, plus a transparent <textarea> stretched over it.
+   The ink span drives the height, so the textarea never auto-grows and the page
+   never reflows on focus — which is what keeps the guide's already-measured
+   pointer rects valid.
+
+   HARD RULE: nothing in here may change text metrics. No font-size, no
+   font-weight, no font-family, no padding on inline runs — or the caret stops
+   sitting on its glyph. Bold is a hairline stroke for exactly that reason.
+--------------------------------------------------------------------------- */
+[data-ps-editing] { position: relative; }
+[data-ps-ink] { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Generated content, so an empty line keeps its line box WITHOUT adding a text
+   node that findQuoteRange's TreeWalker or getSelection() could pick up. */
+[data-ps-ink]::after { content: "\200B"; }
+[data-ps-input] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden;
+  background: transparent; color: transparent;
+  caret-color: hsl(var(--foreground));
+  font: inherit; letter-spacing: inherit; line-height: inherit;
+  text-align: inherit; text-indent: inherit;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+[data-ps-input]::selection { background: hsl(var(--chart-1) / 0.24); color: transparent; }
+/* The heading chip's own 5.25px inset, mirrored on the textarea so the caret
+   lines up with the first glyph inside the chip. */
+[data-ps-editing="heading"] [data-ps-input] { padding: 0 5.25px; }
+
+.ps-syntax { opacity: 0.38; }
+.ps-strong { -webkit-text-stroke: 0.3px currentColor; }
+.ps-mark   { background: rgb(253 230 138 / 0.8); color: #451a03; border-radius: 3px; }
+.ps-code   { background: hsl(var(--muted)); border-radius: 3.5px; }
+.ps-link   { color: hsl(var(--chart-1)); }
+.ps-h-chip { background-color: var(--ps-h-bg); color: var(--ps-h); }
+
+/* Hover affordance: background + spread shadow only, so it costs no layout. */
+[data-ps-live] [data-ps-kind]:not([data-ps-kind="atom"]):not([data-ps-editing]):hover {
+  background: hsl(var(--foreground) / 0.04);
+  border-radius: 6px;
+  box-shadow: 0 0 0 5px hsl(var(--foreground) / 0.04);
+}
+@media (pointer: coarse) {
+  [data-ps-live] [data-ps-kind]:hover { background: none; box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-ps-live] [data-ps-kind]:hover { transition: none; }
 }

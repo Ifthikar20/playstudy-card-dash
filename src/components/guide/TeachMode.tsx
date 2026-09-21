@@ -1046,6 +1046,9 @@ ${visualToMarkdown(spec)}`.trimStart();
     if (!host) return;
     const onClick = (e: MouseEvent) => {
       const target = e.target as Element | null;
+      // A click inside an open line of notes is the student placing a caret,
+      // not asking the lesson to continue from there.
+      if (target?.closest?.("[data-ps-input],[data-ps-ink],[data-ps-chrome]")) return;
       const root = target?.closest?.(`[${BLOCKS_ROOT_ATTR}]`) as HTMLElement | null;
       if (!root) return;
       let blockEl = target?.closest(`[${BLOCK_ATTR}]`) as HTMLElement | null;

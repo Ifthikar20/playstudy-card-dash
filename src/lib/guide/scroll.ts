@@ -94,6 +94,10 @@ export function installScrollTakeover(): () => void {
     cancelAutoScroll();
   };
   const onKey = (e: KeyboardEvent) => {
+    // Moving the caret inside an editable line is not the person scrolling —
+    // without this, every ArrowUp/ArrowDown cancels the guide's in-flight scroll.
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
     if (["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"].includes(e.key)) onUser();
   };
   window.addEventListener("wheel", onUser, { passive: true });
