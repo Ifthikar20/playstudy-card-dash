@@ -43,25 +43,60 @@ export interface AuthResponse {
 
 export interface TokenPayload {
   sub: string; // user ID
-  email: string;
+  /** Absent on a child token — a guardian-created profile has no email. */
+  email?: string;
+  /** "child" on a guardian-created profile's token. */
+  kind?: 'child';
   exp: number; // expiration timestamp
   iat: number; // issued at timestamp
+}
+
+export interface ChildLoginCredentials {
+  username: string;
+  pin: string;
+  turnstileToken?: string;
+}
+
+export interface ChildLoginResult {
+  success: boolean;
+  error?: string;
+  /** Set when the profile is locked after too many wrong PINs. */
+  lockedForSeconds?: number;
+  child?: { name: string; username: string };
 }
 
 export type UserRole = 'student' | 'teacher';
 export type TeacherType = 'individual' | 'organization';
 export type SsoProvider = 'google' | 'microsoft' | 'saml';
 
+/**
+ * "standard" is an ordinary account. "managed_child" is a profile a guardian
+ * created: no email, signs in with a username and PIN, and cannot be detached
+ * from its guardian.
+ *
+ * Note this is NOT a role. A guardian is any adult who has added a child, and
+ * a managed child is still a student.
+ */
+export type AccountKind = 'standard' | 'managed_child';
+
 export interface SessionUser {
   id: string;
-  email: string;
+  /** null on a guardian-created profile. */
+  email: string | null;
   name: string;
+  /** Sign-in name for a guardian-created profile, e.g. "ava-k3m9". */
+  username: string | null;
   xp: number;
   role: UserRole | null;
   teacher_type: TeacherType | null;
   onboarding_completed: boolean;
   auth_provider: 'password' | SsoProvider;
   org_role: 'owner' | 'admin' | 'member' | null;
+  account_kind: AccountKind;
+  /** Learners this account follows. > 0 means the Family section has content. */
+  child_count: number;
+  /** Adults who can see this account's progress. */
+  guardian_count: number;
 }
 
 export interface Organization {
@@ -334,6 +369,50 @@ class AuthService {
         success: false,
         error: 'Network error. Please check your connection and try again.'
       };
+    }
+  }
+
+  /**
+   * Sign in a guardian-created child profile with a username and PIN.
+   *
+   * A separate call rather than a mode on login(): the endpoint differs, the
+   * response carries the child's display name instead of an email, and a
+   * locked profile comes back as 423 with how long to wait.
+   */
+  async loginChild(credentials: ChildLoginCredentials): Promise<ChildLoginResult> {
+    try {
+      const response = await fetch(`${API_URL}/auth/child/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: credentials.username,
+          pin: credentials.pin,
+          turnstileToken: credentials.turnstileToken,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        if (response.status === 423) {
+          const detail = data?.detail ?? {};
+          return {
+            success: false,
+            error: detail.message || 'Too many tries. Ask your parent to help.',
+            lockedForSeconds: detail.retryAfterSeconds,
+          };
+        }
+        return {
+          success: false,
+          error: typeof data?.detail === 'string' ? data.detail : "That username and PIN don't match",
+        };
+      }
+
+      this.setToken(data.access_token);
+      return { success: true, child: data.child };
+    } catch (error) {
+      console.error('[AuthService] Child sign-in error:', error);
+      return { success: false, error: 'Network error. Please check your connection and try again.' };
     }
   }
 

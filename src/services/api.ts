@@ -139,7 +139,8 @@ export interface StudySession {
 export interface UserProfile {
   id: string;
   name: string;
-  email: string;
+  /** null on a guardian-created child profile, which has no email. */
+  email: string | null;
   /** Progress XP plus read-time XP - the number shown on the dashboard. */
   xp: number;
   /** Measured reading seconds, all time. */

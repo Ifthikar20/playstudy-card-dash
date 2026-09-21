@@ -100,7 +100,8 @@ interface AppState {
   userProfile: {
     id: string;
     name: string;
-    email: string;
+    /** null on a guardian-created child profile. */
+    email: string | null;
     /** Measured reading seconds, all time - the read half of the XP total. */
     studySeconds: number;
   } | null;
