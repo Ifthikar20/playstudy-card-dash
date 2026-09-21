@@ -162,7 +162,11 @@ export function blankVisual(spec: VisualSpec): VisualSpec {
 -------------------------------------------------------------------------- */
 export const VISUAL_FENCE = "playstudy-visual";
 
-export function visualToMarkdown(spec: VisualSpec): string {
+/** `space` is handed to JSON.stringify for the fenced kinds. The AI's own pin
+ *  path leaves it 0 (one dense line); the `/` menu passes 2, because a block a
+ *  student inserted is a block a student is about to edit by hand. Both parse
+ *  back through `parseVisualFence` identically. */
+export function visualToMarkdown(spec: VisualSpec, space = 0): string {
   if (spec.kind === "math") {
     const keys = spec.data.labels?.length ? "\n" + spec.data.labels.map((l) => `- **${l.part}** — ${l.meaning}`).join("\n") : "";
     return `\n$$${spec.data.latex}$$\n${keys}\n`;
@@ -178,7 +182,7 @@ export function visualToMarkdown(spec: VisualSpec): string {
     const items = spec.data.items.map((it, i) => `${i + 1}. **${it.label}**${it.detail ? ` — ${it.detail}` : ""}`).join("\n");
     return `\n${spec.data.title ? `**${spec.data.title}**\n\n` : ""}${items}\n`;
   }
-  return `\n\`\`\`${VISUAL_FENCE}\n${JSON.stringify(spec)}\n\`\`\`\n`;
+  return `\n\`\`\`${VISUAL_FENCE}\n${JSON.stringify(spec, null, space)}\n\`\`\`\n`;
 }
 
 /** Read a pinned visual back out of the notes; null if the block isn't one. */

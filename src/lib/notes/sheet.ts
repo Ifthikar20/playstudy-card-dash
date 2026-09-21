@@ -86,6 +86,20 @@ export interface Sheet {
   atoms: SheetAtom[];
   /** Sorted, merged [start,end) that no input may touch and no caret may enter. */
   frozen: Array<[number, number]>;
+  /**
+   * The frozen ranges that are made ENTIRELY of `<mark>` tag bytes.
+   *
+   * They are frozen so a keystroke can never break a highlight open, but unlike
+   * an atom they may be removed by an edit that swallows the whole pair: both
+   * halves go together, so `marksWellFormed` still holds and `guardDoc` still
+   * proves nothing else moved. Without this a highlighted phrase could be made
+   * but never deleted — you could not select across it in either direction.
+   *
+   * An atom is deliberately NOT soft. Taking one out has to go through the
+   * declared-intent path, or the flush would refuse the save afterwards and the
+   * student would lose the work with no way to see why.
+   */
+  soft: Array<[number, number]>;
   /** Source ranges of every top-level block, for the block-boundary flush. */
   blocks: Array<[number, number]>;
 }
@@ -126,7 +140,8 @@ export function buildSheet(md: string): Sheet {
 
   const atoms: SheetAtom[] = [];
   const blocks: Array<[number, number]> = [];
-  const frozen: Array<[number, number]> = [];
+  /* [start, end, soft] — `soft` marks a `<mark>` tag, see Sheet.soft. */
+  const frozen: Array<[number, number, boolean]> = [];
   let hueN = 0;
   let openMark = -1;
 
@@ -164,7 +179,7 @@ export function buildSheet(md: string): Sheet {
         // its source width, so it is NOT overlaid with a KaTeX render — it stays
         // visible as source and is frozen, which is honest and metric-safe.
         fill(f.atom, s, e);
-        frozen.push([s, e]);
+        frozen.push([s, e, false]);
         atoms.push({ start: s, end: e, kind: "math", label: ATOM_LABEL.math, top: false });
         return;
       case "html": {
@@ -173,18 +188,18 @@ export function buildSheet(md: string): Sheet {
           // The tag pair is one frozen glyph, so a selection-delete can never
           // leave a highlight half-open — the dominant way marksWellFormed fails.
           fill(f.tag, s, e);
-          frozen.push([s, e]);
+          frozen.push([s, e, true]);
           openMark = e;
         } else if (/^<\/mark/i.test(v)) {
           fill(f.tag, s, e);
-          frozen.push([s, e]);
+          frozen.push([s, e, true]);
           if (openMark >= 0) {
             fill(f.mark, openMark, s);
             openMark = -1;
           }
         } else {
           fill(f.atom, s, e);
-          frozen.push([s, e]);
+          frozen.push([s, e, false]);
         }
         return;
       }
@@ -227,7 +242,7 @@ export function buildSheet(md: string): Sheet {
         let fe = e;
         while (fs > 0 && md[fs - 1] === "\n") fs--;
         while (fe < n && md[fe] === "\n") fe++;
-        frozen.push([fs, fe]);
+        frozen.push([fs, fe, false]);
         atoms.push({ start: s, end: e, kind, label, top });
         if (top) blocks.push([s, e]);
         return; // never descend into an atom
@@ -300,13 +315,28 @@ export function buildSheet(md: string): Sheet {
 
   frozen.sort((a, b) => a[0] - b[0]);
   const merged: Array<[number, number]> = [];
+  /* A merged range is soft only if EVERY range that went into it was — an atom
+     touching a tag pair makes the whole region as hard as the atom. */
+  const softly: boolean[] = [];
   for (const r of frozen) {
-    const prev = merged[merged.length - 1];
-    if (prev && r[0] <= prev[1]) prev[1] = Math.max(prev[1], r[1]);
-    else merged.push([r[0], r[1]]);
+    const i = merged.length - 1;
+    const prev = merged[i];
+    if (prev && r[0] <= prev[1]) {
+      prev[1] = Math.max(prev[1], r[1]);
+      softly[i] = softly[i] && r[2];
+    } else {
+      merged.push([r[0], r[1]]);
+      softly.push(r[2]);
+    }
   }
 
-  return { runs, atoms, frozen: merged, blocks: blocks.sort((a, b) => a[0] - b[0]) };
+  return {
+    runs,
+    atoms,
+    frozen: merged,
+    soft: merged.filter((_, i) => softly[i]),
+    blocks: blocks.sort((a, b) => a[0] - b[0]),
+  };
 }
 
 /**
