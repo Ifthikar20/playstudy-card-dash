@@ -117,6 +117,28 @@ function Markdown({ md }: { md: string }) {
 const NOTE_PROSE =
   "prose prose-base mx-auto max-w-[78ch] text-[16px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-[18px] prose-h2:leading-[1.4] prose-h3:mt-5 prose-h3:text-[16px] prose-h3:leading-[1.5] prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-4 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.07] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-foreground";
 
+/* Flashcards and Quiz, as icons rather than rows.
+
+   The tinted tile WAS already each one's visual signature; it just used to sit
+   inside a bordered card next to a sentence nobody reads twice, four of which
+   interrupted a page whose notes were deliberately given no card of their own.
+   The tile is the button now.
+
+   A raw <button>, not <Button>: button.tsx's cva carries `[&_svg]:size-4`, which
+   would silently clamp the glyph to 14px at this repo's 14px root and ignore
+   `size-5`. The raw-button idiom is this file's own (lines 205, 208, 260, 537).
+
+   The caption is permanent and never hover-revealed — these are two of the
+   three things a student comes to this page to do, and a tooltip does not
+   exist on touch. The sentence that was in the card moves to `title`, which
+   still shows on a disabled button where a Radix tooltip would not. */
+const SECTION_ACTION =
+  "inline-flex min-w-[5.5rem] shrink-0 select-none flex-col items-center gap-1 rounded-xl px-2 py-1.5 align-top " +
+  "text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+const SECTION_TILE = "flex size-10 items-center justify-center rounded-xl bg-chart-1/10";
+const SECTION_CAPTION = "whitespace-nowrap text-[11px] font-semibold leading-none";
+
 // Book-like reading measure for Read mode; `prose`/`prose-invert` is added per theme.
 const READ_PROSE =
   "prose prose-lg max-w-none text-[17px] leading-[1.85] prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mt-8 prose-h2:text-xl prose-h3:mt-6 prose-h3:text-lg prose-p:my-4 prose-p:leading-[1.85] prose-li:my-1.5 prose-code:rounded prose-code:bg-black/10 prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-5 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.08] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic";
@@ -1097,7 +1119,16 @@ function StudySection({
       <SectionFlashcards session={session} topic={topic} />
 
       {/* Quiz */}
-      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/50 bg-foreground/[0.03]">
+      {/* Inline while idle so it shares a line with the flashcards icon; a real
+          card from the moment the quiz opens. data-guide-quiz stays on this
+          element either way — TeachMode resolves its pointer target through it. */}
+      <div
+        data-guide-quiz={topic.db_id}
+        className={cn(
+          "mt-3",
+          quizIdle ? "ml-1 inline-flex align-top" : "overflow-hidden rounded-2xl border border-border/50 bg-foreground/[0.03]",
+        )}
+      >
         {!quizIdle && (
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quiz</p>
@@ -1210,20 +1241,21 @@ function StudySection({
             </div>
           </div>
         ) : (
-          // Idle: one compact row — it only expands once the learner starts the quiz.
-          <div className="flex items-center gap-2.5 px-3.5 py-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
-              <ListChecks className="size-3.5 text-chart-1" />
+          // Idle: just the icon. The card only exists once the quiz starts.
+          <button
+            type="button"
+            onClick={() => openQuiz(false)}
+            disabled={!topic.db_id}
+            data-guide-quiz-button
+            aria-label="Quiz this section"
+            title="Quiz this section — a few challenging questions from these notes, one at a time"
+            className={SECTION_ACTION}
+          >
+            <span className={SECTION_TILE}>
+              <ListChecks className="size-5 text-chart-1" />
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold leading-tight">Quiz this section</p>
-              <p className="hidden truncate text-xs text-muted-foreground sm:block">A few challenging questions from these notes, one at a time.</p>
-            </div>
-            <Button size="sm" className="h-8 shrink-0" onClick={() => openQuiz(false)} disabled={!topic.db_id} data-guide-quiz-button>
-              <ListChecks className="size-3.5" />
-              Start
-            </Button>
-          </div>
+            <span className={SECTION_CAPTION}>Quiz</span>
+          </button>
         )}
       </div>
 
@@ -1267,19 +1299,22 @@ function SectionFlashcards({ session, topic }: { session: StudySession; topic: T
 
   if (!open) {
     return (
-      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/50 bg-foreground/[0.02] px-3.5 py-2">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
-          <Layers className="size-3.5 text-chart-1" />
+      <button
+        type="button"
+        onClick={() => load(false)}
+        disabled={loading || !topic.db_id}
+        aria-label={loading ? "Making flashcards" : "Flashcards for this section"}
+        title={loading ? "Making cards…" : "Flashcards — flip cards drawn from this section"}
+        className={cn(SECTION_ACTION, "mt-3")}
+      >
+        <span className={SECTION_TILE}>
+          {loading ? <Loader2 className="size-5 animate-spin text-chart-1" /> : <Layers className="size-5 text-chart-1" />}
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-tight">Flashcards</p>
-          <p className="hidden truncate text-xs text-muted-foreground sm:block">Check your memory — flip cards drawn from this section.</p>
-        </div>
-        <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => load(false)} disabled={loading || !topic.db_id}>
-          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Layers className="size-3.5" />}
-          {loading ? "Making cards…" : "Flashcards"}
-        </Button>
-      </div>
+        {/* The caption carries the loading state too — an icon has no room for
+            it, and min-w-[5.5rem] holds both words at one width so the quiz
+            icon beside it does not twitch when this one changes. */}
+        <span className={SECTION_CAPTION}>{loading ? "Making…" : "Flashcards"}</span>
+      </button>
     );
   }
 
