@@ -1,6 +1,7 @@
 /**
  * Unified API service for making a single call to fetch all application data
  */
+import { clearCachedUserData } from '@/lib/localData';
 
 // Browser storage keys
 const STORAGE_KEYS = {
@@ -198,6 +199,7 @@ export const removeAuthToken = (): void => {
  */
 export const logout = (): void => {
   removeAuthToken();
+  clearCachedUserData();
   window.location.href = '/auth';
 };
 

@@ -8,6 +8,8 @@
  * - Authentication state management
  */
 
+import { clearCachedUserData } from '@/lib/localData';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 // Token storage keys
@@ -342,10 +344,15 @@ class AuthService {
     console.log('[AuthService] Logging out user');
     this.removeToken();
 
-    // Clear any other cached data
+    // Cached sessions live under global localStorage keys and survive the
+    // reload below, so on a shared family device the next person to sign in
+    // would otherwise see the last person's work for up to five minutes.
+    clearCachedUserData();
+
     // In future: call backend logout endpoint to invalidate token
 
-    // Redirect to auth page
+    // Redirect to auth page. The full navigation tears down the in-memory
+    // react-query cache, so only localStorage needs clearing by hand.
     window.location.href = '/auth';
   }
 
