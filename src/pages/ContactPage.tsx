@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ShootingStars from "@/components/ShootingStars";
+import { usePageMeta } from "@/lib/pageMeta";
 
 const ContactPage = () => {
+  usePageMeta({ title: "Contact", description: "Get in touch with the AnotherNotes team." });
   return (
     <div className="min-h-screen relative overflow-hidden bg-[hsl(220,30%,8%)]">
       <ShootingStars />
@@ -57,9 +59,9 @@ const ContactPage = () => {
           
           <div className="mt-12 pt-8 border-t border-white/10">
             <p className="text-white/40 text-sm mb-2">Or email us directly</p>
-            <a href="mailto:hello@anothernotes.com" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
+            <a href="mailto:hello@anothernote.app" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
               <Mail className="w-4 h-4" />
-              hello@anothernotes.com
+              hello@anothernote.app
             </a>
           </div>
         </div>

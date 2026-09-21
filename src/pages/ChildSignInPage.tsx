@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, User } from "lucide-react";
 import { authService } from "@/services/authService";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePageMeta } from "@/lib/pageMeta";
 
 /*
   Kids' sign-in — username and PIN, in the same editorial (cream / ink / serif)
@@ -31,6 +32,10 @@ function formatWait(seconds: number): string {
 }
 
 export default function ChildSignInPage() {
+  usePageMeta({
+    title: "Kids' sign-in",
+    description: "Children sign in to AnotherNotes with the name and six-digit PIN a parent or guardian set up.",
+  });
   const navigate = useNavigate();
   const { refreshAuth } = useAuth();
   const [username, setUsername] = useState("");

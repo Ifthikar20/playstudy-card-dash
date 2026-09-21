@@ -241,15 +241,34 @@ export function GuideDock(props: GuideDockProps) {
         <button
           type="button"
           onClick={props.onMic}
-          title={sttMode === "none" ? "Voice input isn't available in this browser — type instead" : listening ? "Stop listening" : "Ask by voice (M)"}
-          aria-label={listening ? "Stop listening" : "Ask by voice"}
+          title={
+            sttMode === "none"
+              ? "Voice input isn't available in this browser — type instead"
+              : listening
+                ? "Done talking — send it (M)"
+                : "Talk to your tutor (press M)"
+          }
+          aria-label={listening ? "Stop listening and send" : "Ask by voice"}
+          aria-keyshortcuts="M"
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors",
+            "relative flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors",
             listening ? "guide-mic-live border-pink-500 bg-pink-500 text-white" : "border-border text-foreground hover:bg-muted",
             sttMode === "none" && "opacity-50",
           )}
         >
           <Mic className="size-4" />
+          {sttMode !== "none" && (
+            // The shortcut is worth seeing, not just hovering for: M starts listening, M again sends.
+            <kbd
+              aria-hidden
+              className={cn(
+                "absolute -right-1.5 -top-1.5 rounded-md border px-1 font-mono text-[9px] font-bold leading-4 shadow-sm",
+                listening ? "border-pink-500 bg-white text-pink-600" : "border-border bg-background text-muted-foreground",
+              )}
+            >
+              M
+            </kbd>
+          )}
         </button>
         <IconButton title="Type a question" onClick={props.onToggleAsk} active={askOpen}>
           <Keyboard className="size-4" />

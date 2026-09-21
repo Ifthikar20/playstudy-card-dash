@@ -19,6 +19,7 @@ const ERRORS: Record<string, string> = {
   no_email: "The provider didn't share an email address, which AnotherNotes needs.",
   inactive: "This account has been deactivated.",
   sso_enforced: "Your organisation requires a different sign-in method.",
+  signups_closed: "There's no AnotherNotes account for that address. AnotherNotes is in beta, so new sign-ups are paused.",
 };
 
 export default function AuthCallbackPage() {

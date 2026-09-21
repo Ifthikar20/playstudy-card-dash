@@ -8,15 +8,33 @@
          show up in the one place nobody checks. -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/an-logo.svg" />
-    <title>AnotherNotes</title>
-    <meta name="description" content="AnotherNotes - Transform your study materials into engaging, competitive quizzes" />
+    <!-- Site-wide defaults. Pages swap the title, description and canonical URL
+         while they're open (src/lib/pageMeta.ts), and read these back as the
+         defaults, so this is the one place to change them. -->
+    <title>AnotherNotes: Your notes, in motion</title>
+    <meta name="description" content="Drop in your notes, slides or a PDF. They come back written up section by section, read aloud to you, with quizzes and flashcards to test what you know." />
+    <link rel="canonical" href="https://anothernote.app/" />
+    <meta name="theme-color" content="#fff9f0" />
     <meta name="author" content="AnotherNotes" />
 
-    <meta property="og:title" content="AnotherNotes - AI-Powered Study Platform" />
-    <meta property="og:description" content="Transform your study materials into engaging, competitive quizzes" />
+    <!-- Link previews (WhatsApp, iMessage, Slack, X, LinkedIn…). Their crawlers
+         don't run JavaScript, so these describe the whole site. The image is
+         public/og-image.png, 1200×630. -->
+    <meta property="og:site_name" content="AnotherNotes" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://anothernote.app/" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:title" content="AnotherNotes: Your notes, in motion" />
+    <meta property="og:description" content="Notes written up for you, read aloud, and turned into quizzes and flashcards." />
+    <meta property="og:image" content="https://anothernote.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="AnotherNotes. Your notes, in motion." />
 
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AnotherNotes: Your notes, in motion" />
+    <meta name="twitter:description" content="Notes written up for you, read aloud, and turned into quizzes and flashcards." />
+    <meta name="twitter:image" content="https://anothernote.app/og-image.png" />
 
     <!-- Pre-paint theme bootstrap: apply the stored theme before CSS loads so a
          dark reload never flashes white. Mirrors ThemeToggle.tsx. -->

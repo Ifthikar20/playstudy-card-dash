@@ -110,6 +110,12 @@ interface AskOptions {
 }
 
 /** Index just past the last sentence end in `s`, or 0 if there isn't one yet. */
+/** A fragment of the answer's JSON header (block/quote/visual…) must never be read aloud or
+ *  captioned. The backend strips the header itself; this is the last line of defence. */
+function looksLikeGuideJson(s: string): boolean {
+  return /^\s*[[{]\s*"/.test(s) || /"(block|quote|in_notes|visual|kind|items|label|detail|title)"\s*:/.test(s);
+}
+
 function lastSentenceEnd(s: string): number {
   const re = /[.!?…]["”’)]?(?=\s)|\n/g;
   let end = 0;
@@ -237,6 +243,7 @@ export function TeachMode({
     next(): void;
     prev(): void;
     mic(): void;
+    cancelListening(): void;
     close(): void;
     continueFrom(sectionIndex: number, blockId: string): void;
   }>();
@@ -688,6 +695,10 @@ ${visualToMarkdown(spec)}`.trimStart();
     const enqueue = (chunk: string) => {
       const s = chunk.trim();
       if (!s) return;
+      if (looksLikeGuideJson(s)) {
+        console.warn("[TeachMode] dropped a JSON-looking fragment from the spoken answer:", s.slice(0, 120));
+        return;
+      }
       spoken += (spoken ? " " : "") + s;
       setPhase("answering");
       chain = chain.then((ok) => (ok && !cancelled(run) ? n.speak(s) : false));
@@ -920,6 +931,14 @@ ${visualToMarkdown(spec)}`.trimStart();
     else startListening();
   };
 
+  /** Esc while the mic is open: throw the recording away and stay in the lesson. */
+  const cancelListening = () => {
+    if (phaseRef.current !== "listening") return;
+    stopListening(false);
+    setPhase("paused");
+    setCaption("Never mind. Press M whenever you want to ask something.");
+  };
+
   const close = () => {
     runRef.current++;
     narrator.current?.cancel();
@@ -961,7 +980,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     }
   };
 
-  actions.current = { togglePlay, next, prev, mic, close, continueFrom };
+  actions.current = { togglePlay, next, prev, mic, cancelListening, close, continueFrom };
 
   // ---- lifecycle -----------------------------------------------------------------
   useEffect(() => {
@@ -1094,21 +1113,26 @@ ${visualToMarkdown(spec)}`.trimStart();
     };
   }, [hostRef]);
 
-  // Keyboard: space play/pause · ←/→ steps · M mic · Esc close.
+  // Keyboard: space play/pause · ←/→ steps · M talk (M again sends) · Esc cancels the mic, otherwise closes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (t?.closest?.(".guide-voicemenu")) return; // picking a tutor: let the menu have the keys
+      if (e.altKey || e.ctrlKey || e.metaKey) return; // browser and OS shortcuts are not ours
       const a = actions.current;
       if (!a) return;
       if (e.key === " ") {
         e.preventDefault();
-        a.togglePlay();
+        if (!e.repeat) a.togglePlay();
       } else if (e.key === "ArrowRight") a.next();
       else if (e.key === "ArrowLeft") a.prev();
-      else if (e.key === "m" || e.key === "M") a.mic();
-      else if (e.key === "Escape") a.close();
+      else if (e.key === "m" || e.key === "M") {
+        if (!e.repeat) a.mic(); // a held key must not flip the mic on and off
+      } else if (e.key === "Escape") {
+        if (phaseRef.current === "listening") a.cancelListening();
+        else a.close();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

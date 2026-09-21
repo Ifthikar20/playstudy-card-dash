@@ -10,6 +10,8 @@ import TurnstileWidget, {
   type TurnstileStatus,
 } from "@/components/TurnstileWidget";
 import { cn } from "@/lib/utils";
+import { SIGNUPS_OPEN } from "@/lib/signups";
+import { usePageMeta } from "@/lib/pageMeta";
 
 /*
   Auth — split screen in the editorial (cream / ink / serif) world.
@@ -34,6 +36,7 @@ const socialPill =
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  usePageMeta({ title: "Sign in", description: "Sign in to AnotherNotes and pick up your notes, lessons and quizzes where you left off." });
   const { login: authLogin, register: authRegister } = useAuth();
   const [mode, setMode] = useState<Mode>("signin");
   const [isLoading, setIsLoading] = useState(false);
@@ -177,9 +180,18 @@ export default function AuthPage() {
             )}
           </h1>
 
+          {!SIGNUPS_OPEN && mode === "signin" && (
+            <p className="mt-6 flex items-start gap-2.5 rounded-lg border border-[var(--hair)] bg-[var(--cream-alt)] px-3.5 py-3 text-[13px] leading-snug text-[var(--muted)]">
+              <span className="mt-px shrink-0 rounded-full bg-[var(--ink)] px-2 py-px text-[10px] font-semibold uppercase tracking-wider text-[var(--on-ink)]">
+                Beta
+              </span>
+              <span>AnotherNotes is in beta, so new sign-ups are paused. Already have an account? Sign in below.</span>
+            </p>
+          )}
+
           {mode !== "sso" && (
             <>
-              <div className="mt-8 flex gap-3">
+              <div className={cn("flex gap-3", SIGNUPS_OPEN ? "mt-8" : "mt-6")}>
                 <button type="button" className={socialPill} onClick={() => continueWith("google")}>
                   <GoogleMark />
                   Google
@@ -370,12 +382,14 @@ export default function AuthPage() {
                     Sign in with your organisation
                   </button>
                 </p>
-                <p>
-                  Don't have an account?{" "}
-                  <button type="button" onClick={() => switchMode("register")} className="font-medium text-[var(--ink)] underline underline-offset-2">
-                    Register
-                  </button>
-                </p>
+                {SIGNUPS_OPEN && (
+                  <p>
+                    Don't have an account?{" "}
+                    <button type="button" onClick={() => switchMode("register")} className="font-medium text-[var(--ink)] underline underline-offset-2">
+                      Register
+                    </button>
+                  </p>
+                )}
                 <p>
                   Forgot your password?{" "}
                   <button type="button" onClick={() => setNotice("Password reset is coming soon. Contact support to regain access.")} className="font-medium text-[var(--ink)] underline underline-offset-2">
@@ -403,43 +417,43 @@ export default function AuthPage() {
         </div>
       </div>
 
-      {/* Right — showcase */}
+      {/* Right — showcase. Just the clip and one line. The "3× faster
+          learning", "turn them into a game" and "used around the world" lines
+          that were here were claims nothing backs, about a product that no
+          longer has games. */}
       <aside className="hidden flex-col items-center justify-center bg-[var(--cream-alt)] px-12 py-16 lg:flex">
-        <p className="lp-serif text-center text-[1.5rem]">
-          <mark className="rounded-sm bg-[#d9f99d] px-1 italic">3× faster learning</mark> for students who play.
-        </p>
-
         <AuthShowcaseMedia />
 
-        <p className="lp-serif mt-2 text-center text-[1.25rem] leading-snug">
+        <p className="lp-serif mt-2 text-center text-[1.5rem] leading-snug">
           Drop your notes in,
           <br />
-          we'll turn them into a game.
+          and see them turn into a lesson.
         </p>
-        <p className="mt-6 text-[12px] text-[var(--muted-2)]">Used by students and teachers around the world</p>
       </aside>
     </div>
   );
 }
 
 /**
- * The media slot on the showcase panel. Replace the contents with the
- * animation when it's ready; the surrounding layout won't need to change.
+ * The media slot on the showcase panel: the same looping clip as the landing
+ * page's "Why" band (a web copy: 720p, silent, about 0.6 MB), so most visitors
+ * already have it cached. The ink background shows while it loads.
  */
 function AuthShowcaseMedia() {
   return (
     <div
       id="auth-showcase-media"
-      className="my-10 flex aspect-[4/3] w-full max-w-lg items-center justify-center rounded-[var(--r-card)] border border-[var(--hair-soft)] bg-[var(--cream)]"
+      className="my-10 aspect-[4/3] w-full max-w-lg overflow-hidden rounded-[var(--r-card)] border border-[var(--hair-soft)] bg-[var(--ink)]"
     >
-      {/* A typographic lockup rather than an image. The raster that was here
-          was the old wordmark with "Playstudy.ai" drawn into it, so it could not
-          be renamed by editing code — and a sign-in page still showing the old
-          name is the one place a rename cannot be half-done. */}
-      <div className="flex flex-col items-center gap-4">
-        <img src="/an-logo.svg" alt="" className="size-20" />
-        <span className="text-3xl font-semibold tracking-tight text-[var(--ink)]">AnotherNotes</span>
-      </div>
+      <video
+        src="/why-desk.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden="true"
+        className="h-full w-full object-cover object-[70%_50%]"
+      />
     </div>
   );
 }

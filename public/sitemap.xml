@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The public pages. The app itself (/dashboard) is behind sign-in and kept out of robots.txt. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://anothernote.app/</loc><lastmod>2026-09-21</lastmod><priority>1.0</priority></url>
+  <url><loc>https://anothernote.app/auth</loc><lastmod>2026-09-21</lastmod><priority>0.5</priority></url>
+  <url><loc>https://anothernote.app/privacy</loc><lastmod>2026-09-21</lastmod><priority>0.3</priority></url>
+  <url><loc>https://anothernote.app/terms</loc><lastmod>2026-09-21</lastmod><priority>0.3</priority></url>
+  <url><loc>https://anothernote.app/contact</loc><lastmod>2026-09-21</lastmod><priority>0.3</priority></url>
+</urlset>

@@ -52,6 +52,9 @@ ENV/
 # keys and a relative API path. Ignoring it would keep it out of CI, which
 # is exactly how the test build ended up pointing at localhost.
 !.env.test
+# .env.off likewise (no sitekey, relative API path): deploy-aws.sh builds with
+# it by default, so a fresh clone must have it to deploy.
+!.env.off
 *.pem
 *.key
 *.crt

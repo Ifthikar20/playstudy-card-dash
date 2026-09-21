@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -13,21 +13,26 @@ import {
   KeyRound,
   Layers,
   LayoutDashboard,
+  Lightbulb,
   Link2,
   ListChecks,
+  Menu,
   Mic,
+  PenLine,
+  Play,
   RotateCcw,
   Timer,
   Upload,
   UserPlus,
   Users,
   Wand2,
+  X,
   Youtube,
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import AgentCursors from "@/components/landing/AgentCursors";
+import { SIGNUPS_OPEN } from "@/lib/signups";
 
 /*
   Marketing landing — the "editorial" world from the reference: cream ground,
@@ -40,8 +45,41 @@ import AgentCursors from "@/components/landing/AgentCursors";
 const inkPill =
   "inline-flex items-center gap-2 rounded-full bg-[var(--ink)] px-6 py-3 text-[15px] font-medium text-[var(--on-ink)] transition-opacity hover:opacity-85";
 const creamPill =
-  "inline-flex items-center gap-2 rounded-full bg-[var(--cream)] px-4 py-2 text-[14px] font-medium text-[var(--ink)] transition-opacity hover:opacity-85";
+  "inline-flex items-center gap-1.5 rounded-full bg-[var(--cream)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--ink)] transition-opacity hover:opacity-85";
 const eyebrow = "text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-2)]";
+const menuRow =
+  "rounded-xl px-4 py-3 text-[16px] font-medium text-[var(--ink)] transition-colors hover:bg-[var(--cream)]";
+
+/* The two video tiles in the "Why AnotherNotes" band (top row, middle; bottom
+   row, left). Put the file in public/ and its path here; an empty `src` shows a
+   placeholder. `focus` is where the crop centres when the tile is narrower than
+   the video (object-position). Both are web copies of the originals: 720p,
+   silent, about 0.6 MB each. */
+const WHY_VIDEOS = {
+  desk: { src: "/why-desk.mp4", focus: "object-[70%_50%]" },
+  shelves: { src: "/why-shelves.mp4", focus: "object-center" },
+};
+
+/* The four things to do on a note, each in a colour from the Features menu
+   palette so the strip reads as four separate actions at a glance. */
+const ONE_PAGE: { icon: LucideIcon; tint: string; title: string; desc: string }[] = [
+  { icon: PenLine, tint: "#FEF3C7", title: "Write on it", desc: "Click any line and type. It saves itself as you go." },
+  { icon: Mic, tint: "#EDE9FE", title: "Be taught it", desc: "A voice reads a section aloud and points as it goes." },
+  { icon: Layers, tint: "#DBEAFE", title: "Flip it", desc: "Flashcards drawn from the section you are reading." },
+  {
+    icon: ListChecks,
+    tint: "#DCFCE7",
+    title: "Be asked about it",
+    desc: "A short quiz per section, with an explanation after every answer.",
+  },
+];
+
+/* Section anchors, shared by the inline nav (lg+) and the menu below it. */
+const NAV_LINKS: [href: string, label: string][] = [
+  ["#how", "How it works"],
+  ["#why", "Why AnotherNotes"],
+  ["#manifesto", "Manifesto"],
+];
 
 /* The Features mega-menu — AnotherNotes's real capabilities, grouped. */
 type Feat = { icon: LucideIcon; title: string; desc: string; tint: string; badge?: string };
@@ -93,136 +131,185 @@ const FEATURE_GROUPS: { label: string; items: Feat[] }[] = [
 
 const LandingPage = () => {
   const [featuresOpen, setFeaturesOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuFeaturesOpen, setMenuFeaturesOpen] = useState(false);
+
+  const closeMenus = () => {
+    setFeaturesOpen(false);
+    setMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (!featuresOpen && !menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setFeaturesOpen(false);
+      setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [featuresOpen, menuOpen]);
 
   return (
     <div className="lp min-h-screen">
-      {/* Floating ink pill nav */}
-      <header className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
-        <nav className="flex w-full max-w-4xl items-center gap-2 rounded-full bg-[var(--ink)] py-2 pl-2.5 pr-2 text-[var(--on-ink)] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
-          <Link to="/" className="flex items-center gap-2.5 pr-2">
-            <img src="/an-logo.svg" alt="" className="size-7" />
-            <span className="text-[15px] font-semibold tracking-tight">AnotherNotes</span>
-            <span className="rounded-full border border-[var(--hair-ink-2)] px-2 py-px text-[10px] font-semibold uppercase tracking-wider text-[var(--on-ink-mut)]">
+      {/* Floating ink pill nav. The full row is ~860px wide, so the section
+          links and Features only sit inline from lg (1024px) and fold into the
+          menu button below that. Every label is nowrap: a label that runs out
+          of room moves into the menu, it never breaks onto a second line.
+          The header lets clicks through; only the pill and the open menus
+          catch them, so the page stays clickable beside the pill. */}
+      <header className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
+        <nav className="pointer-events-auto relative z-50 flex w-full max-w-5xl items-center gap-2 whitespace-nowrap rounded-full bg-[var(--ink)] py-1.5 pl-2 pr-1.5 text-[var(--on-ink)] shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+          <Link to="/" onClick={closeMenus} className="flex shrink-0 items-center gap-2 pr-2">
+            <img src="/an-logo.svg" alt="" className="size-6" />
+            <span className="text-[14px] font-semibold tracking-tight">AnotherNotes</span>
+            <span className="hidden rounded-full border border-[var(--hair-ink-2)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wider text-[var(--on-ink-mut)] sm:inline-block">
               Beta
             </span>
           </Link>
-          <div className="mx-auto hidden items-center gap-1 md:flex">
+          <div className="mx-auto hidden items-center gap-1 lg:flex">
             <button
               type="button"
+              aria-expanded={featuresOpen}
               onClick={() => setFeaturesOpen((o) => !o)}
               className={cn(
-                "flex items-center gap-1 rounded-full px-3 py-1.5 text-[14px] transition-colors hover:bg-white/10 hover:text-[var(--on-ink)]",
+                "flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] transition-colors hover:bg-white/10 hover:text-[var(--on-ink)]",
                 featuresOpen ? "bg-white/10 text-[var(--on-ink)]" : "text-[var(--on-ink-mut)]",
               )}
             >
               Features
-              <ChevronDown className={cn("size-3.5 transition-transform", featuresOpen && "rotate-180")} />
+              <ChevronDown className={cn("size-3 transition-transform", featuresOpen && "rotate-180")} />
             </button>
-            {[
-              ["#how", "How it works"],
-              ["#why", "Why AnotherNotes"],
-              ["#manifesto", "Manifesto"],
-            ].map(([href, label]) => (
+            {NAV_LINKS.map(([href, label]) => (
               <a
                 key={href}
                 href={href}
-                className="rounded-full px-3 py-1.5 text-[14px] text-[var(--on-ink-mut)] transition-colors hover:bg-white/10 hover:text-[var(--on-ink)]"
+                onClick={closeMenus}
+                className="rounded-full px-3 py-1.5 text-[13px] text-[var(--on-ink-mut)] transition-colors hover:bg-white/10 hover:text-[var(--on-ink)]"
               >
                 {label}
               </a>
             ))}
           </div>
-          <Link
-            to="/auth"
-            className="ml-auto rounded-full px-3 py-1.5 text-[14px] text-[var(--on-ink-mut)] transition-colors hover:text-[var(--on-ink)] md:ml-0"
-          >
-            Log in
-          </Link>
-          <Link to="/auth" className={creamPill}>
-            Get started
-            <ArrowRight className="size-3.5" />
-          </Link>
-        </nav>
-
-        {/* Features mega-menu */}
-        {featuresOpen && (
-          <>
+          <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-0">
+            {SIGNUPS_OPEN && (
+              <Link
+                to="/auth"
+                className="hidden rounded-full px-3 py-1.5 text-[13px] text-[var(--on-ink-mut)] transition-colors hover:text-[var(--on-ink)] sm:block"
+              >
+                Log in
+              </Link>
+            )}
+            {/* Under 360px there is only room for the logo and the menu button. */}
+            <Link to="/auth" className={cn(creamPill, "max-[359px]:hidden")}>
+              {SIGNUPS_OPEN ? "Get started" : "Sign in"}
+              <ArrowRight className="size-3" />
+            </Link>
             <button
               type="button"
-              aria-label="Close menu"
-              tabIndex={-1}
-              className="fixed inset-0 z-40 cursor-default"
-              onClick={() => setFeaturesOpen(false)}
-            />
-            <div className="fade-in absolute inset-x-0 top-[calc(100%+0.5rem)] z-50 flex justify-center px-4">
-              <div className="w-full max-w-5xl rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6 shadow-[0_28px_70px_rgba(0,0,0,0.16)] md:p-8 xl:max-w-6xl">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-8 md:grid-cols-3 xl:grid-cols-5">
-                  {FEATURE_GROUPS.map((group) => (
-                    <div key={group.label}>
-                      <p className={eyebrow}>{group.label}</p>
-                      <ul className="mt-4 space-y-4">
-                        {group.items.map((it) => (
-                          <li key={it.title}>
-                            <Link
-                              to="/auth"
-                              onClick={() => setFeaturesOpen(false)}
-                              className="group flex items-start gap-3 rounded-lg -mx-2 px-2 py-1 transition-colors hover:bg-[var(--cream)]"
-                            >
-                              <span
-                                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105"
-                                style={{ backgroundColor: it.tint }}
-                              >
-                                <it.icon className="size-4 text-[var(--ink)]" />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="flex items-center gap-1.5 text-[14px] font-medium text-[var(--ink)]">
-                                  {it.title}
-                                  {it.badge && (
-                                    <span className="rounded bg-[#FEF08A] px-1.5 py-px text-[10px] font-semibold text-[var(--ink)]">{it.badge}</span>
-                                  )}
-                                </span>
-                                <span className="mt-0.5 block text-[12.5px] leading-snug text-[var(--muted)]">{it.desc}</span>
-                              </span>
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              aria-controls="lp-menu"
+              onClick={() => {
+                setFeaturesOpen(false);
+                setMenuOpen((o) => !o);
+              }}
+              className="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-white/10 lg:hidden"
+            >
+              {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </button>
+          </div>
+        </nav>
+
+        {/* Click-away layer for whichever menu is open. It sits under the pill
+            (z-40 against the nav's z-50), so the toggles stay clickable. */}
+        {(featuresOpen || menuOpen) && (
+          <button
+            type="button"
+            aria-label="Close menu"
+            tabIndex={-1}
+            className="pointer-events-auto fixed inset-0 z-40 cursor-default"
+            onClick={closeMenus}
+          />
+        )}
+
+        {/* Features mega-menu (lg+) */}
+        {featuresOpen && (
+          <div className="fade-in absolute inset-x-0 top-[calc(100%+0.5rem)] z-50 hidden justify-center px-4 lg:flex">
+            <div className="pointer-events-auto w-full max-w-5xl rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-8 shadow-[0_28px_70px_rgba(0,0,0,0.16)] xl:max-w-6xl">
+              <FeatureGroups className="grid grid-cols-3 gap-8 xl:grid-cols-5" onPick={closeMenus} />
+            </div>
+          </div>
+        )}
+
+        {/* The menu below lg: Features as a disclosure, then the section links,
+            then on phones the log-in the pill has no room for. It scrolls on
+            its own, since a fixed header never scrolls with the page. */}
+        {menuOpen && (
+          <div
+            id="lp-menu"
+            className="fade-in absolute inset-x-0 top-[calc(100%+0.5rem)] z-50 flex justify-center px-4 lg:hidden"
+          >
+            <div className="pointer-events-auto max-h-[calc(100dvh-6rem)] w-full max-w-5xl overflow-y-auto overscroll-contain rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-2 shadow-[0_28px_70px_rgba(0,0,0,0.16)]">
+              <button
+                type="button"
+                aria-expanded={menuFeaturesOpen}
+                onClick={() => setMenuFeaturesOpen((o) => !o)}
+                className={cn(menuRow, "flex w-full items-center justify-between")}
+              >
+                Features
+                <ChevronDown className={cn("size-4 transition-transform", menuFeaturesOpen && "rotate-180")} />
+              </button>
+              {menuFeaturesOpen && (
+                <FeatureGroups className="grid gap-6 px-4 pb-4 pt-2 sm:grid-cols-2" onPick={closeMenus} />
+              )}
+              {NAV_LINKS.map(([href, label]) => (
+                <a key={href} href={href} onClick={closeMenus} className={cn(menuRow, "block")}>
+                  {label}
+                </a>
+              ))}
+              <div className="mt-2 grid gap-2 border-t border-[var(--hair)] px-2 pb-2 pt-4 sm:hidden">
+                <Link to="/auth" onClick={closeMenus} className={cn(inkPill, "justify-center")}>
+                  {SIGNUPS_OPEN ? "Get started" : "Sign in"}
+                  <ArrowRight className="size-4" />
+                </Link>
+                {SIGNUPS_OPEN && (
+                  <Link
+                    to="/auth"
+                    onClick={closeMenus}
+                    className="rounded-full border border-[var(--hair)] px-6 py-3 text-center text-[15px] font-medium text-[var(--ink)] transition-colors hover:bg-[var(--cream)]"
+                  >
+                    Log in
+                  </Link>
+                )}
               </div>
             </div>
-          </>
+          </div>
         )}
       </header>
 
       {/* Hero */}
       <section className="mx-auto max-w-5xl px-6 pb-16 pt-36 text-center md:pt-44">
-        {/* The four study modes, drifting around the headline as collaborators.
-            The showcase card below stays OUTSIDE this wrapper so no cursor is
-            ever positioned inside its clipped interior. */}
-        <AgentCursors>
-          <h1 className="lp-serif mx-auto max-w-4xl text-[3.25rem] md:text-[4.5rem] lg:text-[5.5rem]">
-            Your notes, <em>in motion.</em>
-          </h1>
-          <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
-            Drop in your notes, slides or a PDF. They come back written up section by section — then read back to you,
-            a line at a time.
-          </p>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link to="/auth" className={inkPill}>
-              Start free
-              <ArrowRight className="size-4" />
-            </Link>
-            <a
-              href="#how"
-              className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[15px] font-medium text-[var(--ink)] underline-offset-4 transition-opacity hover:opacity-70"
-            >
-              See how it works
-              <ArrowUpRight className="size-4" />
-            </a>
-          </div>
-        </AgentCursors>
+        <h1 className="lp-serif mx-auto max-w-4xl text-[3.25rem] md:text-[4.5rem] lg:text-[5.5rem]">
+          Your notes, <em>in motion.</em>
+        </h1>
+        <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
+          Drop in your notes, slides or a PDF. They come back written up section by section — then read back to you,
+          a line at a time.
+        </p>
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+          <Link to="/auth" className={inkPill}>
+            {SIGNUPS_OPEN ? "Start free" : "Sign in"}
+            <ArrowRight className="size-4" />
+          </Link>
+          <a
+            href="#how"
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-[15px] font-medium text-[var(--ink)] underline-offset-4 transition-opacity hover:opacity-70"
+          >
+            See how it works
+            <ArrowUpRight className="size-4" />
+          </a>
+        </div>
 
         {/* Hero showcase — the product in motion, framed as a cinematic card
             with the copy and the numbers set over a dimmed video.
@@ -233,7 +320,7 @@ const LandingPage = () => {
             while the top copy and the three stacked stats each needed ~200px,
             so they overlapped into an unreadable pile. Overlaying only works
             when the card is wider than it is tall. */}
-        <div className="relative mx-auto mt-16 md:mt-0 max-w-5xl overflow-hidden rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--ink)] text-left shadow-[0_28px_70px_rgba(0,0,0,0.12)]">
+        <div className="relative mx-auto mt-16 max-w-5xl overflow-hidden rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--ink)] text-left shadow-[0_28px_70px_rgba(0,0,0,0.12)]">
           <video
             src="/vid-1.mp4"
             autoPlay
@@ -327,10 +414,10 @@ const LandingPage = () => {
             />
             <StepCard
               n="03"
-              icon={<Users className="size-5" />}
-              title="And parents know"
-              body="A parent who set up the account sees what's studied, the time, the accuracy and every question answered. The child cannot unlink them."
-              art="progress"
+              icon={<Lightbulb className="size-5" />}
+              title="Deep understanding"
+              body="See exactly what went right and what went wrong: every question you answered and, for each mistake, the right answer and why. Then retry just the ones you missed."
+              art="understand"
             />
           </div>
         </div>
@@ -344,8 +431,12 @@ const LandingPage = () => {
             Built for the way you <em>actually</em> study
           </h2>
 
+          {/* Three square tiles, then the four-things strip across the full
+              width, then a video beside the parents tile: one clean rectangle at
+              every width. The strip used to be a tall card spanning two rows,
+              which stretched every tile beside it. Videos crop to their tile. */}
           <div className="mt-12 grid gap-4 md:grid-cols-3">
-            <InkTile className="md:col-start-1 md:row-start-1">
+            <InkTile>
               <Mic className="size-5 text-[var(--on-ink-mut)]" />
               <h3 className="lp-serif mt-4 text-[1.5rem]">It reads them to you</h3>
               <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
@@ -354,45 +445,9 @@ const LandingPage = () => {
               </p>
             </InkTile>
 
-            <InkTile className="md:col-start-2 md:row-span-2">
-              <h3 className="lp-serif text-[1.75rem]">One page, four things to do on it</h3>
-              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
-                All of it happens in the same scrolling note. Nothing to switch to, nothing to lose your place in.
-              </p>
-              <ul className="mt-6 divide-y divide-[var(--hair-ink)] border-y border-[var(--hair-ink)]">
-                {[
-                  [GraduationCap, "Write on it", "Click any line and type. It saves itself as you go."],
-                  [Mic, "Be taught it", "A voice reads a section aloud and points as it goes."],
-                  [Layers, "Flip it", "Flashcards drawn from the section you are reading."],
-                  [ListChecks, "Be asked about it", "A short quiz per section, with an explanation after every answer."],
-                ].map(([Icon, t, d]) => {
-                  const I = Icon as typeof GraduationCap;
-                  return (
-                    <li key={t as string} className="flex items-start gap-3 py-3.5">
-                      <I className="mt-0.5 size-4 shrink-0 text-[var(--on-ink-mut)]" />
-                      <div>
-                        <p className="text-[15px] font-medium">{t as string}</p>
-                        <p className="mt-0.5 text-[13px] text-[var(--on-ink-dim)]">{d as string}</p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </InkTile>
+            <VideoTile {...WHY_VIDEOS.desk} />
 
-            <InkTile className="md:col-start-3 md:row-start-1">
-              <Folder className="size-5 text-[var(--on-ink-mut)]" />
-              <h3 className="lp-serif mt-4 text-[1.5rem]">Folders that keep up</h3>
-              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
-                Drag a session onto a folder and it's filed. Subjects, terms, exams — organise it your way.
-              </p>
-            </InkTile>
-
-            <InkTile className="overflow-hidden p-0 md:col-start-1 md:row-start-2">
-              <video src="/video-card4.mp4" autoPlay muted loop playsInline className="h-full w-full object-cover" />
-            </InkTile>
-
-            <InkTile className="md:col-start-3 md:row-start-2">
+            <InkTile>
               <Timer className="size-5 text-[var(--on-ink-mut)]" />
               <h3 className="lp-serif mt-4 text-[1.5rem]">Time that's honest</h3>
               <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
@@ -400,20 +455,39 @@ const LandingPage = () => {
               </p>
             </InkTile>
 
-            {/* Closing band — spans all three columns on a third row, so the
-                parent story reads as its own note rather than a fourth card. */}
-            <InkTile className="min-h-[200px] justify-center md:col-span-3 md:col-start-1 md:row-start-3">
-              <div className="flex flex-col gap-5 md:flex-row md:items-center md:gap-12">
-                <div className="md:w-[18rem] md:shrink-0">
-                  <Users className="size-5 text-[var(--on-ink-mut)]" />
-                  <h3 className="lp-serif mt-4 text-[1.5rem]">Parents can follow along</h3>
-                </div>
-                <p className="max-w-2xl text-[14px] text-[var(--on-ink-mut)]">
-                  Make a profile for a child and they sign in with a name and a six-digit PIN — no email, no inbox to
-                  manage. A learner who already has an account hands you a code instead, and then you see the progress —
-                  streak, time studied, accuracy — not their written work.
+            <InkTile className="min-h-0 md:col-span-3">
+              <div className="md:flex md:items-end md:justify-between md:gap-10">
+                <h3 className="lp-serif text-[1.75rem]">One page, four things to do on it</h3>
+                <p className="mt-2 max-w-md text-[14px] text-[var(--on-ink-mut)] md:mt-0">
+                  All of it happens in the same scrolling note. Nothing to switch to, nothing to lose your place in.
                 </p>
               </div>
+              <ul className="mt-8 grid gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+                {ONE_PAGE.map((item) => (
+                  <li key={item.title}>
+                    <span
+                      className="flex size-10 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: item.tint }}
+                    >
+                      <item.icon className="size-[18px] text-[var(--ink)]" />
+                    </span>
+                    <p className="mt-4 text-[15px] font-medium">{item.title}</p>
+                    <p className="mt-1 text-[13px] leading-snug text-[var(--on-ink-dim)]">{item.desc}</p>
+                  </li>
+                ))}
+              </ul>
+            </InkTile>
+
+            <VideoTile {...WHY_VIDEOS.shelves} />
+
+            <InkTile className="md:col-span-2">
+              <Users className="size-5 text-[var(--on-ink-mut)]" />
+              <h3 className="lp-serif mt-4 text-[1.5rem]">Parents can follow along</h3>
+              <p className="mt-2 max-w-xl text-[14px] text-[var(--on-ink-mut)]">
+                Make a profile for a child and they sign in with a name and a six-digit PIN — no email, no inbox to
+                manage. A learner who already has an account hands you a code instead, and then you see the progress —
+                streak, time studied, accuracy — not their written work.
+              </p>
             </InkTile>
           </div>
         </div>
@@ -449,22 +523,22 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Four things that are true by construction, where there were four
-          unsourced performance claims — a retention rate nothing measures, a
-          speed comparison against nothing, a topic count and a store rating for
-          a product whose own nav still says BETA. The cited band above says of
-          itself "not vanity metrics"; this is what that has to mean. */}
+      {/* Four facts a visitor can act on: what it costs, what comes back, a way
+          in the page doesn't mention anywhere else, and what the study-time
+          number means. Each is true by construction. This band once held
+          unsourced performance claims, then PIN-digit trivia; it gets usage
+          numbers only when there are real ones to show. */}
       <section className="border-y border-[var(--hair)] px-6 py-14">
         <dl className="mx-auto grid max-w-5xl grid-cols-2 gap-y-10 md:grid-cols-4 md:divide-x md:divide-[var(--hair)]">
           {[
-            ["0", "emails needed for a child account"],
-            ["0", "ways a child can unlink a parent"],
-            ["6", "digits in a child's PIN"],
-            ["1", "page per session, start to finish"],
+            ["Free", "every feature, while AnotherNotes is in beta"],
+            ["3", "study tools for every section: notes, a quiz and flashcards"],
+            ["1", "YouTube link is enough to turn a video into notes"],
+            ["0", "idle minutes counted, so the time you see is time you studied"],
           ].map(([v, l]) => (
-            <div key={l} className="text-center md:px-6">
+            <div key={l} className="px-2 text-center md:px-6">
               <dt className="lp-serif text-[3rem] md:text-[3.5rem]">{v}</dt>
-              <dd className="mt-1 text-[13px] text-[var(--muted-2)]">{l}</dd>
+              <dd className="mx-auto mt-1 max-w-[15rem] text-[13px] leading-snug text-[var(--muted-2)]">{l}</dd>
             </div>
           ))}
         </dl>
@@ -476,10 +550,12 @@ const LandingPage = () => {
           Bring your <em>notes.</em>
         </h2>
         <p className="mx-auto mt-4 max-w-md text-[16px] text-[var(--muted)]">
-          Free to start, no card needed. Add a child from the same account, or send a code to a learner who already has one.
+          {SIGNUPS_OPEN
+            ? "Free to start, no card needed. Add a child from the same account, or send a code to a learner who already has one."
+            : "AnotherNotes is in beta, so new sign-ups are paused. Already have an account? Sign in and pick up where you left off."}
         </p>
         <Link to="/auth" className={cn(inkPill, "mt-8")}>
-          Get started free
+          {SIGNUPS_OPEN ? "Get started free" : "Sign in"}
           <ArrowRight className="size-4" />
         </Link>
       </section>
@@ -501,6 +577,78 @@ const LandingPage = () => {
     </div>
   );
 };
+
+/* The feature list, shared by the mega-menu (lg+) and the menu below it. */
+function FeatureGroups({ className, onPick }: { className?: string; onPick: () => void }) {
+  return (
+    <div className={className}>
+      {FEATURE_GROUPS.map((group) => (
+        <div key={group.label}>
+          <p className={eyebrow}>{group.label}</p>
+          <ul className="mt-4 space-y-4">
+            {group.items.map((it) => (
+              <li key={it.title}>
+                <Link
+                  to="/auth"
+                  onClick={onPick}
+                  className="group flex items-start gap-3 rounded-lg -mx-2 px-2 py-1 transition-colors hover:bg-[var(--cream)]"
+                >
+                  <span
+                    className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105"
+                    style={{ backgroundColor: it.tint }}
+                  >
+                    <it.icon className="size-4 text-[var(--ink)]" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-[14px] font-medium text-[var(--ink)]">
+                      {it.title}
+                      {it.badge && (
+                        <span className="rounded bg-[#FEF08A] px-1.5 py-px text-[10px] font-semibold text-[var(--ink)]">{it.badge}</span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-[12.5px] leading-snug text-[var(--muted)]">{it.desc}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* A looping, muted video filling an ink tile — or, until its file exists, a
+   dashed slot marking where the video will go. The video is positioned
+   absolutely so it crops to the tile: in flow, a portrait clip's own aspect
+   ratio would set the row height and stretch every tile beside it. */
+function VideoTile({ src, focus, className }: { src: string; focus?: string; className?: string }) {
+  if (src) {
+    return (
+      <InkTile className={cn("relative overflow-hidden p-0", className)}>
+        <video
+          src={src}
+          autoPlay
+          muted
+          loop
+          playsInline
+          aria-hidden="true"
+          className={cn("absolute inset-0 h-full w-full object-cover", focus)}
+        />
+      </InkTile>
+    );
+  }
+  return (
+    <InkTile className={cn("p-3", className)}>
+      <div className="flex flex-1 flex-col items-center justify-center rounded-[10px] border border-dashed border-[var(--hair-ink-2)] text-center">
+        <span className="flex size-14 items-center justify-center rounded-full border border-[var(--hair-ink-2)]">
+          <Play className="ml-0.5 size-5 text-[var(--on-ink-mut)]" />
+        </span>
+        <p className="mt-4 text-[13px] text-[var(--on-ink-dim)]">Video coming soon</p>
+      </div>
+    </InkTile>
+  );
+}
 
 function InkTile({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
@@ -526,7 +674,7 @@ function StepCard({
   icon: React.ReactNode;
   title: string;
   body: string;
-  art: "upload" | "teach" | "progress";
+  art: "upload" | "teach" | "understand";
 }) {
   return (
     <div className="flex flex-col rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6">
@@ -546,7 +694,7 @@ function StepCard({
 }
 
 /* Quiet monochrome illustrations — ink on cream, gentle motion only. */
-function StepArt({ kind }: { kind: "upload" | "teach" | "progress" }) {
+function StepArt({ kind }: { kind: "upload" | "teach" | "understand" }) {
   if (kind === "upload") {
     return (
       <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -579,20 +727,61 @@ function StepArt({ kind }: { kind: "upload" | "teach" | "progress" }) {
       </svg>
     );
   }
+  // An answer sheet under review. A lens moves down the three answers and
+  // stops on the one that went wrong; its explanation writes itself in
+  // underneath, then the cross turns into a tick (the retry). Two beats of the
+  // page's 2.4s clock: the story has four steps and one beat would rush it.
+  const loop = { dur: "4.8s", repeatCount: "indefinite" } as const;
+  const tick = (y: number) => `M54.5 ${y}l2.5 2.5 4.5-5`;
   return (
-    <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
-      {[
-        [40, 100, 30],
-        [75, 74, 56],
-        [110, 52, 78],
-        [145, 30, 100],
-      ].map(([x, y, h], i) => (
-        <rect key={x} x={x} y={y} width="22" height={h} rx="4" opacity={0.25 + i * 0.2}>
-          <animate attributeName="height" values={`${h};${h + 10};${h}`} dur="2.4s" begin={`${i * 0.3}s`} repeatCount="indefinite" />
-          <animate attributeName="y" values={`${y};${y - 10};${y}`} dur="2.4s" begin={`${i * 0.3}s`} repeatCount="indefinite" />
-        </rect>
-      ))}
-      <path d="M51 92L86 64 121 42 156 22" strokeLinecap="round" opacity="0.9" />
+    <svg
+      viewBox="0 0 200 150"
+      className="h-36 w-48"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="40" y="18" width="104" height="114" rx="8" opacity="0.9" />
+
+      {/* right */}
+      <circle cx="58" cy="44" r="7" opacity="0.9" />
+      <path d={tick(44)} />
+      <path d="M73 44h54" opacity="0.35" />
+
+      {/* wrong, explained, then retried */}
+      <circle cx="58" cy="73" r="7" opacity="0.9" />
+      <path d="M55 70l6 6M61 70l-6 6">
+        <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.6;0.66;0.94;1" {...loop} />
+      </path>
+      <path d={tick(73)} strokeDasharray="11" strokeDashoffset="11">
+        <animate attributeName="stroke-dashoffset" values="11;11;0;0;11" keyTimes="0;0.64;0.72;0.94;1" {...loop} />
+      </path>
+      <path d="M73 73h44" opacity="0.35" />
+      <path d="M73 82h36" strokeWidth="3" opacity="0.45" strokeDasharray="36" strokeDashoffset="36">
+        <animate attributeName="stroke-dashoffset" values="36;36;0;0;36" keyTimes="0;0.38;0.55;0.94;1" {...loop} />
+      </path>
+
+      {/* right */}
+      <circle cx="58" cy="102" r="7" opacity="0.9" />
+      <path d={tick(102)} />
+      <path d="M73 102h50" opacity="0.35" />
+
+      {/* the lens */}
+      <g>
+        <animateTransform
+          attributeName="transform"
+          type="translate"
+          values="0 0;0 0;0 29;0 29;0 58;0 58;0 0"
+          keyTimes="0;0.18;0.3;0.78;0.86;0.93;1"
+          calcMode="spline"
+          keySplines="0 0 1 1;0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1;0 0 1 1;0.4 0 0.2 1"
+          {...loop}
+        />
+        <circle cx="132" cy="44" r="12" />
+        <path d="M140.5 52.5l11 11" strokeWidth="3" />
+      </g>
     </svg>
   );
 }

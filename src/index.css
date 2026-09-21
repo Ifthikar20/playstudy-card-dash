@@ -1120,50 +1120,6 @@ html:has(.lp) #root {
 @media (prefers-reduced-motion: reduce) { .sticky-jump { animation: none; } }
 
 /* ---------------------------------------------------------------------------
-   Hero agent cursors — see src/components/landing/AgentCursors.tsx.
-   The four study modes drift around the hero headline like collaborators in a
-   shared document. This block is ONLY the ambient drift: the on-air state
-   (ink fill vs. hairline outline) and the voice meter are handled in the
-   component with Tailwind transitions and SVG <animate>, so there is nothing
-   here to keep in sync with it.
-
-   Slow by design — 9.6s / 12s / 14.4s are all multiples of the page's 2.4s
-   ambient beat, and every keyframe travels at most 3px across and 6px down,
-   which is the smallest amount of motion that still reads as "live". Transform only, so each cursor
-   stays on the compositor and never dirties layout next to display type.
-   Deliberately no `will-change`: at 3px of travel it buys nothing and would
-   pin four permanent layers.
---------------------------------------------------------------------------- */
-.lp .lp-agent-drift-a { animation: lp-agent-drift-a 9.6s ease-in-out infinite; }
-.lp .lp-agent-drift-b { animation: lp-agent-drift-b 12s ease-in-out infinite; }
-.lp .lp-agent-drift-c { animation: lp-agent-drift-c 14.4s ease-in-out infinite; }
-
-@keyframes lp-agent-drift-a {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  33%      { transform: translate3d(3px, -6px, 0); }
-  66%      { transform: translate3d(-2px, 4px, 0); }
-}
-@keyframes lp-agent-drift-b {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  40%      { transform: translate3d(-3px, 5px, 0); }
-  70%      { transform: translate3d(2px, -4px, 0); }
-}
-@keyframes lp-agent-drift-c {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  30%      { transform: translate3d(2px, 5px, 0); }
-  65%      { transform: translate3d(-3px, -5px, 0); }
-}
-
-/* A CSS-level stop, independent of React state, so the component's motion is
-   never 100% JS-dependent. The component ALSO reads the preference and never
-   starts its timer; this is the backstop. */
-@media (prefers-reduced-motion: reduce) {
-  .lp .lp-agent-drift-a,
-  .lp .lp-agent-drift-b,
-  .lp .lp-agent-drift-c { animation: none; }
-}
-
-/* ---------------------------------------------------------------------------
    The writing surface (src/components/notes/OneSheet.tsx).
 
    The whole section is ONE transparent <textarea> over ONE painted copy of its
