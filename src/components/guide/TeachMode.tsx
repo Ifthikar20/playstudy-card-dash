@@ -29,6 +29,8 @@ import {
 import { bringIntoView, cancelAutoScroll, installScrollTakeover } from "@/lib/guide/scroll";
 import {
   Narrator,
+  browserVoiceName,
+  browserVoicePair,
   createNativeRecognizer,
   loadVoices,
   micBlockedByInsecurePage,
@@ -36,11 +38,13 @@ import {
   secureUrlForThisPage,
   startRecording,
   sttSupport,
+  voiceGender,
   type Recognizer,
   type Recording,
+  type VoiceGender,
 } from "@/lib/guide/speech";
 import { GuidePointer, type Gesture, type MarkColor, type PointerHandle } from "./GuidePointer";
-import { GuideDock, type GuidePhase } from "./GuideDock";
+import { GuideDock, botKind, type GuidePhase, type VoiceOption } from "./GuideDock";
 import { GuideBoard, type BoardHandle } from "./GuideBoard";
 import { prefetchGuideImage } from "./GuideImage";
 import { visualToMarkdown } from "./GuideVisual";
@@ -86,7 +90,7 @@ interface ScriptEntry {
 }
 
 const RATE_KEY = "ps-guide-rate";
-const VOICE_KEY = "ps-guide-voice2"; // "server:<voice id>" | "browser:<voice name>"
+const VOICE_KEY = "ps-guide-voice2"; // { id: "server:<voice id>" | "browser:<voice name>", gender }
 const RATES = [0.85, 1, 1.15, 1.3];
 const NOT_READY = new Set(["notes-missing", "notes-empty"]);
 const QUIZ_ATTR = "data-guide-quiz";
@@ -133,6 +137,49 @@ function writeStored(key: string, value: unknown) {
   }
 }
 
+/** The voice the student picked last time, and whose voice it was. The gender matters
+ *  on its own: when the voices on offer change - a natural voice provider falls over,
+ *  or they open the lesson on another machine - a student who chose the man's voice
+ *  gets the man's voice again, and the character on screen still matches. */
+interface StoredVoice {
+  id: string;
+  gender: VoiceGender | null;
+}
+
+function readVoicePref(): StoredVoice | null {
+  const raw = readStored<string | { id?: string; gender?: string } | null>(VOICE_KEY, null);
+  if (typeof raw === "string") return { id: raw, gender: raw.startsWith("browser:") ? voiceGender(raw.slice(8)) : null };
+  if (raw && typeof raw.id === "string") {
+    return { id: raw.id, gender: raw.gender === "female" || raw.gender === "male" ? raw.gender : null };
+  }
+  return null;
+}
+
+/** The two voices on offer: the natural ones when the server has them, else the browser's own. */
+function voiceChoices(server: GuideVoice[], browser: SpeechSynthesisVoice[]): VoiceOption[] {
+  if (server.length) {
+    return server.map((v) => ({ id: `server:${v.id}`, name: v.name, gender: v.gender ?? null, desc: v.desc }));
+  }
+  return browserVoicePair(browser).map((v) => ({
+    id: `browser:${v.name}`,
+    name: browserVoiceName(v.name),
+    gender: voiceGender(v.name),
+    desc: "your device's own voice",
+  }));
+}
+
+/** The browser voice behind a choice. For a natural voice it's the stand-in if that voice
+ *  fails mid-lesson, so it's the same gender and the face on screen still matches. */
+function browserVoiceFor(choice: VoiceOption, voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (choice.id.startsWith("browser:")) return voices.find((v) => v.name === choice.id.slice(8)) ?? null;
+  return browserVoicePair(voices).find((v) => voiceGender(v.name) === choice.gender) ?? pickVoice(voices);
+}
+
+function applyVoice(n: Narrator, choice: VoiceOption, voices: SpeechSynthesisVoice[]) {
+  n.serverVoice = choice.id.startsWith("server:") ? choice.id.slice(7) : null;
+  n.voice = browserVoiceFor(choice, voices) ?? n.voice;
+}
+
 export function TeachMode({
   sessionId,
   sections,
@@ -162,7 +209,9 @@ export function TeachMode({
   });
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [serverVoices, setServerVoices] = useState<GuideVoice[]>([]);
-  const [voiceId, setVoiceIdState] = useState<string | null>(() => readStored<string | null>(VOICE_KEY, null));
+  const [voicesReady, setVoicesReady] = useState(false);
+  const [greeting, setGreeting] = useState(false); // a newly picked tutor saying hello
+  const [voiceId, setVoiceIdState] = useState<string | null>(() => readVoicePref()?.id ?? null);
   const sttMode = useMemo(() => sttSupport(), []);
 
   // Mutable state for the async flows — refs, so callbacks never go stale.
@@ -408,7 +457,7 @@ export function TeachMode({
         setProgress({ step: k + 1, count: entry.done ? entry.steps.length : 0, title: sec.title });
         const b = board.current;
         const visual = visualOf(step);
-        const hasVisual = !!visual;
+        let hasVisual = !!visual;
         // Aim the pointer at the board's visual; but if the board is closed,
         // minimized or turned off there's nothing to point at, so follow the
         // notes block/quote instead of freezing on a stale, unrelated spot.
@@ -420,8 +469,16 @@ export function TeachMode({
             else pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
           });
         if (visual && b) {
-          b.draw(visual);
-          pointAtBoard();
+          const fresh = b.draw(visual);
+          if (visual.kind === "list" && (!fresh || visual.data.auto)) {
+            // The list is already up and only its highlight moved on - or it's the
+            // notes' own bullets, which the voice reads without announcing - so the
+            // pointer follows the notes at normal pace while the board keeps track.
+            hasVisual = false;
+            pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
+          } else {
+            pointAtBoard();
+          }
         } else {
           pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
         }
@@ -879,36 +936,28 @@ ${visualToMarkdown(spec)}`.trimStart();
     if (narrator.current) narrator.current.rate = r;
     writeStored(RATE_KEY, r);
   };
+  // Nothing to choose from until we know whether the natural voices came through,
+  // so the picker never flashes the browser's voices first.
   const voiceOptions = useMemo(
-    () => [
-      ...serverVoices.map((v) => ({ id: `server:${v.id}`, label: `${v.name} — ${v.desc}` })),
-      ...browserVoices.map((v) => ({
-        id: `browser:${v.name}`,
-        label: `${v.name.replace(/^(Microsoft|Google) /, "").replace(/ - .*$/, "")} (browser)`,
-      })),
-    ],
-    [serverVoices, browserVoices],
+    () => (voicesReady ? voiceChoices(serverVoices, browserVoices) : []),
+    [voicesReady, serverVoices, browserVoices],
   );
+  const speaker = voiceOptions.find((v) => v.id === voiceId) ?? null;
   const setVoice = (id: string) => {
+    const choice = voiceOptions.find((v) => v.id === id);
+    if (!choice) return;
     setVoiceIdState(id);
-    writeStored(VOICE_KEY, id);
+    writeStored(VOICE_KEY, { id, gender: choice.gender });
     const n = narrator.current;
     if (!n) return;
-    if (id.startsWith("server:")) {
-      n.serverVoice = id.slice(7);
-      n.resetServer(); // they asked for this voice: try it even if an earlier one failed
-    }
-    else {
-      n.serverVoice = null;
-      n.voice = browserVoices.find((v) => v.name === id.slice(8)) ?? n.voice;
-    }
+    applyVoice(n, choice, browserVoices);
+    if (n.serverVoice) n.resetServer(); // they asked for this voice: try it even if an earlier one failed
 
     // Let the student hear the voice they just picked (the lesson picks it up on its next sentence).
     const p = phaseRef.current;
     if (p === "paused" || p === "done" || p === "error") {
-      const label = voiceOptions.find((v) => v.id === id)?.label ?? "";
-      const name = label.split(/ — | \(/)[0] || "your tutor";
-      void n.speak(`Hi, I'm ${name}. I'll be your tutor. Press play when you're ready.`);
+      setGreeting(true);
+      void n.speak(`Hi, I'm ${choice.name}. I'll be your tutor. Press play when you're ready.`).finally(() => setGreeting(false));
     }
   };
 
@@ -920,12 +969,12 @@ ${visualToMarkdown(spec)}`.trimStart();
     n.rate = rateRef.current;
     narrator.current = n;
     if (import.meta.env.DEV) (window as unknown as { __gb?: unknown }).__gb = board;
-    const stored = readStored<string | null>(VOICE_KEY, null);
-    loadVoices().then((vs) => {
+    const stored = readVoicePref();
+    const browserReady = loadVoices().then((vs) => {
       setBrowserVoices(vs);
       n.available = n.available && vs.length > 0; // a voiceless synthesizer never speaks: pace captions instead
-      const wanted = stored?.startsWith("browser:") ? vs.find((v) => v.name === stored.slice(8)) : null;
-      n.voice = wanted ?? pickVoice(vs);
+      n.voice = pickVoice(vs);
+      return vs;
     });
 
     // Give every section's blocks their ids up front so a click anywhere works.
@@ -947,18 +996,26 @@ ${visualToMarkdown(spec)}`.trimStart();
     // lands - a second of silence at the start is much easier to follow than an
     // explanation that changes voice halfway through. If it really doesn't
     // arrive, the whole lesson stays in the browser voice.
-    const applyVoices = (sv: GuideVoices | null) => {
-      if (!sv || sv.provider === "browser" || !sv.voices.length) return;
-      setServerVoices(sv.voices);
-      n.useServer(synthesizeSpeech);
-      if (stored?.startsWith("browser:")) return; // they chose a browser voice on purpose
-      const remembered = stored?.startsWith("server:") ? stored.slice(7) : null;
-      const id = remembered && sv.voices.some((v) => v.id === remembered) ? remembered : (sv.default ?? sv.voices[0].id);
-      n.serverVoice = id;
-      setVoiceIdState(`server:${id}`);
+    const applyVoices = (sv: GuideVoices | null, vs: SpeechSynthesisVoice[]) => {
+      const server = sv && sv.provider !== "browser" ? sv.voices : [];
+      if (server.length) {
+        setServerVoices(server);
+        n.useServer(synthesizeSpeech);
+      }
+      setVoicesReady(true);
+      const choices = voiceChoices(server, vs);
+      if (!choices.length) return;
+      // Their earlier pick if it's still on offer, else whoever else is the same gender
+      // (a browser voice, or a natural voice from a provider that's down today), else the default.
+      const sameGender = stored?.gender ? choices.find((c) => c.gender === stored.gender) : undefined;
+      const choice =
+        choices.find((c) => c.id === stored?.id) ?? sameGender ?? choices.find((c) => c.id === `server:${sv?.default}`) ?? choices[0];
+      applyVoice(n, choice, vs);
+      setVoiceIdState(choice.id);
     };
     (async () => {
-      applyVoices(await Promise.race([fetchGuideVoices(), sleep(6000).then(() => null)]));
+      const sv = await Promise.race([fetchGuideVoices(), sleep(6000).then(() => null)]);
+      applyVoices(sv, await browserReady);
       play(start, 0);
     })();
 
@@ -1039,6 +1096,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (t?.closest?.(".guide-voicemenu")) return; // picking a tutor: let the menu have the keys
       const a = actions.current;
       if (!a) return;
       if (e.key === " ") {
@@ -1061,6 +1119,7 @@ ${visualToMarkdown(spec)}`.trimStart();
           host={hostRef.current}
           speaking={phase === "speaking" || phase === "answering"}
           caption={phase === "listening" || phase === "thinking" ? null : caption}
+          speaker={speaker && { name: speaker.name, kind: botKind(speaker) }}
         />
       )}
       <GuideBoard ref={board} enabled={boardEnabled} onClose={onBoardClose} onPin={pinVisual} />
@@ -1075,6 +1134,7 @@ ${visualToMarkdown(spec)}`.trimStart();
         voices={voiceOptions}
         voiceId={voiceId}
         onVoice={setVoice}
+        greeting={greeting}
         askOpen={askOpen}
         onToggleAsk={() => setAskOpen((v) => !v)}
         onAsk={ask}

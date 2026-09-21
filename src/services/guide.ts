@@ -82,6 +82,16 @@ export interface GuideTable {
   rows: string[][];
 }
 
+/** The principles, laws, stages or key points a passage sets out, listed on the board. */
+export interface GuideList {
+  title?: string;
+  items: { label: string; detail?: string }[];
+  /** The item being explained right now; omitted when the whole list is introduced or recapped. */
+  focus?: number;
+  /** Put up by the server from the notes' own bullets (the voice doesn't announce it). */
+  auto?: boolean;
+}
+
 /** A dated timeline; events are placed by their real year, so the gaps show. */
 export interface GuideTimeline {
   title?: string;
@@ -196,6 +206,8 @@ export interface GuideStep {
   draw_labels?: GuideLabel[] | null;
   /** Optional comparison table. */
   table?: GuideTable | null;
+  /** Optional list of principles / key points, with the one being explained highlighted. */
+  list?: GuideList | null;
   /** Optional dated timeline. */
   timeline?: GuideTimeline | null;
   /** Optional number line / scale strip. */
@@ -221,6 +233,7 @@ export interface GuideStep {
 export type VisualSpec =
   | { kind: "math"; data: GuideMath }
   | { kind: "table"; data: GuideTable }
+  | { kind: "list"; data: GuideList }
   | { kind: "chart"; data: GuideChart }
   | { kind: "timeline"; data: GuideTimeline }
   | { kind: "scale"; data: GuideScale }
@@ -242,6 +255,7 @@ export type VisualKind = VisualSpec["kind"];
 export const VISUAL_LABEL: Record<VisualKind, string> = {
   math: "Equation",
   table: "Table",
+  list: "List",
   chart: "Chart",
   timeline: "Timeline",
   scale: "Scale",
@@ -261,6 +275,7 @@ export const VISUAL_LABEL: Record<VisualKind, string> = {
 /** The one visual a step carries, if any. Order matches the server's priority. */
 export function visualOf(step: GuideStep): VisualSpec | null {
   if (step.table) return { kind: "table", data: step.table };
+  if (step.list) return { kind: "list", data: step.list };
   if (step.chart) return { kind: "chart", data: step.chart };
   if (step.timeline) return { kind: "timeline", data: step.timeline };
   if (step.scale) return { kind: "scale", data: step.scale };
@@ -285,6 +300,8 @@ export function visualKey(spec: VisualSpec | null): string {
   if (spec.kind === "math") return "math:" + spec.data.latex;
   if (spec.kind === "molecule") return "molecule:" + spec.data.smiles;
   if (spec.kind === "image") return "image:" + spec.data.query;
+  // the same list with the highlight on another item is still the same list
+  if (spec.kind === "list") return "list:" + JSON.stringify({ ...spec.data, focus: undefined });
   return spec.kind + ":" + JSON.stringify(spec.data);
 }
 
@@ -425,12 +442,14 @@ export interface GuideVoice {
   name: string;
   lang: string;
   desc: string;
+  gender?: "female" | "male" | null;
 }
 
 export interface GuideVoices {
-  /** "edge" | "elevenlabs" | "openai", or "browser" when no natural voice is available. */
+  /** "speechify" | "elevenlabs" | "edge" | "openai", or "browser" when no natural voice is available. */
   provider: string;
   default: string | null;
+  /** The two voices on offer: a woman's and a man's, the default first. */
   voices: GuideVoice[];
 }
 

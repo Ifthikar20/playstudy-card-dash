@@ -364,6 +364,86 @@ html:has(.lp) #root {
 .guide-eq-pink i { background: #ec4899; }
 .dark .guide-bubble { background: rgba(24, 24, 27, 0.97); color: #fafafa; border-color: rgba(236, 72, 153, 0.45); }
 .dark .guide-bubble-head { color: #f472b6; }
+.guide-bubble-role { font-weight: 600; letter-spacing: 0.08em; opacity: 0.6; }
+
+/* ---- Teach mode: the little tutor who is talking (see GuideBot.tsx) ------- */
+/* Pixel art, so everything moves in whole pixels: it bobs, blinks, and works
+   its mouth while the voice speaks, leans in to listen and looks away to think. */
+.guide-bot { display: inline-block; flex-shrink: 0; line-height: 0; transition: transform 0.25s ease; }
+.guide-bot svg { display: block; overflow: visible; }
+.bot-float { animation: bot-bob 2s steps(1) infinite; }
+.bot-shadow { transform-box: fill-box; transform-origin: 50% 50%; animation: bot-shadow 2s steps(1) infinite; }
+.bot-eyes { transform-box: fill-box; transform-origin: 50% 65%; animation: bot-blink 5.4s infinite; }
+.bot-mouth-open { opacity: 0; }
+.bot-glow { opacity: 0; }
+.bot-dots { opacity: 0; }
+@keyframes bot-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.5px); } }
+@keyframes bot-shadow { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(0.88); } }
+@keyframes bot-blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  95%, 97% { transform: scaleY(0.1); }
+}
+/* talking: the mouth opens and shuts on an uneven beat, and the bob speeds up */
+.guide-bot[data-mood="talking"] .bot-float { animation-duration: 0.9s; }
+.guide-bot[data-mood="talking"] .bot-mouth-open { animation: bot-talk 0.44s steps(1) infinite; }
+.guide-bot[data-mood="talking"] .bot-mouth-shut { animation: bot-talk-shut 0.44s steps(1) infinite; }
+@keyframes bot-talk { 0%, 40% { opacity: 1; } 41%, 70% { opacity: 0; } 71%, 100% { opacity: 1; } }
+@keyframes bot-talk-shut { 0%, 40% { opacity: 0; } 41%, 70% { opacity: 1; } 71%, 100% { opacity: 0; } }
+/* listening: leans towards you, with the antenna lit */
+.guide-bot[data-mood="listening"] { transform: rotate(-5deg); }
+.guide-bot[data-mood="listening"] .bot-glow { animation: bot-listen 1.2s ease-in-out infinite; }
+@keyframes bot-listen { 0%, 100% { opacity: 0.15; r: 2.6; } 50% { opacity: 0.55; r: 3.6; } }
+/* thinking: eyes look away, and a thought trails off over its head */
+.guide-bot[data-mood="thinking"] .bot-eyes { transform: translate(0.5px, -0.4px); animation: none; }
+.guide-bot[data-mood="thinking"] .bot-dots { opacity: 1; }
+.guide-bot[data-mood="thinking"] .bot-dots rect { animation: bot-think 1.5s ease-in-out infinite; }
+.guide-bot[data-mood="thinking"] .bot-dots rect:nth-child(2) { animation-delay: 0.2s; }
+.guide-bot[data-mood="thinking"] .bot-dots rect:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bot-think { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+/* the one standing above the controls */
+.guide-bot-stage {
+  pointer-events: auto; display: block; padding: 0; border: 0; background: none;
+  cursor: pointer; animation: bot-arrive 0.45s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.guide-bot-stage:hover .bot-float { animation-duration: 0.7s; }
+@keyframes bot-arrive { from { opacity: 0; transform: translateY(14px) scale(0.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .bot-float, .bot-shadow, .bot-eyes, .guide-bot-stage,
+  .guide-bot[data-mood="talking"] .bot-mouth-open,
+  .guide-bot[data-mood="talking"] .bot-mouth-shut,
+  .guide-bot[data-mood="listening"] .bot-glow,
+  .guide-bot[data-mood="thinking"] .bot-dots rect { animation: none; }
+  .guide-bot[data-mood="talking"] .bot-mouth-open { opacity: 1; }
+  .guide-bot[data-mood="talking"] .bot-mouth-shut { opacity: 0; }
+}
+
+/* ---- Teach mode: picking which of the two tutors speaks ------------------- */
+.guide-voicebtn {
+  display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+  height: 32px; padding: 0 8px 0 5px; border-radius: 9999px;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--background));
+  font-size: 12px; font-weight: 600; color: hsl(var(--muted-foreground));
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.guide-voicebtn:hover, .guide-voicebtn[aria-expanded="true"] { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.guide-voicemenu {
+  display: flex; flex-direction: column; gap: 4px;
+  width: min(260px, calc(100vw - 2rem)); padding: 6px;
+  border-radius: 18px; border: 1px solid rgba(236, 72, 153, 0.25);
+  background: hsl(var(--background) / 0.97); backdrop-filter: blur(8px);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.35);
+  animation: guide-pop 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.guide-voicemenu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px 6px 6px; border-radius: 14px; border: 1px solid transparent;
+  text-align: left; color: hsl(var(--foreground));
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.guide-voicemenu-item:hover { background: hsl(var(--muted)); }
+.guide-voicemenu-item.is-on { border-color: rgba(236, 72, 153, 0.45); background: rgba(236, 72, 153, 0.08); }
+.guide-voicemenu-name { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.guide-voicemenu-desc { font-size: 11px; color: hsl(var(--muted-foreground)); line-height: 1.2; }
 
 /* Teach mode: highlighter marks over the words being explained. A real marker's
    stroke — slightly skewed, soft ends, sweeps in from the left — in a colour
@@ -408,7 +488,10 @@ html:has(.lp) #root {
 .guide-board {
   position: fixed;
   right: 24px;
-  top: 50%;
+  /* sits just above centre and never grows into the tutor and controls in the
+     corner below it; a visual taller than that scrolls inside the board */
+  top: calc(50% - 52px);
+  max-height: calc(100vh - 264px);
   transform: translateY(-50%);
   z-index: 60;
   width: min(560px, 46vw);
@@ -448,6 +531,7 @@ html:has(.lp) #root {
 .guide-board-body {
   position: relative;
   min-height: 132px;
+  overflow-y: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -530,7 +614,8 @@ html:has(.lp) #root {
   .guide-board {
     right: 12px;
     left: 12px;
-    bottom: 92px;
+    /* clear of the tutor and the controls standing in the bottom-right corner */
+    bottom: 148px;
     top: auto;
     transform: none;
     width: auto;
@@ -722,6 +807,48 @@ html:has(.lp) #root {
 .guide-table-grid tbody tr:last-child th,
 .guide-table-grid tbody tr:last-child td { border-bottom: none; }
 
+/* ---- Teach mode whiteboard: a list of principles ------------------------- */
+/* Each item is written on left to right (staggered), the one being explained gets
+   a filled number and a marker stroke, the ones already covered get a tick. */
+.guide-list { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.guide-list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.guide-list-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 5px 9px; border-radius: 10px;
+  font-family: "Patrick Hand", cursive; color: hsl(var(--foreground));
+  transition: background-color 0.35s ease;
+  animation: guide-write 0.75s steps(24, end) both;
+}
+.guide-list-num {
+  flex-shrink: 0; display: inline-grid; place-items: center;
+  width: 24px; height: 24px; margin-top: 1px; border-radius: 9999px;
+  border: 1.5px solid hsl(var(--border));
+  font-size: 14px; font-weight: 700; line-height: 1; color: hsl(var(--muted-foreground));
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+.guide-list-text { display: flex; flex-direction: column; min-width: 0; }
+.guide-list-label { position: relative; z-index: 0; align-self: flex-start; font-size: 18px; line-height: 1.25; }
+.guide-list-detail { font-size: 14.5px; line-height: 1.3; color: hsl(var(--muted-foreground)); }
+.guide-list-item[data-state="focus"] { background: rgba(236, 72, 153, 0.07); }
+.guide-list-item[data-state="focus"] .guide-list-num {
+  background: #ec4899; border-color: #ec4899; color: #fff;
+  box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.18);
+}
+.guide-list-item[data-state="focus"] .guide-list-label::before {
+  content: ""; position: absolute; inset: 1px -4px 0; z-index: -1;
+  border-radius: 0.45em 0.25em 0.4em 0.3em;
+  background: linear-gradient(100deg, rgba(253, 224, 71, 0) 0.5%, rgba(253, 224, 71, 0.9) 3%, rgba(253, 224, 71, 0.78) 95%, rgba(253, 224, 71, 0) 99%);
+  transform-origin: left center;
+  animation: guide-mark-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.guide-list-item[data-state="done"] .guide-list-num { background: rgba(236, 72, 153, 0.12); border-color: transparent; color: #db2777; }
+.dark .guide-list-item[data-state="focus"] .guide-list-label::before { background: rgba(236, 72, 153, 0.32); }
+.dark .guide-list-item[data-state="done"] .guide-list-num { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
+@media (prefers-reduced-motion: reduce) {
+  .guide-list-item,
+  .guide-list-item[data-state="focus"] .guide-list-label::before { animation-duration: 0.01ms; }
+}
+
 /* ---- Teach mode whiteboard: timeline, scale, Venn ------------------------ */
 .guide-timeline, .guide-scale, .guide-venn, .guide-periodic,
 .guide-circuit, .guide-forces, .guide-geometry, .guide-code { width: 100%; }
@@ -837,7 +964,7 @@ html:has(.lp) #root {
 .guide-board-traffic:hover .guide-board-dot-full::before { content: "\2922"; opacity: 1; }
 .guide-board.guide-board-full {
   left: 3vw; right: 3vw; top: 4vh; bottom: 4vh;
-  width: auto; height: auto;
+  width: auto; height: auto; max-height: none;
   transform: none;
   animation: none;
 }
@@ -877,3 +1004,108 @@ html:has(.lp) #root {
     display: none;
   }
 }
+
+/* ---- Sticky notes -------------------------------------------------------- */
+/* Paper a student sticks things to: the phrase they highlighted, a key idea the
+   AI marked, a reminder they typed. Written in the same hand as the whiteboard,
+   tilted a hair so a wall of them looks stuck up rather than laid out. */
+.sticky-note {
+  --sticky-paper: #fef3c7;
+  --sticky-edge: #fcd77f;
+  --sticky-ink: #432c07;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 132px;
+  padding: 14px 14px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--sticky-edge);
+  background: var(--sticky-paper);
+  color: var(--sticky-ink);
+  font-family: "Patrick Hand", ui-rounded, cursive;
+  box-shadow: 0 1px 2px rgba(23, 18, 5, 0.06), 0 10px 20px -14px rgba(23, 18, 5, 0.5);
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.sticky-note:hover, .sticky-note:focus-within {
+  transform: rotate(0deg) translateY(-2px);
+  box-shadow: 0 2px 4px rgba(23, 18, 5, 0.07), 0 16px 28px -16px rgba(23, 18, 5, 0.55);
+}
+.sticky-note[data-color="pink"]   { --sticky-paper: #fce7f3; --sticky-edge: #f8bcdc; --sticky-ink: #500724; }
+.sticky-note[data-color="green"]  { --sticky-paper: #dcfce7; --sticky-edge: #a7e9bf; --sticky-ink: #052e16; }
+.sticky-note[data-color="blue"]   { --sticky-paper: #dbeafe; --sticky-edge: #a9c9fb; --sticky-ink: #172554; }
+.sticky-note[data-color="violet"] { --sticky-paper: #ede9fe; --sticky-edge: #c9bdfb; --sticky-ink: #2e1065; }
+.dark .sticky-note                      { --sticky-paper: #2f2610; --sticky-edge: #57451a; --sticky-ink: #fde3a7; }
+.dark .sticky-note[data-color="pink"]   { --sticky-paper: #331628; --sticky-edge: #5b2347; --sticky-ink: #fbcfe8; }
+.dark .sticky-note[data-color="green"]  { --sticky-paper: #14291c; --sticky-edge: #1f4a31; --sticky-ink: #bbf7d0; }
+.dark .sticky-note[data-color="blue"]   { --sticky-paper: #131f38; --sticky-edge: #1e3a6b; --sticky-ink: #bfdbfe; }
+.dark .sticky-note[data-color="violet"] { --sticky-paper: #211a3a; --sticky-edge: #3c2f6b; --sticky-ink: #ddd6fe; }
+.sticky-note-text {
+  font-size: 17px; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+}
+.sticky-note-input {
+  flex: 1; min-height: 78px; resize: none; width: 100%;
+  background: transparent; border: 0; outline: none; color: inherit;
+  font: inherit; font-size: 17px; line-height: 1.35;
+}
+.sticky-note-input::placeholder { color: currentColor; opacity: 0.45; }
+.sticky-note-foot {
+  margin-top: auto; display: flex; align-items: center; gap: 6px; min-height: 18px;
+  font-family: inherit; font-size: 12px; letter-spacing: 0.01em; opacity: 0.66;
+}
+.sticky-note-tools {
+  position: absolute; top: 6px; right: 6px; display: flex; gap: 1px;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.sticky-note:hover .sticky-note-tools, .sticky-note:focus-within .sticky-note-tools { opacity: 1; }
+.sticky-note-tools button, .sticky-note-action {
+  display: grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 7px; color: inherit; opacity: 0.65; transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+.sticky-note-tools button:hover, .sticky-note-action:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
+.sticky-note-action:disabled { opacity: 0.3; }
+.dark .sticky-note-tools button:hover, .dark .sticky-note-action:hover { background: rgba(255, 255, 255, 0.12); }
+.sticky-swatch {
+  width: 14px; height: 14px; border-radius: 9999px;
+  border: 1px solid rgba(23, 18, 5, 0.18); background: #fef3c7;
+  transition: transform 0.15s ease;
+}
+.sticky-swatch[data-color="pink"] { background: #fce7f3; }
+.sticky-swatch[data-color="green"] { background: #dcfce7; }
+.sticky-swatch[data-color="blue"] { background: #dbeafe; }
+.sticky-swatch[data-color="violet"] { background: #ede9fe; }
+.sticky-swatch:hover { transform: scale(1.18); }
+.sticky-swatch.is-on { box-shadow: 0 0 0 2px currentColor; }
+.sticky-empty {
+  display: block; width: 100%; padding: 20px 18px;
+  border: 1px dashed hsl(var(--border)); border-radius: 16px;
+  background: hsl(var(--card) / 0.4);
+  font-size: 13.5px; line-height: 1.5; text-align: left; color: hsl(var(--muted-foreground));
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.sticky-empty:hover { background: hsl(var(--muted) / 0.5); border-color: hsl(var(--muted-foreground) / 0.4); }
+@media (prefers-reduced-motion: reduce) {
+  .sticky-note, .sticky-note:hover, .sticky-note:focus-within { transform: none; transition: none; }
+}
+/* The button that floats over a phrase you've just highlighted in your notes. */
+.sticky-selection {
+  position: fixed; z-index: 140; transform: translate(-50%, -100%);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
+  animation: guide-pop 0.16s ease-out;
+}
+.sticky-selection:hover { background: hsl(var(--muted)); }
+.sticky-selection:disabled { opacity: 0.7; }
+/* Arriving from a sticky note: show which passage it was kept from. */
+.sticky-jump { animation: sticky-jump 1.8s ease-out; border-radius: 12px; }
+@keyframes sticky-jump {
+  0%, 60% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.08); }
+  100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .sticky-jump { animation: none; } }

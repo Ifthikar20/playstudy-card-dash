@@ -1,16 +1,44 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Keyboard, Loader2, Mic, Pause, Play, Send, X } from "lucide-react";
+import { Check, Keyboard, Loader2, Mic, Pause, Play, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SttMode } from "@/lib/guide/speech";
+import { GuideBot, type BotKind, type BotMood } from "./GuideBot";
 
 /*
-  Teach mode's controls: one small pill in the bottom-right corner — status,
-  play/pause, mic, typed question, speed, voice, close. What is being said shows
-  in the speech bubble next to the pointer, not here.
+  Teach mode's controls: the tutor standing in the bottom-right corner with one
+  small pill under them — status, play/pause, mic, typed question, speed, which
+  tutor is speaking, close. What is being said shows in the speech bubble next to
+  the pointer, not here.
 */
 
 export type GuidePhase = "loading" | "speaking" | "paused" | "listening" | "thinking" | "answering" | "done" | "error";
+
+/** One of the two voices on offer, and the character that goes with it. */
+export interface VoiceOption {
+  /** "server:<id>" for a natural voice, "browser:<name>" for the browser's own. */
+  id: string;
+  name: string;
+  gender: "female" | "male" | null;
+  /** A few words about how it sounds ("bright", "warm"). */
+  desc?: string;
+}
+
+export const botKind = (voice: { gender?: "female" | "male" | null } | null | undefined): BotKind =>
+  voice?.gender === "female" ? "female" : voice?.gender === "male" ? "male" : "neutral";
+
+/** Below this the whiteboard lies across the bottom of the screen, so the tutor stands smaller
+ *  (and index.css lifts the board) to leave the board's own buttons clear. */
+function useNarrow() {
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches);
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 900px)");
+    const onChange = () => setNarrow(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
+}
 
 export interface GuideDockProps {
   phase: GuidePhase;
@@ -20,10 +48,12 @@ export interface GuideDockProps {
   progress: { step: number; count: number; title: string };
   rate: number;
   onCycleRate: () => void;
-  /** Voice choices: natural server voices first ("server:<id>"), then browser voices ("browser:<name>"). */
-  voices: { id: string; label: string }[];
+  /** The two voices to choose from: a woman's and a man's. */
+  voices: VoiceOption[];
   voiceId: string | null;
   onVoice: (id: string) => void;
+  /** True while a newly picked voice introduces itself, so the tutor's mouth moves. */
+  greeting?: boolean;
   askOpen: boolean;
   onToggleAsk: () => void;
   onAsk: (text: string) => void;
@@ -50,21 +80,34 @@ function IconButton({ title, onClick, children, active }: { title: string; onCli
   );
 }
 
-const shortName = (label: string) => label.split(/ — | \(/)[0];
-
 export function GuideDock(props: GuideDockProps) {
-  const { phase, question, interim, error, progress, rate, voices, voiceId, askOpen, sttMode } = props;
+  const { phase, question, interim, error, progress, rate, voices, voiceId, askOpen, sttMode, greeting } = props;
   const [draft, setDraft] = useState("");
+  const [picking, setPicking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const narrow = useNarrow();
 
   useEffect(() => {
     if (askOpen) inputRef.current?.focus();
   }, [askOpen]);
 
+  // Close the tutor picker on a click anywhere else.
+  useEffect(() => {
+    if (!picking) return;
+    const onDown = (e: PointerEvent) => {
+      if (!dockRef.current?.contains(e.target as Node)) setPicking(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [picking]);
+
   const busy = phase === "loading" || phase === "thinking";
   const playing = phase === "speaking" || phase === "answering" || phase === "listening" || busy;
   const listening = phase === "listening";
   const talking = phase === "speaking" || phase === "answering";
+  const speaker = voices.find((v) => v.id === voiceId) ?? null;
+  const mood: BotMood = talking || greeting ? "talking" : listening ? "listening" : busy ? "thinking" : "idle";
 
   let status: string;
   if (phase === "speaking") status = progress.step ? `Teaching · ${progress.step}${progress.count ? `/${progress.count}` : ""}` : "Teaching";
@@ -88,7 +131,51 @@ export function GuideDock(props: GuideDockProps) {
   };
 
   return createPortal(
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[130] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
+    <div
+      ref={dockRef}
+      className="pointer-events-none fixed bottom-4 right-4 z-[130] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && picking) {
+          e.stopPropagation();
+          setPicking(false);
+        }
+      }}
+    >
+      {speaker && (
+        <button
+          key={speaker.id}
+          type="button"
+          className="guide-bot-stage"
+          onClick={() => setPicking((p) => !p)}
+          aria-label={`${speaker.name} is reading. Change voice`}
+        >
+          <GuideBot kind={botKind(speaker)} mood={mood} size={narrow ? 50 : 74} title={`${speaker.name} — tap to change voice`} />
+        </button>
+      )}
+      {picking && voices.length > 1 && (
+        <div className="guide-voicemenu pointer-events-auto" role="menu" aria-label="Voice">
+          {voices.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={v.id === voiceId}
+              className={cn("guide-voicemenu-item", v.id === voiceId && "is-on")}
+              onClick={() => {
+                props.onVoice(v.id);
+                setPicking(false);
+              }}
+            >
+              <GuideBot kind={botKind(v)} mood={v.id === voiceId ? "talking" : "idle"} size={38} />
+              <span className="flex flex-1 flex-col gap-0.5">
+                <span className="guide-voicemenu-name">{v.name}</span>
+                {v.desc && <span className="guide-voicemenu-desc">{v.desc}</span>}
+              </span>
+              {v.id === voiceId && <Check className="size-4 text-pink-500" />}
+            </button>
+          ))}
+        </div>
+      )}
       {error && (
         <div className="pointer-events-auto max-w-sm rounded-xl border border-destructive/40 bg-background/95 px-3 py-2 text-xs text-destructive shadow-lg backdrop-blur">
           {error}
@@ -175,20 +262,19 @@ export function GuideDock(props: GuideDockProps) {
         >
           {rate}×
         </button>
-        {voices.length > 1 && (
-          <select
-            value={voiceId ?? ""}
-            onChange={(e) => props.onVoice(e.target.value)}
-            title="Voice"
+        {voices.length > 1 && speaker && (
+          <button
+            type="button"
+            className="guide-voicebtn"
+            onClick={() => setPicking((p) => !p)}
+            title={`${speaker.name} is reading — change voice`}
             aria-label="Voice"
-            className="hidden h-8 max-w-[120px] rounded-full border border-border bg-background px-2 text-xs text-muted-foreground sm:block"
+            aria-haspopup="menu"
+            aria-expanded={picking}
           >
-            {voices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {shortName(v.label)}
-              </option>
-            ))}
-          </select>
+            <GuideBot kind={botKind(speaker)} variant="head" size={20} mood={mood === "talking" ? "talking" : "idle"} />
+            <span className="hidden sm:inline">{speaker.name}</span>
+          </button>
         )}
         <IconButton title="Close Teach mode (Esc)" onClick={props.onClose}>
           <X className="size-4" />

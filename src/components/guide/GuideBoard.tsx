@@ -19,8 +19,9 @@ import { GuideVisual, blankVisual, canBlank } from "./GuideVisual";
 */
 
 export interface BoardHandle {
-  /** Put a visual on the board (erasing whatever's there). */
-  draw(spec: VisualSpec): void;
+  /** Put a visual on the board (erasing whatever's there). False when that visual was
+   *  already up - it stays, and a list just moves its highlight to the new focus. */
+  draw(spec: VisualSpec): boolean;
   /** Shorthand for a line of LaTeX. */
   write(latex: string, opts?: { replace?: boolean }): void;
   clear(): void;
@@ -124,11 +125,17 @@ export const GuideBoard = forwardRef<
     setItem(next);
   };
 
-  const show = (spec: VisualSpec) => {
-    const next: BoardItem = { id: ++idRef.current, spec, mode: "writing" };
+  const show = (spec: VisualSpec): boolean => {
     // Keep the same visual on the board across consecutive steps that discuss it,
     // instead of erasing and redrawing the identical thing (which would flicker).
-    if (itemRef.current && itemRef.current.mode === "writing" && visualKey(itemRef.current.spec) === visualKey(spec)) return;
+    // A list stays up the same way; only its highlight moves to the item now being
+    // explained (same id, so it isn't redrawn and keeps its ticks).
+    const cur = itemRef.current;
+    if (cur && cur.mode === "writing" && visualKey(cur.spec) === visualKey(spec)) {
+      if (spec.kind === "list") put({ ...cur, spec });
+      return false;
+    }
+    const next: BoardItem = { id: ++idRef.current, spec, mode: "writing" };
     setShown(true);
     shownRef.current = true;
     setReviewing(null);
@@ -142,6 +149,7 @@ export const GuideBoard = forwardRef<
     } else {
       put(next);
     }
+    return true;
   };
 
   // While the board floats over the right of the page, the notes underneath move
@@ -158,7 +166,7 @@ export const GuideBoard = forwardRef<
     ref,
     () => ({
       draw(spec) {
-        if (spec) show(spec);
+        return spec ? show(spec) : false;
       },
       write(latex, opts) {
         const clean = (latex || "").trim();
@@ -181,7 +189,8 @@ export const GuideBoard = forwardRef<
         setReviewing(null);
         put(null);
       },
-      lastLine: () => elRef.current,
+      // the part being talked about (a list's highlighted item), else the whole visual
+      lastLine: () => elRef.current?.querySelector<HTMLElement>("[data-board-focus]") ?? elRef.current,
       visible: () => shownRef.current,
     }),
     [],

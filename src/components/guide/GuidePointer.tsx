@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { GuideBot, type BotKind } from "./GuideBot";
 
 /*
   The AI's pointer — a big pink cursor that lives inside the page (not the OS
@@ -81,8 +82,17 @@ const RGB: Record<MarkColor, string> = {
   pink: "236, 72, 153",
 };
 
-export const GuidePointer = forwardRef<PointerHandle, { host: HTMLElement; speaking: boolean; caption: string | null }>(
-  function GuidePointer({ host, speaking, caption }, ref) {
+/** Whose voice is talking: the tutor's name and character, so it reads as a person teaching. */
+export interface Speaker {
+  name: string;
+  kind: BotKind;
+}
+
+export const GuidePointer = forwardRef<
+  PointerHandle,
+  { host: HTMLElement; speaking: boolean; caption: string | null; speaker?: Speaker | null }
+>(
+  function GuidePointer({ host, speaking, caption, speaker }, ref) {
     const layerRef = useRef<HTMLDivElement>(null);
     const cursorRef = useRef<HTMLDivElement>(null);
     const pos = useRef<Pt>({ x: 0, y: 0 });
@@ -341,7 +351,15 @@ export const GuidePointer = forwardRef<PointerHandle, { host: HTMLElement; speak
           {caption ? (
             <div key={caption} className={cn("guide-bubble", bubbleLeft && "guide-bubble-left")}>
               <div className="guide-bubble-head">
-                PlayStudy AI
+                {speaker ? (
+                  <>
+                    <GuideBot kind={speaker.kind} variant="head" size={22} mood={speaking ? "talking" : "idle"} />
+                    {speaker.name}
+                    <span className="guide-bubble-role">· PlayStudy AI</span>
+                  </>
+                ) : (
+                  "PlayStudy AI"
+                )}
                 {speaking && (
                   <span className="guide-eq guide-eq-pink">
                     <i />
@@ -353,8 +371,15 @@ export const GuidePointer = forwardRef<PointerHandle, { host: HTMLElement; speak
               {caption}
             </div>
           ) : (
-            <div className="guide-chip">
-              PlayStudy AI
+            <div className={cn("guide-chip", speaker && "guide-chip-speaker")}>
+              {speaker ? (
+                <>
+                  <GuideBot kind={speaker.kind} variant="head" size={18} mood={speaking ? "talking" : "idle"} />
+                  {speaker.name}
+                </>
+              ) : (
+                "PlayStudy AI"
+              )}
               {speaking && (
                 <span className="guide-eq">
                   <i />

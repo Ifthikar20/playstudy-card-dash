@@ -11,6 +11,7 @@ import { GuideGraph } from "./GuideGraph";
 import { GuideMolecule } from "./GuideMolecule";
 import { GuideImage } from "./GuideImage";
 import { GuideTable } from "./GuideTable";
+import { GuideList } from "./GuideList";
 import { GuideTimeline } from "./GuideTimeline";
 import { GuideScale } from "./GuideScale";
 import { GuideVenn } from "./GuideVenn";
@@ -61,6 +62,8 @@ export function GuideVisual({ spec }: { spec: VisualSpec }) {
       return <GuideMathLine math={spec.data} />;
     case "table":
       return <GuideTable table={spec.data} />;
+    case "list":
+      return <GuideList list={spec.data} />;
     case "chart":
       return <GuideChart chart={spec.data} />;
     case "timeline":
@@ -100,7 +103,7 @@ export function GuideVisual({ spec }: { spec: VisualSpec }) {
    drawing is identical — only the words are gone until you reveal them.
 -------------------------------------------------------------------------- */
 const BLANK = "?";
-const BLANKABLE: VisualKind[] = ["table", "chart", "timeline", "scale", "diagram", "venn", "periodic", "circuit", "forces", "geometry", "code"];
+const BLANKABLE: VisualKind[] = ["table", "list", "chart", "timeline", "scale", "diagram", "venn", "periodic", "circuit", "forces", "geometry", "code"];
 
 export const canBlank = (spec: VisualSpec | null): boolean => !!spec && BLANKABLE.includes(spec.kind);
 
@@ -110,6 +113,10 @@ export function blankVisual(spec: VisualSpec): VisualSpec {
     case "table":
       // keep the headers and the row labels; the comparisons are the answer
       clone.data.rows = clone.data.rows.map((r) => r.map((c, i) => (i === 0 ? c : c ? BLANK : c)));
+      break;
+    case "list":
+      // name each principle from its description
+      clone.data.items = clone.data.items.map((it) => ({ ...it, label: BLANK }));
       break;
     case "chart":
       clone.data.data = clone.data.data.map((d) => ({ ...d, label: BLANK }));
@@ -167,6 +174,10 @@ export function visualToMarkdown(spec: VisualSpec): string {
     const body = spec.data.rows.map((r) => `| ${r.map(esc).join(" | ")} |`).join("\n");
     return `\n${spec.data.title ? `**${spec.data.title}**\n\n` : ""}${head}\n${rule}\n${body}\n`;
   }
+  if (spec.kind === "list") {
+    const items = spec.data.items.map((it, i) => `${i + 1}. **${it.label}**${it.detail ? ` — ${it.detail}` : ""}`).join("\n");
+    return `\n${spec.data.title ? `**${spec.data.title}**\n\n` : ""}${items}\n`;
+  }
   return `\n\`\`\`${VISUAL_FENCE}\n${JSON.stringify(spec)}\n\`\`\`\n`;
 }
 
@@ -206,6 +217,8 @@ export function visualSummary(spec: VisualSpec): string {
       return clip(spec.data.title || spec.data.sets.join(" vs "));
     case "table":
       return clip(spec.data.title || spec.data.columns.filter(Boolean).join(" vs "));
+    case "list":
+      return clip(spec.data.title || spec.data.items.map((it) => it.label).join(", "));
     case "code":
       return clip(spec.data.title || spec.data.language || spec.data.lines[0]);
     case "forces":

@@ -35,9 +35,8 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-/** Best-sounding browser voice for `lang` (defaults to the browser language). */
-export function pickVoice(voices: SpeechSynthesisVoice[], lang = navigator.language || "en-US"): SpeechSynthesisVoice | null {
-  if (!voices.length) return null;
+/** Browser voices best-sounding first for `lang` (defaults to the browser language). */
+function rankVoices(voices: SpeechSynthesisVoice[], lang = navigator.language || "en-US"): SpeechSynthesisVoice[] {
   const base = lang.toLowerCase().split("-")[0];
   const score = (v: SpeechSynthesisVoice) => {
     const name = v.name.toLowerCase();
@@ -51,7 +50,51 @@ export function pickVoice(voices: SpeechSynthesisVoice[], lang = navigator.langu
     if (/espeak|compact/.test(name)) s -= 20;
     return s;
   };
-  return [...voices].sort((a, b) => score(b) - score(a))[0] ?? null;
+  return [...voices].sort((a, b) => score(b) - score(a));
+}
+
+/** Best-sounding browser voice for `lang` (defaults to the browser language). */
+export function pickVoice(voices: SpeechSynthesisVoice[], lang?: string): SpeechSynthesisVoice | null {
+  return rankVoices(voices, lang)[0] ?? null;
+}
+
+export type VoiceGender = "female" | "male";
+
+// Browsers don't say whose voice it is, but the common ones are well known
+// (Windows, Edge's online voices, Chrome's Google voices, macOS).
+const FEMALE_VOICE =
+  /\b(female|zira|aria|jenny|michelle|ava|emma|sonia|libby|natasha|neerja|heera|hazel|susan|catherine|linda|samantha|karen|moira|tessa|victoria|allison|fiona|serena|google us english)\b/i;
+const MALE_VOICE = /\b(male|david|mark|guy|andrew|brian|christopher|eric|roger|steffan|ryan|george|james|ravi|richard|sean|daniel|alex|fred|oliver|thomas|aaron|arthur)\b/i;
+
+/** Whose voice a browser voice is, going by its name; null when we can't tell. */
+export function voiceGender(name: string): VoiceGender | null {
+  if (FEMALE_VOICE.test(name)) return "female";
+  if (MALE_VOICE.test(name)) return "male";
+  return null;
+}
+
+/** "Microsoft Guy Online (Natural) - English (United States)" → "Guy". */
+export function browserVoiceName(name: string): string {
+  return (
+    name
+      .replace(/^(Microsoft|Google) /, "")
+      .replace(/ - .*$/, "")
+      .replace(/ (Online|Desktop)\b| \(.*\)$/g, "")
+      .trim() || name
+  );
+}
+
+/** The two browser voices to offer: the best woman's and man's voice (the top two when we can't tell). */
+export function browserVoicePair(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+  const ranked = rankVoices(voices);
+  const pair = (["female", "male"] as const)
+    .map((g) => ranked.find((v) => voiceGender(v.name) === g))
+    .filter((v): v is SpeechSynthesisVoice => !!v);
+  for (const v of ranked) {
+    if (pair.length >= 2) break;
+    if (!pair.includes(v)) pair.push(v);
+  }
+  return pair;
 }
 
 /** Split spoken text into sentence-sized utterances; very long ones break at clauses. */

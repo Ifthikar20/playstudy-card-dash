@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -28,6 +28,7 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  StickyNote,
   Sun,
   Wand2,
   Youtube,
@@ -48,6 +49,8 @@ import { generateSectionFlashcards, generateSectionQuiz, generateTopicNotes, get
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { TeachMode, type TeachSection } from "@/components/guide/TeachMode";
+import { StickySelection, StickySessionDialog, keyIdeasOf } from "@/components/StickyNotes";
+import { useStickyStore } from "@/store/stickyStore";
 import { GuideVisual, VISUAL_FENCE, parseVisualFence } from "@/components/guide/GuideVisual";
 import { LoadingFacts } from "@/components/LoadingFacts";
 
@@ -303,6 +306,7 @@ export default function FullStudyPage() {
   const [wrong, setWrong] = useState<WrongEntry[]>([]);
   const [showWrong, setShowWrong] = useState(false);
   const [readMode, setReadMode] = useState(false);
+  const [showStickies, setShowStickies] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [boardOn, setBoardOn] = useState(true);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -358,6 +362,41 @@ export default function FullStudyPage() {
   const sections = useMemo(() => flattenSections(currentSession?.extractedTopics), [currentSession?.extractedTopics]);
   const done = sections.filter((s) => s.topic.completed).length;
   const pct = sections.length ? Math.round((done / sections.length) * 100) : 0;
+
+  // Sticky notes kept from this session (the wall itself lives on the dashboard).
+  const stickyNotes = useStickyStore((s) => s.notes);
+  const loadStickies = useStickyStore((s) => s.load);
+  useEffect(() => {
+    void loadStickies();
+  }, [loadStickies]);
+  const stickyCount = stickyNotes.filter((n) => n.study_session_id === sessionId).length;
+  // Arriving from a sticky note: go to the section it was kept from, once its notes exist.
+  const focusTopic = (useLocation().state as { focusTopic?: number } | null)?.focusTopic ?? null;
+  useEffect(() => {
+    if (!focusTopic) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.querySelector<HTMLElement>(`[data-guide-notes="${focusTopic}"]`);
+      if (el) {
+        window.clearInterval(timer);
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("sticky-jump");
+        window.setTimeout(() => el.classList.remove("sticky-jump"), 1800);
+      } else if (++tries > 30) {
+        window.clearInterval(timer);
+      }
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [focusTopic]);
+
+  /** Which section a highlighted phrase came from, by the id on its notes block. */
+  const sectionOfNotes = useCallback(
+    (notesKey: string) => {
+      const hit = sections.find((s) => String(s.topic.db_id) === notesKey);
+      return hit?.topic.db_id ? { topicId: hit.topic.db_id, title: hit.topic.title } : null;
+    },
+    [sections],
+  );
 
   // ---- auto-write notes for every section that doesn't have them yet --------
   // Sequential (one at a time) so we never overwhelm the single-worker dev API;
@@ -503,6 +542,20 @@ export default function FullStudyPage() {
               <Youtube className="size-4" />
             </a>
           )}
+          {stickyCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowStickies(true)}
+              title="Everything you've kept from this session"
+              className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              <StickyNote className="size-3.5" />
+              Sticky notes
+              <span className="flex min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-bold text-background tabular-nums">
+                {stickyCount}
+              </span>
+            </button>
+          )}
           {wrong.length > 0 && (
             <button
               type="button"
@@ -600,6 +653,9 @@ export default function FullStudyPage() {
       </div>
 
           <WrongQuestionsDialog open={showWrong} onOpenChange={setShowWrong} entries={wrong} onClear={clearWrong} />
+          <StickySessionDialog open={showStickies} onOpenChange={setShowStickies} sessionId={session.id} />
+          {/* highlight anything in the notes → "Save to sticky" */}
+          <StickySelection sessionId={session.id} resolve={sectionOfNotes} />
         </div>
       </div>
       {readMode && (
@@ -655,6 +711,34 @@ function StudySection({
   const reward = useAppStore((s) => (s.lastTopicReward?.topicId === topic.id ? s.lastTopicReward : null));
 
   const questions = topic.questions ?? [];
+
+  // The phrases the AI marked as this section's point, one click from a sticky note.
+  const keyIdeas = useMemo(() => keyIdeasOf(topic.notes), [topic.notes]);
+  const addSticky = useStickyStore((s) => s.add);
+  const [keeping, setKeeping] = useState(false);
+  const keepKeyIdeas = async () => {
+    if (!keyIdeas.length) return;
+    setKeeping(true);
+    try {
+      for (const text of keyIdeas) {
+        await addSticky({
+          text,
+          source: "key-idea",
+          study_session_id: session.id,
+          topic_id: topic.db_id ?? null,
+          section_title: topic.title,
+        });
+      }
+      toast({
+        title: `Kept ${keyIdeas.length} key idea${keyIdeas.length === 1 ? "" : "s"}`,
+        description: "They're on your dashboard with the rest of your sticky notes.",
+      });
+    } catch (e) {
+      toast({ title: "Couldn't keep those", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    } finally {
+      setKeeping(false);
+    }
+  };
 
   // Notes editing
   const [editing, setEditing] = useState<null | "head" | "notes">(null);
@@ -831,6 +915,19 @@ function StudySection({
       <div className="mt-4 overflow-hidden rounded-2xl border border-border/70 bg-[#FCFBF6] shadow-sm dark:bg-card">
         {editing !== "notes" && topic.db_id && topic.notes && (
           <div className="flex items-center justify-end gap-1 border-b border-border/70 px-3 py-1.5">
+            {keyIdeas.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mr-auto h-7 text-xs text-muted-foreground"
+                onClick={keepKeyIdeas}
+                disabled={keeping}
+                title="Put this section's highlighted ideas on sticky notes"
+              >
+                {keeping ? <Loader2 className="size-3.5 animate-spin" /> : <StickyNote className="size-3.5" />}
+                Keep {keyIdeas.length} key idea{keyIdeas.length === 1 ? "" : "s"}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

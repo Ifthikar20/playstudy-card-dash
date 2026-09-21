@@ -37,6 +37,7 @@ import { CreateFolderDialog } from "@/components/CreateFolderDialog";
 import { XpCard } from "@/components/XpCard";
 import { StreakCard } from "@/components/StreakCard";
 import { SourceLogo } from "@/components/SourceLogo";
+import { StickyWall } from "@/components/StickyNotes";
 import { useAppStore, type Folder, type StudySession } from "@/store/appStore";
 import { moveSessionToFolder } from "@/services/folder-api";
 import { fetchAppData, deleteStudySession } from "@/services/api";
@@ -375,6 +376,9 @@ export default function Index() {
               )}
             </div>
           </section>
+
+          {/* Everything the student decided was worth keeping */}
+          <StickyWall />
 
           {/* Sources */}
           <section>
