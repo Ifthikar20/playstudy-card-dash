@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/appStore";
 import { usePresenceStore, formatDuration } from "@/store/presenceStore";
 import { logout } from "@/services/api";
+import { MyGuardiansCard } from "@/components/family/MyGuardiansCard";
 import { formatStudyTime } from "@/lib/xp";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +105,11 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Who can see this learner, and exactly what they see. Read-only:
+              a guardianship is not something the learner can end, so the
+              compensating control is that they can always see it in full. */}
+          <MyGuardiansCard />
 
           {/* Stats — measured, not seeded */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

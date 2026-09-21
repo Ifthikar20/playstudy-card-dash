@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/command";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useQueryClient } from "@tanstack/react-query";
+import { parentalKeys } from "@/services/parental";
 import { useAppStore } from "@/store/appStore";
 import { startPresenceTracking } from "@/store/presenceStore";
 import { cn } from "@/lib/utils";
@@ -97,6 +99,7 @@ function SidebarChevronTrigger({ className }: { className?: string }) {
 function useCrumbs(): Crumb[] {
   const { pathname } = useLocation();
   const { studySessions, folders, currentSession } = useAppStore();
+  const queryClient = useQueryClient();
 
   return useMemo(() => {
     const crumbs: Crumb[] = [{ label: "Dashboard", to: "/dashboard" }];
@@ -111,6 +114,18 @@ function useCrumbs(): Crumb[] {
       return [...crumbs, { label: "Study Folders", to: "/dashboard/folders" }, { label: folder?.name ?? "Folder" }];
     }
     if (first === "profile") return [...crumbs, { label: "Profile & Settings" }];
+    if (first === "family") {
+      if (!second) return [...crumbs, { label: "Family" }];
+      // Read whatever the parental queries already hold — never fetch, and
+      // never reach into the app store, which belongs to the signed-in user
+      // rather than to the learner being viewed.
+      const cached =
+        queryClient.getQueryData<{ name: string }>(parentalKeys.child(second)) ??
+        queryClient
+          .getQueryData<{ id: string; name: string }[]>(parentalKeys.children())
+          ?.find((c) => c.id === second);
+      return [...crumbs, { label: "Family", to: "/dashboard/family" }, { label: cached?.name ?? "Learner" }];
+    }
     if (MODE_LABELS[first]) return [...crumbs, { label: MODE_LABELS[first] }];
 
     // /dashboard/:sessionId/:mode
@@ -121,7 +136,7 @@ function useCrumbs(): Crumb[] {
       { label: session?.title ?? "Study session", to: modeLabel ? `/dashboard/${first}/full-study` : undefined },
       ...(modeLabel ? [{ label: modeLabel }] : []),
     ];
-  }, [pathname, studySessions, folders, currentSession]);
+  }, [pathname, studySessions, folders, currentSession, queryClient]);
 }
 
 function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {

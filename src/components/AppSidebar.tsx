@@ -10,6 +10,7 @@ import {
   Moon,
   Settings,
   Sun,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -70,6 +71,12 @@ const NAV: NavGroup[] = [
     ],
   },
   {
+    group: "Family",
+    items: [
+      { title: "Family", to: "/dashboard/family", icon: Users, match: "/dashboard/family" },
+    ],
+  },
+  {
     group: "Account",
     items: [
       { title: "Profile & Settings", to: "/dashboard/profile", icon: Settings, match: "/dashboard/profile" },
@@ -85,8 +92,9 @@ const ROLE_LABELS: Record<string, string> = { owner: "Owner", admin: "Admin", me
 
 function roleLine(session: ReturnType<typeof useAuth>["session"]): string {
   const u = session?.user;
+  if (u?.account_kind === "managed_child") return "Student";
   if (!u?.role) return "";
-  if (u.role === "student") return "Student";
+  if (u.role === "student") return u.child_count > 0 ? "Student · Parent" : "Student";
   if (u.teacher_type === "organization" && session?.org) return `Teacher · ${session.org.name}`;
   return u.teacher_type === "individual" ? "Independent teacher" : "Teacher";
 }
@@ -109,6 +117,9 @@ export function AppSidebar() {
   const { session } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const org = session?.org ?? null;
+  // A guardian-created profile has no Family section — it is the one being
+  // followed, not the one following.
+  const isManagedChild = session?.user.account_kind === "managed_child";
 
   const isActive = (item: NavItem) =>
     item.exact ? pathname === item.match : pathname.startsWith(item.match);
@@ -156,7 +167,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {NAV.map((group) => (
+        {NAV.filter((group) => group.group !== "Family" || !isManagedChild).map((group) => (
           <SidebarGroup key={group.group}>
             <SidebarGroupLabel>{group.group}</SidebarGroupLabel>
             <SidebarMenu>

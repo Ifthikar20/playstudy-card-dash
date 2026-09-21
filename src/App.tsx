@@ -10,6 +10,7 @@ import { useAppStore } from "@/store/appStore";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/apiClient";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import StandardAccountRoute from "@/components/StandardAccountRoute";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +26,8 @@ import StudyFolders from "./pages/StudyFolders";
 import CalendarPage from "./pages/CalendarPage";
 import FolderDetailPage from "./pages/FolderDetailPage";
 import ProfilePage from "./pages/ProfilePage";
+import FamilyPage from "./pages/FamilyPage";
+import ChildDetailPage from "./pages/ChildDetailPage";
 import FullStudyPage from "./pages/FullStudyPage";
 import NotFound from "./pages/NotFound";
 import DevLoginPage from "./pages/DevLoginPage";
@@ -66,6 +69,25 @@ const AppContent = () => {
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="folder/:folderId" element={<FolderDetailPage />} />
           <Route path="profile" element={<ProfilePage />} />
+
+          {/* Family — guardian-only. A profile a guardian created is bounced
+              back to the dashboard rather than shown something it cannot use. */}
+          <Route
+            path="family"
+            element={
+              <StandardAccountRoute>
+                <FamilyPage />
+              </StandardAccountRoute>
+            }
+          />
+          <Route
+            path="family/:childId"
+            element={
+              <StandardAccountRoute>
+                <ChildDetailPage />
+              </StandardAccountRoute>
+            }
+          />
           <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
 
           {/* Study (the only mode: one scrolling note with a quiz per section) */}
