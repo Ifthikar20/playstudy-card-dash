@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Gamepad2, GraduationCap, Mic, Zap } from "lucide-react";
+import { BookOpen, GraduationCap, Layers, Mic } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /*
-  Agent cursors — AnotherNotes's four study modes standing around the hero copy
+  Agent cursors — four things AnotherNotes does, standing around the hero copy
   the way collaborators stand around a shared document, and drifting the way
   they do in Figma or Notion.
 
@@ -35,11 +35,16 @@ import { cn } from "@/lib/utils";
    pass is a one-line edit per station rather than a hunt through this array. */
 type Agent = { name: string; icon: LucideIcon };
 
+/* Four things that exist. The previous four were "modes" — Speed run, Mentor
+   mode and Game zone — and three of them were never built: there is one study
+   route (App.tsx calls it "the only mode"), and no memory match, no platformer
+   and no weekly game anywhere in either repo. These four are each a real
+   surface in the study page. */
 const AGENTS: Agent[] = [
   { name: "Full study", icon: GraduationCap },
-  { name: "Speed run", icon: Zap },
-  { name: "Mentor mode", icon: Mic },
-  { name: "Game zone", icon: Gamepad2 },
+  { name: "Teach mode", icon: Mic },
+  { name: "Flashcards", icon: Layers },
+  { name: "Read mode", icon: BookOpen },
 ];
 
 /*
@@ -326,9 +331,9 @@ export default function AgentCursors({ children, className }: { children: ReactN
       {/* The roster, once, as capability rather than as fake live status — no
           aria-live, because announcing a name every 2.4s would be pure noise. */}
       <p className="sr-only">
-        AnotherNotes studies your notes four ways: Full study teaches topic by topic and explains every answer, Speed run
-        drills you with flashcards against the clock, Mentor mode reads your notes aloud and quizzes you on them, and
-        Game zone turns them into games.
+        AnotherNotes works on your notes four ways: Full study goes topic by topic and explains every answer, Teach
+        mode reads a section aloud and points at the line it is on, Flashcards draws flip cards from the section you
+        are reading, and Read mode strips everything back for reading.
       </p>
     </div>
   );

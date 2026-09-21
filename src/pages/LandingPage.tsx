@@ -9,7 +9,6 @@ import {
   FileText,
   Flame,
   Folder,
-  Gamepad2,
   GraduationCap,
   KeyRound,
   Layers,
@@ -207,8 +206,8 @@ const LandingPage = () => {
             Your notes, <em>in motion.</em>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--muted)] md:text-[18px]">
-            Drop in your notes, slides or a PDF. AnotherNotes turns them into topics, questions and games you'll actually
-            want to finish.
+            Drop in your notes, slides or a PDF. They come back written up section by section — then read back to you,
+            a line at a time.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link to="/auth" className={inkPill}>
@@ -249,11 +248,11 @@ const LandingPage = () => {
           {/* Copy — top */}
           <div className="flex flex-col items-start justify-between gap-4 p-6 md:absolute md:inset-x-0 md:top-0 md:flex-row md:p-8">
             <p className="lp-serif max-w-md text-[1.9rem] leading-[1.05] text-white md:text-[2.5rem]">
-              Four modes, one set of notes.
+              Notes you don't have to reread.
             </p>
             <p className="max-w-sm text-[14px] leading-relaxed text-white/80 md:text-[15px]">
-              You forget most of what you read within a day. AnotherNotes turns your notes into active recall and games — the
-              two things the research below says actually make it stick.
+              You forget most of what you read within a day. So your notes get taught back to you, you get asked about
+              them, and someone who cares can see how it went.
             </p>
           </div>
 
@@ -273,10 +272,15 @@ const LandingPage = () => {
                 href: "https://journals.sagepub.com/doi/10.1111/j.1467-9280.2006.01693.x",
               },
               {
-                v: "g = 0.49",
-                l: "boost to learning from gamification (meta-analysis, 19 studies)",
-                src: "Sailer & Homner, 2020",
-                href: "https://eric.ed.gov/?id=EJ1245270",
+                // Replaced the gamification meta-analysis: the product no longer
+                // leads on games, and three of the four "modes" it supported were
+                // never built. Hedged to "about", because the abstract reports a
+                // range (roughly 0.46 to 0.55 depending on the outcome measure)
+                // rather than one figure.
+                v: "≈ 0.5 SD",
+                l: "higher achievement for secondary students whose parents are involved (52 studies)",
+                src: "Jeynes, 2007",
+                href: "https://eric.ed.gov/?id=EJ748034",
               },
             ].map((s) => (
               <div key={s.src} className="min-w-0">
@@ -341,21 +345,26 @@ const LandingPage = () => {
           </h2>
 
           <div className="mt-12 grid gap-4 md:grid-cols-3">
-            <InkTile className="overflow-hidden p-0 md:col-start-1 md:row-start-1">
-              <img src="/image-card-1.png" alt="New game added every week" className="h-full w-full object-cover" />
+            <InkTile className="md:col-start-1 md:row-start-1">
+              <Mic className="size-5 text-[var(--on-ink-mut)]" />
+              <h3 className="lp-serif mt-4 text-[1.5rem]">It reads them to you</h3>
+              <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
+                A voice works through a section, pointing at the line it's on. Interrupt with a question and the answer
+                is written into the notes.
+              </p>
             </InkTile>
 
             <InkTile className="md:col-start-2 md:row-span-2">
-              <h3 className="lp-serif text-[1.75rem]">Four ways to learn the same thing</h3>
+              <h3 className="lp-serif text-[1.75rem]">One page, four things to do on it</h3>
               <p className="mt-2 text-[14px] text-[var(--on-ink-mut)]">
-                Switch modes without losing your place. Progress follows the session, not the screen.
+                All of it happens in the same scrolling note. Nothing to switch to, nothing to lose your place in.
               </p>
               <ul className="mt-6 divide-y divide-[var(--hair-ink)] border-y border-[var(--hair-ink)]">
                 {[
-                  [GraduationCap, "Full study", "Topic by topic, with explanations after every answer."],
-                  [Zap, "Speed run", "Flashcards or rapid multiple choice against the clock."],
-                  [Mic, "Mentor mode", "An AI voice that teaches, then quizzes you on what it said."],
-                  [Gamepad2, "Game zone", "Memory match, platformers and a new game every week."],
+                  [GraduationCap, "Write on it", "Click any line and type. It saves itself as you go."],
+                  [Mic, "Be taught it", "A voice reads a section aloud and points as it goes."],
+                  [Layers, "Flip it", "Flashcards drawn from the section you are reading."],
+                  [ListChecks, "Be asked about it", "A short quiz per section, with an explanation after every answer."],
                 ].map(([Icon, t, d]) => {
                   const I = Icon as typeof GraduationCap;
                   return (
@@ -415,23 +424,24 @@ const LandingPage = () => {
         <div className="mx-auto max-w-2xl">
           <p className={eyebrow}>Our manifesto</p>
           <h2 className="lp-serif mt-3 text-[2.5rem] md:text-[3rem]">
-            Learning shouldn't feel like a <em>chore.</em>
+            Notes are where the <em>learning</em> is.
           </h2>
           <div className="mt-8 space-y-5 text-[17px] leading-relaxed text-[var(--muted)]">
             <p>
-              We believe the best learning happens when you're having fun. When curiosity takes over and studying feels
-              like playing your favourite game.
+              Everyone keeps notes. Almost nobody goes back to them. They get written once, read twice, and then sit in
+              a folder being quietly forgotten while the exam gets closer.
             </p>
             <p>
-              Traditional studying is broken. Highlighting textbooks. Rereading notes. Hoping it sticks. We knew there
-              had to be a better way.
+              The problem was never the notes. It was that a page of writing cannot do anything. It cannot explain the
+              bit you skimmed, or notice you have not opened it in a fortnight, or tell anyone you are struggling.
             </p>
             <p>
-              So we built AnotherNotes: a place where your notes become quizzes, your slides become flashcards and your
-              textbooks become games. Where every answer earns XP, every topic mastered is a level up, and learning
-              becomes something you actually want to do.
+              So we built notes that can. Yours are written up for you, read back to you out loud, and turned into
+              questions that find the gaps. If a parent set the account up, they see the progress — not the writing.
             </p>
-            <p className="text-[var(--ink)]">This is studying, reimagined. This is AnotherNotes.</p>
+            <p className="text-[var(--ink)]">
+              It is another notes app. That is the joke, and then it is not.
+            </p>
           </div>
           <p className="lp-serif mt-10 border-t border-[var(--hair)] pt-6 text-[1.25rem] italic text-[var(--muted)]">
             — The AnotherNotes team
@@ -439,14 +449,18 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Four things that are true by construction, where there were four
+          unsourced performance claims — a retention rate nothing measures, a
+          speed comparison against nothing, a topic count and a store rating for
+          a product whose own nav still says BETA. The cited band above says of
+          itself "not vanity metrics"; this is what that has to mean. */}
       <section className="border-y border-[var(--hair)] px-6 py-14">
         <dl className="mx-auto grid max-w-5xl grid-cols-2 gap-y-10 md:grid-cols-4 md:divide-x md:divide-[var(--hair)]">
           {[
-            ["95%", "retention rate"],
-            ["3×", "faster learning"],
-            ["50K+", "topics covered"],
-            ["4.9", "user rating"],
+            ["0", "emails needed for a child account"],
+            ["0", "ways a child can unlink a parent"],
+            ["6", "digits in a child's PIN"],
+            ["1", "page per session, start to finish"],
           ].map(([v, l]) => (
             <div key={l} className="text-center md:px-6">
               <dt className="lp-serif text-[3rem] md:text-[3.5rem]">{v}</dt>
@@ -459,10 +473,10 @@ const LandingPage = () => {
       {/* CTA */}
       <section className="px-6 py-24 text-center md:py-32">
         <h2 className="lp-serif mx-auto max-w-2xl text-[2.5rem] md:text-[3.5rem]">
-          Ready to change how you <em>study?</em>
+          Bring your <em>notes.</em>
         </h2>
         <p className="mx-auto mt-4 max-w-md text-[16px] text-[var(--muted)]">
-          Join thousands of students who've made learning fun again. Free to start, no card needed — and parents can add a child from the same account.
+          Free to start, no card needed. Add a child from the same account, or send a code to a learner who already has one.
         </p>
         <Link to="/auth" className={cn(inkPill, "mt-8")}>
           Get started free
