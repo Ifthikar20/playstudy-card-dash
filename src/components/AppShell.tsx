@@ -7,11 +7,10 @@ import {
   Folder,
   GraduationCap,
   LayoutGrid,
-  Search,
+  Menu,
   Settings,
 } from "lucide-react";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
@@ -31,7 +30,6 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { AppSidebar } from "@/components/AppSidebar";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { useQueryClient } from "@tanstack/react-query";
 import { parentalKeys } from "@/services/parental";
 import { useAppStore } from "@/store/appStore";
@@ -39,10 +37,15 @@ import { startPresenceTracking } from "@/store/presenceStore";
 import { cn } from "@/lib/utils";
 
 /*
-  App shell — sidebar + framed content card, per the Cansee reference:
-  the content floats as a rounded, hairline-bordered card on the sidebar-
-  coloured ground; a 4rem header carries the trigger, breadcrumbs and a ⌘K
-  search pill; pages render inside a padded flex column.
+  App shell — sidebar + framed content card. The content floats as a rounded,
+  hairline-bordered card on the sidebar-coloured ground.
+
+  The top strip carries the breadcrumb and nothing else: no border, no card
+  fill, no utility controls, so it reads as the page's first line rather than
+  as a toolbar. Search, theme, help, presence and the account menu all live in
+  the sidebar (header row / footer shelf). The only control the strip still
+  renders is the sidebar trigger, and only in the modes where it is the user's
+  real route back to navigation — see ShellTrigger.
 */
 
 const SIDEBAR_WIDTH = "13.75rem"; // 220px expanded (narrower than stock shadcn)
@@ -78,20 +81,75 @@ interface Crumb {
   to?: string;
 }
 
-function SidebarChevronTrigger({ className }: { className?: string }) {
-  const { state, toggleSidebar, isMobile } = useSidebar();
+/*
+  Does this device have a hover-capable pointer? A touch tablet sits at md+,
+  where the sidebar's own collapse control is `showOnHover` (md:opacity-0) and
+  SidebarRail is a 16px, tabIndex={-1}, hover-only strip — so without a mouse
+  there would be no visible way to re-collapse an expanded sidebar. On those
+  devices the strip keeps its trigger.
+*/
+const HOVER_POINTER = "(hover: hover) and (pointer: fine)";
+
+function useHoverPointer() {
+  const [hover, setHover] = useState(
+    () => typeof window === "undefined" || !window.matchMedia || window.matchMedia(HOVER_POINTER).matches,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(HOVER_POINTER);
+    const apply = (e: MediaQueryListEvent) => setHover(e.matches);
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, []);
+  return hover;
+}
+
+/*
+  The one control the top strip may render — and it renders nothing at all on a
+  hover-capable desktop with the sidebar already open, which is what makes the
+  top "purely empty" there. Collapsing is then done from the sidebar's own brand
+  row, the rail, or Ctrl+B.
+
+  It also fixes a live a11y bug: `state` only tracks the desktop rail, so on a
+  phone aria-expanded used to report `true` while the Sheet was shut.
+*/
+function ShellTrigger() {
+  const { state, toggleSidebar, isMobile, openMobile } = useSidebar();
+  const hoverPointer = useHoverPointer();
   const collapsed = state === "collapsed";
+
+  if (!isMobile && !collapsed && hoverPointer) return null;
+
+  const expanded = isMobile ? openMobile : !collapsed;
+  const label = isMobile ? "Open navigation" : expanded ? "Collapse sidebar" : "Expand sidebar";
+
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={toggleSidebar}
-      aria-expanded={!collapsed}
-      aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      title={collapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
-      className={cn("size-9 border border-border bg-muted/60 shadow-sm hover:bg-muted", className)}
+      aria-expanded={expanded}
+      aria-label={label}
+      title={isMobile ? label : `${label} (Ctrl+B)`}
+      // The glyph stays small so the strip still reads as empty, but the
+      // TOUCH TARGET is extended past it with an invisible ::after. This
+      // project sets a 14px root (index.css), so `size-9` computes to 31.5px
+      // and `size-8` to 28px — both well under the 44px iOS / 48dp Android
+      // guidance, and on a phone this button is the ONLY route into
+      // navigation. The header is 42px tall, so a physically larger button
+      // does not fit; -inset-2 brings the hit area to ~46px without changing
+      // a single pixel of what is drawn.
+      className={cn(
+        "relative -ml-2 size-9 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground md:size-8",
+        "after:absolute after:-inset-2 after:content-['']",
+      )}
     >
-      {collapsed || isMobile ? <ChevronsRight className="size-4" /> : <ChevronsLeft className="size-4" />}
+      {isMobile ? (
+        <Menu className="size-4" />
+      ) : expanded ? (
+        <ChevronsLeft className="size-4" />
+      ) : (
+        <ChevronsRight className="size-4" />
+      )}
     </Button>
   );
 }
@@ -213,8 +271,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!userId) return;
     return startPresenceTracking(userId);
   }, [userId]);
-  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+  // ⌘K / Ctrl+K is unchanged and still lives here — only the visible trigger
+  // moved, into the sidebar's search row.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -232,51 +291,47 @@ export function AppShell({ children }: { children: ReactNode }) {
       style={{ "--sidebar-width": SIDEBAR_WIDTH, "--sidebar-width-icon": SIDEBAR_WIDTH_ICON } as React.CSSProperties}
     >
       <TabletRail />
-      <AppSidebar />
+      <AppSidebar onSearch={() => setPaletteOpen(true)} />
       {/* On md+ the inset is a viewport-height card and pages scroll inside the
-          content frame below, so the header stays pinned. Below md the document scrolls. */}
+          content frame below, so the strip stays pinned without `sticky`. Below
+          md the DOCUMENT scrolls, and this strip carries the only route into
+          navigation (and therefore into search) — so there it sticks. z-30 sits
+          under every floating layer already in the app: toasts z-100, ReadMode
+          z-120, GuideDock z-130, the sticky-selection bubble z-140. */}
       <SidebarInset className="md:h-[calc(100svh-1rem)] md:overflow-hidden md:rounded-xl md:border md:border-border md:shadow-sm">
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card transition-[width,height] ease-linear">
-          <div className="flex min-w-0 items-center gap-2 px-4 md:px-6">
-            <SidebarChevronTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                {crumbs.map((c, i) => {
-                  const last = i === crumbs.length - 1;
-                  return (
-                    <Fragment key={`${c.label}-${i}`}>
-                      {i > 0 && <BreadcrumbSeparator className="hidden md:block" />}
-                      <BreadcrumbItem className={cn(!last && "hidden md:block")}>
-                        {last || !c.to ? (
-                          <BreadcrumbPage className="max-w-[40vw] truncate">{c.label}</BreadcrumbPage>
-                        ) : (
-                          <BreadcrumbLink asChild>
-                            <Link to={c.to}>{c.label}</Link>
-                          </BreadcrumbLink>
-                        )}
-                      </BreadcrumbItem>
-                    </Fragment>
-                  );
-                })}
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
-
-          <div className="ml-auto flex items-center gap-2 px-4 md:px-6">
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="flex items-center gap-2 rounded-full border border-border bg-muted px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:bg-background"
-            >
-              <Search size={14} strokeWidth={1.8} />
-              <span className="hidden sm:inline">Search...</span>
-              <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
-                {isMac ? "⌘+K" : "Ctrl+K"}
-              </kbd>
-            </button>
-            <ThemeToggle />
-          </div>
+        <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-background/90 px-4 backdrop-blur-sm md:static md:z-auto md:h-14 md:bg-transparent md:px-6 md:backdrop-blur-none">
+          <ShellTrigger />
+          <Breadcrumb className="min-w-0">
+            <BreadcrumbList className="min-w-0 flex-nowrap">
+              {crumbs.map((c, i) => {
+                const last = i === crumbs.length - 1;
+                // Only the MIDDLE crumb collapses on narrow screens, so a phone
+                // keeps a working root link ("Dashboard / Chemistry Notes")
+                // instead of degrading to a bare, unlinked page title.
+                const middle = i > 0 && !last;
+                return (
+                  <Fragment key={`${c.label}-${i}`}>
+                    {i > 0 && <BreadcrumbSeparator className={cn(middle && "hidden sm:block")} />}
+                    <BreadcrumbItem className={cn("min-w-0", middle && "hidden sm:block")}>
+                      {last || !c.to ? (
+                        // Nothing on the right to truncate against any more.
+                        <BreadcrumbPage className="max-w-[60vw] truncate md:max-w-none">{c.label}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink asChild>
+                          {/* flex-nowrap + min-w-0: a long session title
+                              ellipsizes instead of wrapping the strip or
+                              overflowing the inset's md:overflow-hidden */}
+                          <Link to={c.to} className="truncate">
+                            {c.label}
+                          </Link>
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </Fragment>
+                );
+              })}
+            </BreadcrumbList>
+          </Breadcrumb>
         </header>
 
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">{children}</div>
