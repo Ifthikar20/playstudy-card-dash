@@ -300,29 +300,32 @@ const LandingPage = () => {
       <section id="how" className="scroll-mt-24 border-t border-[var(--hair)] px-6 py-20 md:py-28">
         <div className="mx-auto max-w-6xl">
           <p className={eyebrow}>How it works</p>
+          {/* The heading undersells and the three cards refuse to. The name is
+              a straight-faced joke about being another notes app, so the copy
+              tells it once, here, and then never winks again. */}
           <h2 className="lp-serif mt-3 max-w-2xl text-[2.5rem] md:text-[3rem]">
-            Three steps to <em>smarter</em> studying
+            It's a notes app. <em>Mostly.</em>
           </h2>
           <div className="mt-12 grid gap-4 md:grid-cols-3">
             <StepCard
               n="01"
-              icon={<Upload className="size-5" />}
-              title="Upload anything"
-              body="PDFs, slides, notes or pasted text. Key concepts are extracted into a topic tree in seconds."
+              icon={<FileText className="size-5" />}
+              title="Notes get written"
+              body="Drop in a PDF, slides or pasted text. Notes come back for every section, and you click any line to write in them yourself."
               art="upload"
             />
             <StepCard
               n="02"
-              icon={<Gamepad2 className="size-5" />}
-              title="Pick your mode"
-              body="Full study, speed runs, an AI mentor that talks you through it, or a game. Learning becomes play."
-              art="game"
+              icon={<Mic className="size-5" />}
+              title="Then it teaches"
+              body="It reads a section aloud, pointing at the line it's on. Ask a question halfway through and the answer is written into your notes."
+              art="teach"
             />
             <StepCard
               n="03"
-              icon={<Zap className="size-5" />}
-              title="Watch it stick"
-              body="Every answer earns XP, every topic mastered is a level up, and your dashboard shows exactly where you stand."
+              icon={<Users className="size-5" />}
+              title="And parents know"
+              body="A parent who set up the account sees what's studied, the time, the accuracy and every question answered. The child cannot unlink them."
               art="progress"
             />
           </div>
@@ -509,7 +512,7 @@ function StepCard({
   icon: React.ReactNode;
   title: string;
   body: string;
-  art: "upload" | "game" | "progress";
+  art: "upload" | "teach" | "progress";
 }) {
   return (
     <div className="flex flex-col rounded-[var(--r-card)] border border-[var(--hair)] bg-[var(--cream-alt)] p-6">
@@ -529,7 +532,7 @@ function StepCard({
 }
 
 /* Quiet monochrome illustrations — ink on cream, gentle motion only. */
-function StepArt({ kind }: { kind: "upload" | "game" | "progress" }) {
+function StepArt({ kind }: { kind: "upload" | "teach" | "progress" }) {
   if (kind === "upload") {
     return (
       <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -541,17 +544,24 @@ function StepArt({ kind }: { kind: "upload" | "game" | "progress" }) {
       </svg>
     );
   }
-  if (kind === "game") {
+  if (kind === "teach") {
+    // A page being read to: the rule under the line it is on draws itself
+    // across, and the voice arcs breathe on the same 2.4s as everything else on
+    // the page. One clock, or the mouth pulses twice per pass of the underline.
     return (
       <svg viewBox="0 0 200 150" className="h-36 w-48" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="38" y="50" width="124" height="60" rx="30" opacity="0.9" />
-        <path d="M60 80h22M71 69v22" strokeLinecap="round" opacity="0.5" />
-        <circle cx="128" cy="72" r="5" opacity="0.5" />
-        <circle cx="144" cy="80" r="5" opacity="0.5" />
-        <circle cx="128" cy="88" r="5" opacity="0.5" />
-        <circle cx="112" cy="80" r="5" fill="currentColor" stroke="none">
-          <animate attributeName="opacity" values="1;0.25;1" dur="2.4s" repeatCount="indefinite" />
-        </circle>
+        <rect x="46" y="26" width="84" height="98" rx="8" opacity="0.9" />
+        <path d="M58 48h56M58 62h40M58 90h52M58 104h34" strokeLinecap="round" opacity="0.35" />
+        <path d="M58 76h56" strokeLinecap="round" opacity="0.35" />
+        <path d="M58 80h56" strokeLinecap="round" strokeWidth="3" opacity="0.45" strokeDasharray="56">
+          <animate attributeName="stroke-dashoffset" values="56;0;0;56" keyTimes="0;0.45;0.8;1" dur="2.4s" repeatCount="indefinite" />
+        </path>
+        <path d="M144 66a13 13 0 0 1 0 20" strokeLinecap="round" opacity="0.5">
+          <animate attributeName="opacity" values="0.5;0.12;0.5" dur="2.4s" repeatCount="indefinite" />
+        </path>
+        <path d="M154 58a24 24 0 0 1 0 36" strokeLinecap="round" opacity="0.28">
+          <animate attributeName="opacity" values="0.28;0.06;0.28" dur="2.4s" begin="0.3s" repeatCount="indefinite" />
+        </path>
       </svg>
     );
   }
