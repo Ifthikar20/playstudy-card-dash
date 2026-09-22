@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
@@ -18,12 +18,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  FileText,
   GraduationCap,
   Presentation,
   Layers,
   ListChecks,
   Loader2,
   Moon,
+  NotebookText,
   Palette,
   Pencil,
   Plus,
@@ -46,7 +48,7 @@ import { TopicSummary } from "@/components/TopicSummary";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useAppStore, type Question, type StudySession, type Topic } from "@/store/appStore";
 import { usePresenceStore } from "@/store/presenceStore";
-import { generateSectionFlashcards, generateSectionQuiz, generateTopicNotes, getStudySession, reviseTopicNotes, updateTopicDetails, type Flashcard } from "@/services/api";
+import { fetchSessionPdf, generateSectionFlashcards, generateSectionQuiz, generateTopicNotes, getStudySession, reviseTopicNotes, updateTopicDetails, type Flashcard } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { TeachMode, type TeachSection } from "@/components/guide/TeachMode";
@@ -59,6 +61,16 @@ import { PaperNotes, type PaperNotesHandle } from "@/components/notes/PaperNotes
 import { ShellTrigger } from "@/components/AppShell";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SHEETS, setSheet, useSheet } from "@/lib/studySurface";
+import type { PdfPageInfo } from "@/components/pdf/PdfDocument";
+import { trackAction } from "@/lib/analytics";
+
+// PDF.js is big: it only loads when someone opens the PDF view.
+const PdfDocument = lazy(() => import("@/components/pdf/PdfDocument").then((m) => ({ default: m.PdfDocument })));
+
+/** What the page shows: the notes, or the uploaded PDF itself. Remembered per session on this device. */
+type StudyView = "notes" | "pdf";
+const viewKey = (sessionId: string) => `an-study-view:${sessionId}`;
+const NO_PAGES: PdfPageInfo[] = [];
 
 /*
   Full Study — the one way to study. A session is a single scrolling note:
@@ -307,6 +319,18 @@ function BackgroundPicker() {
   );
 }
 
+/** Where the PDF will be while it downloads and PDF.js loads: a page-shaped placeholder. */
+function PdfOpening({ label }: { label: string }) {
+  return (
+    <div className="mx-auto w-full max-w-[980px]">
+      <div className="flex aspect-[1/1.294] w-full flex-col items-center justify-center gap-2 rounded-md bg-foreground/[0.04] text-sm text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" />
+        Opening your {label === "Slides" ? "slides" : label}…
+      </div>
+    </div>
+  );
+}
+
 export default function FullStudyPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
@@ -331,6 +355,65 @@ export default function FullStudyPage() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [boardOn, setBoardOn] = useState(true);
   const pageRef = useRef<HTMLDivElement>(null);
+
+  // ---- notes or the PDF ---------------------------------------------------------
+  // A session built from a PDF (or slides, converted to one) can show the file
+  // itself, and Teach mode then explains it page by page right on the page.
+  const [view, setViewState] = useState<StudyView>("notes");
+  const [fetchedPdf, setFetchedPdf] = useState<{ sessionId: string; file: ArrayBuffer } | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  // The pages of the PDF on screen, once its text is in place - tied to that file, so
+  // pages reported for another session's PDF are never taken for this one's.
+  const [pdfReady, setPdfReady] = useState<{ file: string | ArrayBuffer; pages: PdfPageInfo[] } | null>(null);
+  const currentId = currentSession?.id;
+  // A new upload's response carries the file; the session list only says there is one.
+  const inlinePdf =
+    currentSession?.pdfContent || (currentSession?.fileType === "pdf" ? currentSession.fileContent : undefined) || undefined;
+  const hasPdf = !!currentSession && (!!currentSession.hasPdf || !!inlinePdf);
+  const showPdf = view === "pdf" && hasPdf;
+  const pdfFile: string | ArrayBuffer | null = inlinePdf ?? (fetchedPdf && fetchedPdf.sessionId === currentId ? fetchedPdf.file : null);
+  const pdfPages = showPdf && pdfReady && pdfReady.file === pdfFile ? pdfReady.pages : NO_PAGES;
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let stored: StudyView = "notes";
+    try {
+      stored = localStorage.getItem(viewKey(sessionId)) === "pdf" ? "pdf" : "notes";
+    } catch {
+      /* private mode */
+    }
+    setViewState(stored);
+    setPdfError(null);
+  }, [sessionId]);
+
+  const setView = useCallback(
+    (next: StudyView) => {
+      setGuideOpen(false); // a lesson belongs to what was on screen when it started
+      setViewState(next);
+      trackAction("study_view", { view: next });
+      setPdfReady(null); // the PDF lays itself out again when it comes back
+      setPdfError(null);
+      try {
+        if (sessionId) localStorage.setItem(viewKey(sessionId), next);
+      } catch {
+        /* private mode */
+      }
+    },
+    [sessionId],
+  );
+
+  useEffect(() => {
+    if (!showPdf || !currentId || inlinePdf || fetchedPdf?.sessionId === currentId) return;
+    const ctrl = new AbortController();
+    setPdfError(null);
+    fetchSessionPdf(currentId, ctrl.signal).then(
+      (file) => setFetchedPdf({ sessionId: currentId, file }),
+      (e: unknown) => {
+        if (!ctrl.signal.aborted) setPdfError(e instanceof Error ? e.message : "Couldn't load the PDF.");
+      },
+    );
+    return () => ctrl.abort();
+  }, [showPdf, currentId, inlinePdf, fetchedPdf?.sessionId]);
   const [readTheme, setReadTheme] = useState<"paper" | "night">(() => {
     try {
       return (localStorage.getItem("an-read-theme") as "paper" | "night") || "paper";
@@ -413,6 +496,8 @@ export default function FullStudyPage() {
   /** Which section a highlighted phrase came from, by the id on its notes block. */
   const sectionOfNotes = useCallback(
     (notesKey: string) => {
+      const page = Number(notesKey);
+      if (page < 0) return { topicId: null, title: `Page ${-page}` }; // kept from the PDF itself
       const hit = sections.find((s) => String(s.topic.db_id) === notesKey);
       return hit?.topic.db_id ? { topicId: hit.topic.db_id, title: hit.topic.title } : null;
     },
@@ -495,9 +580,16 @@ export default function FullStudyPage() {
   }
 
   const session = currentSession!;
-  const teachSections: TeachSection[] = sections
-    .filter((s) => s.topic.db_id)
-    .map((s) => ({ topicId: s.topic.id, dbId: s.topic.db_id!, title: s.topic.title, index: s.index }));
+  // In the PDF view every page is a "section": dbId -N is page N (its text layer
+  // carries data-guide-notes="-N", and the backend reads -N as that page).
+  const teachSections: TeachSection[] = showPdf
+    ? pdfPages.map((p) => ({ topicId: `pdf-${p.page}`, dbId: -p.page, title: `Page ${p.page}`, index: p.page }))
+    : sections
+        .filter((s) => s.topic.db_id)
+        .map((s) => ({ topicId: s.topic.id, dbId: s.topic.db_id!, title: s.topic.title, index: s.index }));
+  const pdfLabel = session.fileType === "pptx" ? "Slides" : "PDF";
+  const pdfNoun = pdfLabel === "Slides" ? "slides" : "PDF"; // mid-sentence
+  const teachReady = !showPdf || pdfPages.length > 0;
 
   return (
     <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
@@ -533,14 +625,53 @@ export default function FullStudyPage() {
         {/* Wraps: this cluster gained a control and a 360px phone cannot
             hold the modes, the picker and the progress meter on one line. */}
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          {hasPdf && (
+            <div
+              role="radiogroup"
+              aria-label="Study from"
+              className="flex items-center rounded-full border border-border bg-foreground/[0.04] p-0.5"
+            >
+              {(["notes", "pdf"] as const).map((v) => {
+                const on = (v === "pdf") === showPdf;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => !on && setView(v)}
+                    title={
+                      v === "pdf"
+                        ? `The ${pdfNoun} you uploaded. Teach mode explains it right on the page.`
+                        : `The notes written from your ${pdfNoun}`
+                    }
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                      on ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {v === "pdf" ? <FileText className="size-3.5" /> : <NotebookText className="size-3.5" />}
+                    {v === "pdf" ? pdfLabel : "Notes"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <button
             type="button"
+            disabled={!teachReady}
             onClick={() => {
               primeSpeechAudio();
               setGuideOpen(true);
             }}
-            title="Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
-            className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            title={
+              !teachReady
+                ? `Opening the ${pdfNoun}…`
+                : showPdf
+                  ? `Teach mode: AnotherNotes AI goes through your ${pdfNoun} page by page, pointing at each part as it explains it`
+                  : "Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
+            }
+            className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 disabled:hover:scale-100"
           >
             <GraduationCap className="size-3.5" />
             Teach mode
@@ -630,7 +761,26 @@ export default function FullStudyPage() {
       </div>
 
       <div className="guide-grid mt-6 grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
-        {/* Document */}
+        {/* Document: the uploaded PDF itself… */}
+        {showPdf ? (
+          <div className="order-2 min-w-0 lg:order-1">
+            {pdfError ? (
+              <div className="rounded-2xl border border-border bg-foreground/[0.03] p-6 text-center">
+                <p className="text-sm font-semibold">{pdfError}</p>
+                <Button size="sm" variant="outline" className="mt-4" onClick={() => setView("notes")}>
+                  Back to the notes
+                </Button>
+              </div>
+            ) : pdfFile ? (
+              <Suspense fallback={<PdfOpening label={pdfLabel} />}>
+                <PdfDocument file={pdfFile} onReady={(pages) => setPdfReady({ file: pdfFile, pages })} />
+              </Suspense>
+            ) : (
+              <PdfOpening label={pdfLabel} />
+            )}
+          </div>
+        ) : (
+        /* …or the notes written from it */
         <div className="order-2 min-w-0 space-y-12 lg:order-1">
           {sections.map((s) => (
             <StudySection
@@ -669,12 +819,29 @@ export default function FullStudyPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* Outline */}
         <nav className="order-1 hidden lg:order-2 lg:block">
-          <div className="sticky top-2 space-y-1">
-            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">On this page</p>
-            {sections.map((s) => (
+          <div className={cn("sticky top-2 space-y-1", showPdf && "max-h-[calc(100vh-1rem)] overflow-y-auto pb-2")}>
+            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {showPdf ? "Pages" : "On this page"}
+            </p>
+            {showPdf && pdfPages.map((p) => (
+              <button
+                key={p.page}
+                type="button"
+                onClick={() => document.getElementById(`pdf-page-${p.page}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
+              >
+                <FileText className="mt-px size-3.5 shrink-0 text-muted-foreground/60" />
+                <span className="min-w-0">
+                  <span className="block tabular-nums text-foreground">Page {p.page}</span>
+                  {p.heading && <span className="line-clamp-1 text-muted-foreground">{p.heading}</span>}
+                </span>
+              </button>
+            ))}
+            {!showPdf && sections.map((s) => (
               <button
                 key={s.topic.id}
                 type="button"
@@ -711,14 +878,16 @@ export default function FullStudyPage() {
           onClose={() => setReadMode(false)}
         />
       )}
-      {guideOpen && (
+      {guideOpen && teachReady && (
         <TeachMode
+          key={showPdf ? "pdf" : "notes"}
           sessionId={session.id}
           sections={teachSections}
           hostRef={pageRef}
           onClose={() => setGuideOpen(false)}
           boardEnabled={boardOn}
           onBoardClose={() => setBoardOn(false)}
+          source={showPdf ? "pdf" : "notes"}
         />
       )}
     </div>

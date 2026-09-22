@@ -32,6 +32,11 @@ type SidebarContext = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  /** A collapsed icon rail the mouse is resting on slides out over the page (see Sidebar). */
+  peek: boolean
+  setPeek: (peek: boolean) => void
+  /** Collapse, whatever state it's in: expanded, peeking out on hover, or the phone sheet. */
+  collapse: () => void
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -94,6 +99,17 @@ const SidebarProvider = React.forwardRef<
         : setOpen((open) => !open)
     }, [isMobile, setOpen, setOpenMobile])
 
+    const [peek, setPeek] = React.useState(false)
+    // Opening it for good ends a peek; so does collapsing.
+    React.useEffect(() => {
+      if (open) setPeek(false)
+    }, [open])
+    const collapse = React.useCallback(() => {
+      if (isMobile) return setOpenMobile(false)
+      setPeek(false)
+      setOpen(false)
+    }, [isMobile, setOpen, setOpenMobile])
+
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -123,8 +139,11 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        peek,
+        setPeek,
+        collapse,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, peek, collapse]
     )
 
     return (
@@ -173,7 +192,17 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const { isMobile, state, openMobile, setOpenMobile, peek, setPeek } = useSidebar()
+    const containerRef = React.useRef<HTMLDivElement>(null)
+    const enterTimer = React.useRef<number>()
+    const leaveTimer = React.useRef<number>()
+    React.useEffect(
+      () => () => {
+        window.clearTimeout(enterTimer.current)
+        window.clearTimeout(leaveTimer.current)
+      },
+      []
+    )
 
     if (collapsible === "none") {
       return (
@@ -210,12 +239,40 @@ const Sidebar = React.forwardRef<
       )
     }
 
+    /*
+      Peek: resting the mouse on the collapsed icon rail slides the whole sidebar out
+      OVER the page - the gap beside it keeps its rail width, so nothing underneath
+      moves - and it folds away again when the mouse leaves. Mouse only: a tap on a
+      touch screen should just follow the link under it. A menu opened from the
+      sidebar (the account menu) lives outside it, so the sidebar stays out while one
+      is open.
+    */
+    const peeking = collapsible === "icon" && state === "collapsed" && peek
+    const onPointerEnter = (e: React.PointerEvent) => {
+      window.clearTimeout(leaveTimer.current)
+      if (e.pointerType !== "mouse" || collapsible !== "icon" || state !== "collapsed") return
+      window.clearTimeout(enterTimer.current)
+      enterTimer.current = window.setTimeout(() => setPeek(true), 140)
+    }
+    const onPointerLeave = () => {
+      window.clearTimeout(enterTimer.current)
+      const fold = () => {
+        if (containerRef.current?.querySelector('[aria-expanded="true"]')) {
+          leaveTimer.current = window.setTimeout(fold, 300)
+          return
+        }
+        setPeek(false)
+      }
+      leaveTimer.current = window.setTimeout(fold, 220)
+    }
+
     return (
       <div
         ref={ref}
         className="group peer hidden md:block text-sidebar-foreground"
         data-state={state}
-        data-collapsible={state === "collapsed" ? collapsible : ""}
+        data-collapsible={state === "collapsed" && !peeking ? collapsible : ""}
+        data-peek={peeking ? "true" : undefined}
         data-variant={variant}
         data-side={side}
       >
@@ -226,13 +283,17 @@ const Sidebar = React.forwardRef<
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
-              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
+              ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[peek=true]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
+              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[peek=true]:w-[--sidebar-width-icon]"
           )}
         />
         <div
+          ref={containerRef}
+          onPointerEnter={onPointerEnter}
+          onPointerLeave={onPointerLeave}
           className={cn(
             "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
+            "group-data-[peek=true]:z-50",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -246,7 +307,7 @@ const Sidebar = React.forwardRef<
         >
           <div
             data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
+            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow group-data-[peek=true]:rounded-xl group-data-[peek=true]:border group-data-[peek=true]:border-sidebar-border group-data-[peek=true]:shadow-xl"
           >
             {children}
           </div>
@@ -552,7 +613,7 @@ const SidebarMenuButton = React.forwardRef<
     ref
   ) => {
     const Comp = asChild ? Slot : "button"
-    const { isMobile, state } = useSidebar()
+    const { isMobile, state, peek } = useSidebar()
 
     const button = (
       <Comp
@@ -581,7 +642,7 @@ const SidebarMenuButton = React.forwardRef<
         <TooltipContent
           side="right"
           align="center"
-          hidden={state !== "collapsed" || isMobile}
+          hidden={state !== "collapsed" || peek || isMobile}
           {...tooltip}
         />
       </Tooltip>

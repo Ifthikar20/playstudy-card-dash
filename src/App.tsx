@@ -4,13 +4,15 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from "react-router-dom";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { apiClient } from "@/services/apiClient";
 import { migrateLocalKeys } from "@/lib/localData";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { trackView } from "@/lib/analytics";
 import StandardAccountRoute from "@/components/StandardAccountRoute";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
@@ -32,6 +34,7 @@ import ChildDetailPage from "./pages/ChildDetailPage";
 import FullStudyPage from "./pages/FullStudyPage";
 import NotFound from "./pages/NotFound";
 import DevLoginPage from "./pages/DevLoginPage";
+import DevBoardPage from "./pages/DevBoardPage";
 
 const queryClient = new QueryClient();
 
@@ -47,9 +50,20 @@ apiClient.initialize().catch((error) => {
   console.error('[App] Failed to initialize API client:', error);
 });
 
+/** One page view per route change (lib/analytics). */
+function PageViews() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    trackView(pathname);
+  }, [pathname]);
+  return null;
+}
+
 const AppContent = () => {
   return (
     <BrowserRouter>
+      <PageViews />
+      <AppErrorBoundary>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
@@ -62,6 +76,8 @@ const AppContent = () => {
         <Route path="/contact" element={<ContactPage />} />
         {/* Dev-only: scripted sign-in used by scripts/dev-login.mjs (tree-shaken from prod builds) */}
         {import.meta.env.DEV && <Route path="/dev-login" element={<DevLoginPage />} />}
+        {/* Dev-only: the whiteboard's list looks in light and dark (tree-shaken from prod builds) */}
+        {import.meta.env.DEV && <Route path="/dev-board" element={<DevBoardPage />} />}
 
         {/* Protected routes - require authentication */}
         <Route
@@ -108,13 +124,17 @@ const AppContent = () => {
         {/* 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </AppErrorBoundary>
     </BrowserRouter>
   );
 };
 
 // Component that loads data only when authenticated
 const AuthenticatedApp = () => {
-  const { data, isError, refetch } = useAppData();
+  const { data, isError, error, isFetching, refetch } = useAppData();
+  // fetch() rejects with a TypeError when nothing answers at all; an HTTP error status
+  // comes back as an Error with the status in it.
+  const unreachable = error instanceof TypeError;
   const { initializeFromAPI, isInitialized } = useAppStore();
   const { session, sessionLoading } = useAuth();
 
@@ -137,16 +157,20 @@ const AuthenticatedApp = () => {
     <AppShell>
       {isError && !isInitialized ? (
         <div className="mx-auto mt-10 w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center">
-          <p className="text-sm font-semibold">Couldn't reach the server</p>
+          <p className="text-sm font-semibold">
+            {unreachable ? "Couldn't reach the server" : "The server couldn't load your sessions"}
+          </p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Your sessions and stats will appear once the backend responds.
+            {unreachable ? "It may be restarting." : "Something went wrong on its side."} Trying again every few
+            seconds — your sessions and stats appear as soon as it answers.
           </p>
           <button
             type="button"
             onClick={() => refetch()}
-            className="mt-4 inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={isFetching}
+            className="mt-4 inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
           >
-            Try again
+            {isFetching ? "Trying…" : "Try now"}
           </button>
         </div>
       ) : !session && sessionLoading ? null : (

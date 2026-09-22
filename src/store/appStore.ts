@@ -52,6 +52,8 @@ export interface StudySession {
   fileContent?: string; // Original file (base64)
   fileType?: string; // File type: pdf, pptx, docx, txt
   pdfContent?: string; // Converted PDF for PPTX files
+  /** There's a PDF to show in Full Study (the upload, or a deck converted to one). */
+  hasPdf?: boolean;
   extractedTopics?: Topic[];
   folderId?: number | null;
   /** Where the material came from (e.g. a YouTube video) + a few frame snapshots */

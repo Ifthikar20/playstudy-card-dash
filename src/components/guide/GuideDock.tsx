@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, Keyboard, Loader2, Mic, Pause, Play, Send, X } from "lucide-react";
+import { Check, Loader2, Mic, Pause, Play, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SttMode } from "@/lib/guide/speech";
 import { GuideBot, type BotKind, type BotMood } from "./GuideBot";
 
 /*
   Teach mode's controls: the tutor standing in the bottom-right corner with one
-  small pill under them — status, play/pause, mic, typed question, speed, which
-  tutor is speaking, close. What is being said shows in the speech bubble next to
-  the pointer, not here.
+  small pill under them — status, play/pause, mic, speed, which tutor is speaking,
+  close. What is being said shows in the speech bubble next to the pointer, not
+  here. The typed-question box opens by itself where there's no microphone.
 */
 
 export type GuidePhase = "loading" | "speaking" | "paused" | "listening" | "thinking" | "answering" | "done" | "error";
@@ -57,6 +57,8 @@ export interface GuideDockProps {
   askOpen: boolean;
   onToggleAsk: () => void;
   onAsk: (text: string) => void;
+  /** What the lesson is about, for the question box: "section" (notes) or "page" (a PDF). */
+  unit?: "section" | "page";
   sttMode: SttMode;
   onPlayPause: () => void;
   onMic: () => void;
@@ -198,7 +200,7 @@ export function GuideDock(props: GuideDockProps) {
               }
               e.stopPropagation();
             }}
-            placeholder="Ask about this section…"
+            placeholder={`Ask about this ${props.unit ?? "section"}…`}
             className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-pink-500"
           />
           <button
@@ -218,12 +220,6 @@ export function GuideDock(props: GuideDockProps) {
           listening && "border-pink-500/60",
         )}
       >
-        <span
-          className={cn(
-            "mr-1.5 size-2 shrink-0 rounded-full",
-            talking ? "guide-glow bg-pink-500" : listening ? "guide-mic-live bg-pink-500" : busy ? "bg-amber-400" : "bg-muted-foreground/40",
-          )}
-        />
         <span className={cn("mr-1 truncate text-xs font-medium text-foreground", listening ? "max-w-[280px]" : "max-w-[200px]")} title={progress.title}>
           {status}
         </span>
@@ -270,9 +266,6 @@ export function GuideDock(props: GuideDockProps) {
             </kbd>
           )}
         </button>
-        <IconButton title="Type a question" onClick={props.onToggleAsk} active={askOpen}>
-          <Keyboard className="size-4" />
-        </IconButton>
         <button
           type="button"
           onClick={props.onCycleRate}

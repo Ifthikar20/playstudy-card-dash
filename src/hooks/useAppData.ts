@@ -29,6 +29,9 @@ export const useAppData = () => {
     refetchOnReconnect: true,
     retry: 1, // Reduced from 2 to avoid long delays
     retryDelay: 1000, // 1 second between retries
+    // While the server can't be reached (restarting, mid-deploy, not started
+    // locally), ask again every few seconds so the app comes back on its own.
+    refetchInterval: (query) => (query.state.status === 'error' ? 4000 : false),
   });
 
   console.log('[useAppData] Query state:', {

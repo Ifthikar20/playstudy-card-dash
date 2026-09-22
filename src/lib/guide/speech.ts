@@ -150,6 +150,71 @@ function silentClip(): string {
 }
 let sharedAudio: HTMLAudioElement | null = null;
 let audioPrimed = false;
+/** Which clip owns the shared <audio> right now: a finished or cancelled clip must never pause or unhook the next one. */
+let clipToken = 0;
+
+/*
+  One voice at a time, everywhere. Every Narrator registers here, and whichever
+  starts speaking silences the others first: a Teach mode that closed while its
+  voice list was still loading, a second instance, or Teach mode open in another
+  tab (told over a BroadcastChannel). Two voices talking over each other is never
+  acceptable.
+*/
+const narrators = new Set<Narrator>();
+const TAB_ID = Math.random().toString(36).slice(2);
+let voiceChannel: BroadcastChannel | null | undefined;
+
+function channel(): BroadcastChannel | null {
+  if (voiceChannel !== undefined) return voiceChannel;
+  voiceChannel = null;
+  if (typeof BroadcastChannel === "undefined") return null;
+  try {
+    voiceChannel = new BroadcastChannel("anothernotes-voice");
+    voiceChannel.onmessage = (e: MessageEvent) => {
+      if (e.data?.type === "speaking" && e.data.tab !== TAB_ID) narrators.forEach((n) => n.preempt());
+    };
+  } catch {
+    voiceChannel = null;
+  }
+  return voiceChannel;
+}
+
+/** `owner` is about to speak: everyone else, here and in other tabs, goes quiet. */
+function claimVoice(owner: Narrator): void {
+  narrators.forEach((n) => n !== owner && n.preempt());
+  try {
+    channel()?.postMessage({ type: "speaking", tab: TAB_ID });
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Stop whatever is sounding right now, whoever started it. */
+function silenceAll(browserVoice: boolean): void {
+  clipToken++;
+  if (sharedAudio) {
+    try {
+      sharedAudio.pause();
+    } catch {
+      /* ignore */
+    }
+    sharedAudio.onended = null;
+    sharedAudio.onerror = null;
+  }
+  if (browserVoice) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** A speaking style's prosody (backend speaking_styles.json), relative to the lesson's own rate and pitch. */
+export interface Tone {
+  rate: number;
+  pitch: number;
+}
 
 /** The shared audio element, created on first use. */
 export function speechAudioElement(): HTMLAudioElement {
@@ -210,10 +275,24 @@ export class Narrator {
   private gen = 0;
   private keep: SpeechSynthesisUtterance[] = []; // Chrome GCs utterances mid-speech otherwise
   private timer: number | undefined;
+  /** Settles a paced (voiceless) line early when it's cancelled. */
+  private pacedDone: (() => void) | undefined;
   private onCaption?: (text: string | null) => void;
+  /** True from the start of a `speak()` until it settles. */
+  private active = false;
+  /** Set by `dispose()`: this narrator never makes a sound again. */
+  private disposed = false;
+  /** The current line's speaking style. */
+  private tone: Tone | null = null;
+  /** While the browser voice is mid-sentence: pick the sentence up again at the new speed. */
+  private rerate: (() => void) | undefined;
+  /** Called when someone else (another narrator, another tab) takes the voice mid-line. */
+  onPreempted?: () => void;
 
   constructor(opts: { onCaption?: (text: string | null) => void } = {}) {
     this.onCaption = opts.onCaption;
+    narrators.add(this);
+    channel();
     if (typeof document !== "undefined") {
       const events = ["pointerdown", "touchstart", "keydown"];
       const listenerOpts = { capture: true, passive: true } as AddEventListenerOptions;
@@ -228,9 +307,16 @@ export class Narrator {
   get rate(): number {
     return this.rateValue;
   }
+  /**
+   * The speed button. It takes effect at once, not from the next sentence: the natural
+   * voice's clip just plays faster or slower (keeping the line's own style), and the
+   * browser voice - which can't change speed mid-utterance - carries on from the word
+   * it's on at the new speed.
+   */
   set rate(r: number) {
     this.rateValue = r;
-    if (sharedAudio) sharedAudio.playbackRate = r;
+    if (sharedAudio) sharedAudio.playbackRate = r * (this.tone?.rate ?? 1);
+    this.rerate?.();
   }
 
   /** Route speech through the backend's natural voice. */
@@ -256,48 +342,57 @@ export class Narrator {
   /** Stop speaking immediately; any in-flight `speak()` resolves false. */
   cancel(): void {
     this.gen++;
+    this.active = false;
     if (this.timer) {
       window.clearTimeout(this.timer);
       this.timer = undefined;
     }
-    if (sharedAudio) {
-      try {
-        sharedAudio.pause();
-      } catch {
-        /* ignore */
-      }
-      sharedAudio.onended = null;
-      sharedAudio.onerror = null;
-    }
-    if (this.available) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {
-        /* ignore */
-      }
-    }
+    const paced = this.pacedDone;
+    this.pacedDone = undefined;
+    paced?.();
+    silenceAll(this.available);
     this.keep = [];
   }
 
-  /** Speak `text` sentence by sentence. Resolves true when it finished, false if cancelled. */
-  async speak(text: string): Promise<boolean> {
+  /** Someone else is about to speak: stop, and tell the owner if we were mid-line. */
+  preempt(): void {
+    const wasSpeaking = this.active;
+    this.cancel();
+    if (wasSpeaking) this.onPreempted?.();
+  }
+
+  /** For good: this narrator's lesson is gone. Nothing it was saying, or is asked to say, is heard. */
+  dispose(): void {
+    this.disposed = true;
+    this.cancel();
+    narrators.delete(this);
+  }
+
+  /**
+   * Speak `text` sentence by sentence, in `tone` (a speaking style's pace and pitch).
+   * Resolves true when it finished, false if cancelled. Whatever else was sounding -
+   * this narrator's last line, another narrator, another tab - stops first.
+   */
+  async speak(text: string, tone?: Tone | null): Promise<boolean> {
+    if (this.disposed) return false;
     const gen = ++this.gen;
-    if (this.available) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {
-        /* ignore */
+    claimVoice(this);
+    silenceAll(this.available);
+    this.tone = tone ?? null;
+    this.active = true;
+    try {
+      const parts = splitSentences(text);
+      if (this.serverActive) parts.slice(1, 4).forEach((s) => void this.clip(s).catch(() => undefined));
+      for (const sentence of parts) {
+        if (gen !== this.gen) return false;
+        this.onCaption?.(sentence);
+        const ok = await this.one(sentence, gen);
+        if (!ok) return false;
       }
+      return gen === this.gen;
+    } finally {
+      if (gen === this.gen) this.active = false;
     }
-    const parts = splitSentences(text);
-    if (this.serverActive) parts.slice(1, 4).forEach((s) => void this.clip(s).catch(() => undefined));
-    for (const sentence of parts) {
-      if (gen !== this.gen) return false;
-      this.onCaption?.(sentence);
-      const ok = await this.one(sentence, gen);
-      if (!ok) return false;
-    }
-    return gen === this.gen;
   }
 
   /*
@@ -353,9 +448,13 @@ export class Narrator {
 
   private async oneServer(sentence: string, gen: number): Promise<boolean> {
     const blob = await this.clip(sentence, true);
-    if (gen !== this.gen) return false;
+    if (gen !== this.gen || this.disposed) return false;
     const url = URL.createObjectURL(blob);
     const a = speechAudioElement();
+    // This clip owns the element from here on. An earlier clip's guard or finish
+    // checks the token and leaves this one alone: before, a cancelled line's
+    // guard could pause the NEXT line (or unhook its onended) and freeze the lesson.
+    const token = ++clipToken;
     a.onended = null;
     a.onerror = null;
     try {
@@ -370,7 +469,9 @@ export class Narrator {
       /* ignore */
     }
     a.muted = false;
-    a.playbackRate = this.rateValue;
+    // A style's pace shows in the natural voice too (a calm line a touch slower,
+    // a surprising one a touch quicker); its pitch only applies to the browser voice.
+    a.playbackRate = this.rateValue * (this.tone?.rate ?? 1);
     (a as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
     try {
       await a.play();
@@ -384,19 +485,23 @@ export class Narrator {
         if (settled) return;
         settled = true;
         window.clearInterval(guard);
-        a.onended = null;
-        a.onerror = null;
+        if (clipToken === token) {
+          a.onended = null;
+          a.onerror = null;
+        }
         URL.revokeObjectURL(url);
         resolve(ok && gen === this.gen);
       };
       a.onended = () => finish(true);
       a.onerror = () => finish(true);
       const guard = window.setInterval(() => {
-        if (gen !== this.gen) {
-          try {
-            a.pause();
-          } catch {
-            /* ignore */
+        if (gen !== this.gen || clipToken !== token) {
+          if (clipToken === token) {
+            try {
+              a.pause();
+            } catch {
+              /* ignore */
+            }
           }
           finish(false);
         }
@@ -406,41 +511,83 @@ export class Narrator {
 
   private oneBrowser(sentence: string, gen: number): Promise<boolean> {
     if (!this.available) {
-      // No synthesizer: pace the caption as if it were being read.
+      // No synthesizer: pace the caption as if it were being read. `cancel()` settles
+      // it (false) - clearing the timer alone left the line waiting forever.
       return new Promise((resolve) => {
         const ms = Math.max(1800, (sentence.split(/\s+/).length * 330) / this.rateValue);
-        this.timer = window.setTimeout(() => resolve(gen === this.gen), ms);
+        this.pacedDone = () => resolve(false);
+        this.timer = window.setTimeout(() => {
+          this.pacedDone = undefined;
+          resolve(gen === this.gen);
+        }, ms);
       });
     }
+    if (this.disposed) return Promise.resolve(false);
     return new Promise((resolve) => {
       const synth = window.speechSynthesis;
-      const u = new SpeechSynthesisUtterance(sentence);
-      u.rate = this.rateValue;
-      u.pitch = this.pitch;
-      if (this.voice) {
-        u.voice = this.voice;
-        u.lang = this.voice.lang;
-      }
+      let current: SpeechSynthesisUtterance | null = null;
+      let from = 0; // where in the sentence the current utterance starts
+      let reached = 0; // the last word boundary the voice reported, in the whole sentence
+      let startedAt = Date.now();
       let settled = false;
       const finish = (ok: boolean) => {
         if (settled) return;
         settled = true;
         window.clearInterval(guard);
-        this.keep = this.keep.filter((k) => k !== u);
+        if (this.rerate === rerate) this.rerate = undefined;
+        this.keep = this.keep.filter((k) => k !== current);
         resolve(ok && gen === this.gen);
       };
-      u.onend = () => finish(true);
-      u.onerror = (e) => finish(e.error !== "interrupted" && e.error !== "canceled");
-      this.keep.push(u);
-      const startedAt = Date.now();
+      const say = (start: number) => {
+        const u = new SpeechSynthesisUtterance(sentence.slice(start));
+        u.rate = this.rateValue * (this.tone?.rate ?? 1);
+        u.pitch = this.pitch * (this.tone?.pitch ?? 1);
+        if (this.voice) {
+          u.voice = this.voice;
+          u.lang = this.voice.lang;
+        }
+        // Only the utterance now speaking may end the sentence; one replaced by a speed
+        // change reports "interrupted" as it goes, and that must be ignored.
+        u.onend = () => u === current && finish(true);
+        u.onerror = (e) => u === current && finish(e.error !== "interrupted" && e.error !== "canceled");
+        u.onboundary = (e) => {
+          if (u === current) reached = start + e.charIndex;
+        };
+        this.keep = this.keep.filter((k) => k !== current);
+        this.keep.push(u);
+        current = u;
+        from = start;
+        startedAt = Date.now();
+        if (synth.paused) synth.resume();
+        synth.speak(u);
+      };
+      // New speed mid-sentence: stop, and carry on from the word it was on. A voice that
+      // doesn't report word positions starts the sentence again if it has only just
+      // begun, else the new speed waits for the next sentence.
+      const rerate = () => {
+        if (settled || gen !== this.gen) return;
+        const at = reached > from ? reached : Date.now() - startedAt < 1500 ? from : -1;
+        if (at < 0) return;
+        this.keep = this.keep.filter((k) => k !== current);
+        current = null; // the one being cut off can't finish the sentence now
+        synth.cancel();
+        window.setTimeout(() => {
+          if (settled || gen !== this.gen) return;
+          try {
+            say(at);
+          } catch {
+            finish(true);
+          }
+        }, 60); // Chrome drops a speak() that comes straight after cancel()
+      };
+      this.rerate = rerate;
       // Chrome occasionally never fires onend; poll so the walkthrough never stalls.
       const guard = window.setInterval(() => {
         if (gen !== this.gen) return finish(false);
-        if (Date.now() - startedAt > 800 && !synth.speaking && !synth.pending) finish(true);
+        if (current && Date.now() - startedAt > 800 && !synth.speaking && !synth.pending) finish(true);
       }, 300);
       try {
-        if (synth.paused) synth.resume();
-        synth.speak(u);
+        say(0);
       } catch {
         finish(true);
       }

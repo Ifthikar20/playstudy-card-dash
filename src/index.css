@@ -373,7 +373,6 @@ html:has(.lp) #root {
 .guide-eq-pink i { background: #ec4899; }
 .dark .guide-bubble { background: rgba(24, 24, 27, 0.97); color: #fafafa; border-color: rgba(236, 72, 153, 0.45); }
 .dark .guide-bubble-head { color: #f472b6; }
-.guide-bubble-role { font-weight: 600; letter-spacing: 0.08em; opacity: 0.6; }
 
 /* ---- Teach mode: the little tutor who is talking (see GuideBot.tsx) ------- */
 /* Pixel art, so everything moves in whole pixels: it bobs, blinks, and works
@@ -817,45 +816,293 @@ html:has(.lp) #root {
 .guide-table-grid tbody tr:last-child td { border-bottom: none; }
 
 /* ---- Teach mode whiteboard: a list of principles ------------------------- */
-/* Each item is written on left to right (staggered), the one being explained gets
-   a filled number and a marker stroke, the ones already covered get a tick. */
-.guide-list { width: 100%; display: flex; flex-direction: column; gap: 8px; }
-.guide-list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-.guide-list-item {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 5px 9px; border-radius: 10px;
-  font-family: "Patrick Hand", cursive; color: hsl(var(--foreground));
-  transition: background-color 0.35s ease;
-  animation: guide-write 0.75s steps(24, end) both;
+/* Five looks, picked per list in GuideList.tsx - numbered, cards, steps, sticky and
+   chips - with each item in a hue from the list's colour theme. Items are written
+   on one after another; the one being explained is raised or ringed, with a marker
+   stroke over its label, and the ones already covered get a tick and step back. */
+.guide-list {
+  /* each hue's main colour (the steps' rail runs from one item's to the next's) */
+  --gl-amber: #f59e0b; --gl-violet: #8b5cf6; --gl-green: #22c55e; --gl-pink: #ec4899;
+  --gl-blue: #3b82f6; --gl-orange: #f97316; --gl-teal: #14b8a6;
+  --gl-on-strong: #ffffff;
+  /* the highlighter over the label being explained */
+  --gl-hl: rgba(253, 224, 71, 0.9);
+  --gl-hl-end: rgba(253, 224, 71, 0.78);
+  container-type: inline-size;
+  width: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  font-family: "Patrick Hand", cursive;
+  color: hsl(var(--foreground));
 }
+.dark .guide-list {
+  --gl-amber: #fbbf24; --gl-violet: #a78bfa; --gl-green: #4ade80; --gl-pink: #f472b6;
+  --gl-blue: #60a5fa; --gl-orange: #fb923c; --gl-teal: #2dd4bf;
+  --gl-on-strong: #0c0a09;
+}
+/* Per hue: pastel paper (tiles, notes, chips) with an ink that stays dark on it, an
+   edge, a strong fill for the item in focus, a faint tint, a glow, and a marker
+   that still shows on the hue's own paper. Dark mode keeps the tiles pastel and
+   gives sticky notes the dark paper the dashboard's sticky wall uses. */
+.guide-list[data-hue="amber"],  .guide-list [data-hue="amber"]  { --gl-accent: var(--gl-amber);  --gl-paper: #fef3c7; --gl-paper-2: #fde68a; --gl-edge: #fcd77f; --gl-strong: #b45309; --gl-ink: #78350f; --gl-tint: #fffbeb; --gl-glow: rgba(245, 158, 11, 0.28); --gl-mark: rgba(252, 211, 77, 0.85); }
+.guide-list[data-hue="violet"], .guide-list [data-hue="violet"] { --gl-accent: var(--gl-violet); --gl-paper: #ede9fe; --gl-paper-2: #ddd6fe; --gl-edge: #c9bdfb; --gl-strong: #7c3aed; --gl-ink: #4c1d95; --gl-tint: #f5f3ff; --gl-glow: rgba(139, 92, 246, 0.26); --gl-mark: rgba(196, 181, 253, 0.85); }
+.guide-list[data-hue="green"],  .guide-list [data-hue="green"]  { --gl-accent: var(--gl-green);  --gl-paper: #dcfce7; --gl-paper-2: #bbf7d0; --gl-edge: #a7e9bf; --gl-strong: #15803d; --gl-ink: #14532d; --gl-tint: #f0fdf4; --gl-glow: rgba(34, 197, 94, 0.26); --gl-mark: rgba(134, 239, 172, 0.85); }
+.guide-list[data-hue="pink"],   .guide-list [data-hue="pink"]   { --gl-accent: var(--gl-pink);   --gl-paper: #fce7f3; --gl-paper-2: #fbcfe8; --gl-edge: #f8bcdc; --gl-strong: #db2777; --gl-ink: #831843; --gl-tint: #fdf2f8; --gl-glow: rgba(236, 72, 153, 0.24); --gl-mark: rgba(249, 168, 212, 0.85); }
+.guide-list[data-hue="blue"],   .guide-list [data-hue="blue"]   { --gl-accent: var(--gl-blue);   --gl-paper: #dbeafe; --gl-paper-2: #bfdbfe; --gl-edge: #a9c9fb; --gl-strong: #2563eb; --gl-ink: #1e3a8a; --gl-tint: #eff6ff; --gl-glow: rgba(59, 130, 246, 0.26); --gl-mark: rgba(147, 197, 253, 0.85); }
+.guide-list[data-hue="orange"], .guide-list [data-hue="orange"] { --gl-accent: var(--gl-orange); --gl-paper: #ffedd5; --gl-paper-2: #fed7aa; --gl-edge: #fdc48a; --gl-strong: #c2410c; --gl-ink: #7c2d12; --gl-tint: #fff7ed; --gl-glow: rgba(249, 115, 22, 0.26); --gl-mark: rgba(253, 186, 116, 0.85); }
+.guide-list[data-hue="teal"],   .guide-list [data-hue="teal"]   { --gl-accent: var(--gl-teal);   --gl-paper: #ccfbf1; --gl-paper-2: #99f6e4; --gl-edge: #8eead8; --gl-strong: #0f766e; --gl-ink: #134e4a; --gl-tint: #f0fdfa; --gl-glow: rgba(20, 184, 166, 0.26); --gl-mark: rgba(94, 234, 212, 0.85); }
+.dark .guide-list[data-hue="amber"],  .dark .guide-list [data-hue="amber"]  { --gl-paper: #fde68a; --gl-paper-2: #fcd34d; --gl-edge: rgba(251, 191, 36, 0.5); --gl-strong: #fbbf24; --gl-ink: #451a03; --gl-tint: rgba(251, 191, 36, 0.08); --gl-glow: rgba(251, 191, 36, 0.3); --gl-mark: rgba(251, 191, 36, 0.34); --gl-note: #2f2610; --gl-note-edge: #57451a; --gl-note-ink: #fde3a7; }
+.dark .guide-list[data-hue="violet"], .dark .guide-list [data-hue="violet"] { --gl-paper: #ddd6fe; --gl-paper-2: #c4b5fd; --gl-edge: rgba(167, 139, 250, 0.52); --gl-strong: #a78bfa; --gl-ink: #2e1065; --gl-tint: rgba(167, 139, 250, 0.09); --gl-glow: rgba(167, 139, 250, 0.3); --gl-mark: rgba(167, 139, 250, 0.36); --gl-note: #211a3a; --gl-note-edge: #3c2f6b; --gl-note-ink: #ddd6fe; }
+.dark .guide-list[data-hue="green"],  .dark .guide-list [data-hue="green"]  { --gl-paper: #bbf7d0; --gl-paper-2: #86efac; --gl-edge: rgba(74, 222, 128, 0.46); --gl-strong: #4ade80; --gl-ink: #052e16; --gl-tint: rgba(74, 222, 128, 0.07); --gl-glow: rgba(74, 222, 128, 0.28); --gl-mark: rgba(74, 222, 128, 0.3); --gl-note: #14291c; --gl-note-edge: #1f4a31; --gl-note-ink: #bbf7d0; }
+.dark .guide-list[data-hue="pink"],   .dark .guide-list [data-hue="pink"]   { --gl-paper: #fbcfe8; --gl-paper-2: #f9a8d4; --gl-edge: rgba(244, 114, 182, 0.5); --gl-strong: #f472b6; --gl-ink: #500724; --gl-tint: rgba(244, 114, 182, 0.08); --gl-glow: rgba(244, 114, 182, 0.3); --gl-mark: rgba(244, 114, 182, 0.34); --gl-note: #331628; --gl-note-edge: #5b2347; --gl-note-ink: #fbcfe8; }
+.dark .guide-list[data-hue="blue"],   .dark .guide-list [data-hue="blue"]   { --gl-paper: #bfdbfe; --gl-paper-2: #93c5fd; --gl-edge: rgba(96, 165, 250, 0.52); --gl-strong: #60a5fa; --gl-ink: #172554; --gl-tint: rgba(96, 165, 250, 0.09); --gl-glow: rgba(96, 165, 250, 0.3); --gl-mark: rgba(96, 165, 250, 0.36); --gl-note: #131f38; --gl-note-edge: #1e3a6b; --gl-note-ink: #bfdbfe; }
+.dark .guide-list[data-hue="orange"], .dark .guide-list [data-hue="orange"] { --gl-paper: #fed7aa; --gl-paper-2: #fdba74; --gl-edge: rgba(251, 146, 60, 0.5); --gl-strong: #fb923c; --gl-ink: #431407; --gl-tint: rgba(251, 146, 60, 0.08); --gl-glow: rgba(251, 146, 60, 0.3); --gl-mark: rgba(251, 146, 60, 0.34); --gl-note: #33200f; --gl-note-edge: #5f3614; --gl-note-ink: #fed7aa; }
+.dark .guide-list[data-hue="teal"],   .dark .guide-list [data-hue="teal"]   { --gl-paper: #99f6e4; --gl-paper-2: #5eead4; --gl-edge: rgba(45, 212, 191, 0.48); --gl-strong: #2dd4bf; --gl-ink: #042f2e; --gl-tint: rgba(45, 212, 191, 0.07); --gl-glow: rgba(45, 212, 191, 0.28); --gl-mark: rgba(45, 212, 191, 0.32); --gl-note: #0f2926; --gl-note-edge: #1b4a44; --gl-note-ink: #99f6e4; }
+
+.guide-list-title { display: flex; flex-direction: column; align-items: center; }
+.guide-list-squiggle {
+  width: 54px; height: 8px; margin-top: 1px;
+  fill: none; stroke: var(--gl-accent); stroke-width: 2.2; stroke-linecap: round;
+}
+.guide-list-items { list-style: none; margin: 0; padding: 0; }
+.guide-list-item { position: relative; min-width: 0; }
 .guide-list-num {
   flex-shrink: 0; display: inline-grid; place-items: center;
-  width: 24px; height: 24px; margin-top: 1px; border-radius: 9999px;
-  border: 1.5px solid hsl(var(--border));
-  font-size: 14px; font-weight: 700; line-height: 1; color: hsl(var(--muted-foreground));
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+  width: 26px; height: 26px; border-radius: 9999px;
+  font-size: 15px; font-weight: 700; line-height: 1;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease,
+    opacity 0.3s ease, rotate 0.3s ease, scale 0.3s ease;
 }
-.guide-list-text { display: flex; flex-direction: column; min-width: 0; }
-.guide-list-label { position: relative; z-index: 0; align-self: flex-start; font-size: 18px; line-height: 1.25; }
-.guide-list-detail { font-size: 14.5px; line-height: 1.3; color: hsl(var(--muted-foreground)); }
-.guide-list-item[data-state="focus"] { background: rgba(236, 72, 153, 0.07); }
-.guide-list-item[data-state="focus"] .guide-list-num {
-  background: #ec4899; border-color: #ec4899; color: #fff;
-  box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.18);
+.guide-list-tick {
+  width: 64%; height: 64%;
+  fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: guide-list-tick 0.4s ease-out 0.1s forwards;
 }
+.guide-list-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; transition: opacity 0.35s ease; }
+.guide-list-label {
+  position: relative; z-index: 0; align-self: flex-start; max-width: 100%;
+  font-size: 18px; line-height: 1.25; overflow-wrap: anywhere;
+}
+.guide-list-detail { font-size: 14.5px; line-height: 1.3; color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; }
+/* "Quiz me": the label is a blank to fill in */
+.guide-list-blank { min-width: 3em; text-align: center; border-bottom: 2px dashed currentColor; opacity: 0.7; }
 .guide-list-item[data-state="focus"] .guide-list-label::before {
   content: ""; position: absolute; inset: 1px -4px 0; z-index: -1;
   border-radius: 0.45em 0.25em 0.4em 0.3em;
-  background: linear-gradient(100deg, rgba(253, 224, 71, 0) 0.5%, rgba(253, 224, 71, 0.9) 3%, rgba(253, 224, 71, 0.78) 95%, rgba(253, 224, 71, 0) 99%);
+  background: linear-gradient(100deg, transparent 0.5%, var(--gl-hl) 3%, var(--gl-hl-end) 95%, transparent 99%);
   transform-origin: left center;
   animation: guide-mark-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.guide-list-item[data-state="done"] .guide-list-num { background: rgba(236, 72, 153, 0.12); border-color: transparent; color: #db2777; }
-.dark .guide-list-item[data-state="focus"] .guide-list-label::before { background: rgba(236, 72, 153, 0.32); }
-.dark .guide-list-item[data-state="done"] .guide-list-num { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
+.guide-list-item[data-state="done"] .guide-list-text { opacity: 0.6; }
+/* on a dark board a yellow stroke would swallow white text; use the item's own hue */
+.dark .guide-list-item { --gl-hl: var(--gl-mark); --gl-hl-end: var(--gl-mark); }
+
+/* numbered: a clean list, each number ringed in its own colour */
+.guide-list[data-layout="numbered"] .guide-list-items { display: flex; flex-direction: column; gap: 2px; }
+.guide-list[data-layout="numbered"] .guide-list-item {
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 6px 10px 6px 8px; border-radius: 12px;
+  color: hsl(var(--foreground));
+  transition: background-color 0.35s ease;
+  animation: guide-list-write 0.75s steps(24, end) backwards;
+}
+.guide-list[data-layout="numbered"] .guide-list-num { margin-top: 1px; border: 2px solid var(--gl-edge); color: var(--gl-strong); }
+.guide-list[data-layout="numbered"] .guide-list-item[data-state="focus"] { background: var(--gl-tint); }
+.guide-list[data-layout="numbered"] .guide-list-item[data-state="focus"]::after {
+  content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 3px;
+  background: var(--gl-accent);
+}
+.guide-list[data-layout="numbered"] .guide-list-item[data-state="focus"] .guide-list-num {
+  border-color: var(--gl-strong); background: var(--gl-strong); color: var(--gl-on-strong);
+  box-shadow: 0 0 0 4px var(--gl-glow);
+}
+.guide-list[data-layout="numbered"] .guide-list-item[data-state="done"] .guide-list-num { border-color: var(--gl-paper); background: var(--gl-paper); color: var(--gl-ink); }
+
+/* cards: a grid of small cards, each number on a pastel tile set down at a slant */
+.guide-list[data-layout="cards"] .guide-list-items {
+  --gl-cols: 2;
+  display: grid; grid-template-columns: repeat(var(--gl-cols), minmax(0, 1fr)); gap: 10px;
+}
+.guide-list[data-layout="cards"] .guide-list-items[data-cols="1"] { --gl-cols: 1; }
+.guide-list[data-layout="cards"] .guide-list-items[data-cols="2"] > .guide-list-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.guide-list[data-layout="cards"] .guide-list-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px 11px 10px; border-radius: 14px;
+  border: 1.5px solid var(--gl-edge); background: var(--gl-tint);
+  color: hsl(var(--foreground));
+  transition: translate 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.35s ease, background-color 0.35s ease, box-shadow 0.35s ease;
+  animation: guide-list-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.guide-list[data-layout="cards"] .guide-list-num {
+  width: 30px; height: 30px; border-radius: 9px; rotate: -4deg;
+  background: var(--gl-paper); color: var(--gl-ink); font-size: 16px;
+}
+.guide-list[data-layout="cards"] .guide-list-item:nth-child(even) .guide-list-num { rotate: 3deg; }
+.guide-list[data-layout="cards"] .guide-list-text { padding-top: 3px; }
+.guide-list[data-layout="cards"] .guide-list-item[data-state="focus"] {
+  translate: 0 -2px; border-color: var(--gl-accent);
+  box-shadow: 0 0 0 1px var(--gl-accent), 0 14px 24px -14px var(--gl-accent);
+}
+.guide-list[data-layout="cards"] .guide-list-item[data-state="focus"] .guide-list-num {
+  rotate: 0deg; scale: 1.08; background: var(--gl-strong); color: var(--gl-on-strong);
+}
+.guide-list[data-layout="cards"] .guide-list-item[data-state="done"] { border-style: dashed; background: transparent; }
+
+/* steps: a stepper for stages, cycles and processes; covered steps fill in the rail */
+.guide-list[data-layout="steps"] .guide-list-items { display: flex; flex-direction: column; gap: 8px; }
+.guide-list[data-layout="steps"] .guide-list-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 3px 8px 3px 2px;
+  color: hsl(var(--foreground));
+  animation: guide-list-write 0.75s steps(24, end) backwards;
+}
+.guide-list[data-layout="steps"] .guide-list-item:not(:last-child)::after {
+  content: ""; position: absolute; left: 15.5px; top: 37px; bottom: -9px; width: 3px; border-radius: 3px;
+  background: repeating-linear-gradient(to bottom, var(--gl-edge) 0 5px, transparent 5px 10px);
+}
+.guide-list[data-layout="steps"] .guide-list-item[data-state="done"]::after {
+  background: linear-gradient(var(--gl-accent), var(--gl-next, var(--gl-accent)));
+}
+.guide-list[data-layout="steps"] .guide-list-num {
+  width: 30px; height: 30px; border: 2.5px solid var(--gl-edge);
+  background: hsl(var(--card)); color: var(--gl-strong);
+}
+.guide-list[data-layout="steps"] .guide-list-text { padding-top: 4px; }
+.guide-list[data-layout="steps"] .guide-list-item[data-state="focus"] .guide-list-num {
+  scale: 1.1; border-color: var(--gl-strong); background: var(--gl-strong); color: var(--gl-on-strong);
+  box-shadow: 0 0 0 5px var(--gl-glow);
+}
+.guide-list[data-layout="steps"] .guide-list-item[data-state="done"] .guide-list-num { border-color: var(--gl-accent); background: var(--gl-paper); color: var(--gl-ink); }
+/* a short sequence runs across a wide board instead, the rail joining the nodes left to right */
+@container (min-width: 460px) {
+  .guide-list[data-layout="steps"] .guide-list-items[data-flow="row"] {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: 10px;
+  }
+  .guide-list[data-layout="steps"] [data-flow="row"] .guide-list-item {
+    flex-direction: column; align-items: center; gap: 7px;
+    padding: 2px 0 4px; text-align: center;
+  }
+  .guide-list[data-layout="steps"] [data-flow="row"] .guide-list-item:not(:last-child)::after {
+    left: calc(50% + 21px); top: 15.5px; bottom: auto; width: calc(100% - 32px); height: 3px;
+    background: repeating-linear-gradient(to right, var(--gl-edge) 0 5px, transparent 5px 10px);
+  }
+  .guide-list[data-layout="steps"] [data-flow="row"] .guide-list-item[data-state="done"]::after {
+    background: linear-gradient(to right, var(--gl-accent), var(--gl-next, var(--gl-accent)));
+  }
+  .guide-list[data-layout="steps"] [data-flow="row"] .guide-list-text { align-items: center; padding-top: 0; }
+  .guide-list[data-layout="steps"] [data-flow="row"] .guide-list-label { align-self: center; }
+}
+
+/* sticky: notes stuck up on the board with tape, each tilted a hair */
+.guide-list[data-layout="sticky"] .guide-list-items {
+  --gl-cols: 3; --gl-gap: 14px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 18px var(--gl-gap);
+  padding: 10px 6px 8px;
+}
+.guide-list[data-layout="sticky"] .guide-list-items[data-cols="2"] { --gl-cols: 2; }
+/* notes stay note-sized, however wide the board; longer notes get a little more room */
+.guide-list[data-layout="sticky"][data-density="medium"] .guide-list-items { --gl-note-max: 230px; }
+.guide-list[data-layout="sticky"][data-density="long"] .guide-list-items { --gl-note-max: 260px; }
+.guide-list[data-layout="sticky"] .guide-list-item {
+  --gl-hl: var(--gl-mark); --gl-hl-end: var(--gl-mark);
+  width: calc((100% - (var(--gl-cols) - 1) * var(--gl-gap)) / var(--gl-cols));
+  max-width: var(--gl-note-max, 210px);
+  display: flex; flex-direction: column; gap: 3px;
+  min-height: 96px; padding: 15px 12px 12px;
+  border: 1px solid var(--gl-note-edge, var(--gl-edge)); border-radius: 3px 3px 16px 3px;
+  background: var(--gl-note, var(--gl-paper));
+  color: var(--gl-note-ink, var(--gl-ink));
+  box-shadow: 0 1px 2px rgba(23, 18, 5, 0.06), 0 10px 18px -12px rgba(23, 18, 5, 0.45);
+  rotate: var(--gl-tilt, 0deg);
+  transition: rotate 0.35s ease, scale 0.35s ease, translate 0.35s ease, box-shadow 0.35s ease;
+  animation: guide-list-stick 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.guide-list[data-layout="sticky"] .guide-list-item::before {
+  content: ""; position: absolute; top: -8px; left: 50%; width: 44px; height: 16px;
+  translate: -50% 0; rotate: -3deg;
+  border: 1px solid rgba(23, 18, 5, 0.06); border-radius: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 1px 2px rgba(23, 18, 5, 0.08);
+}
+.dark .guide-list[data-layout="sticky"] .guide-list-item::before { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.08); }
+.guide-list[data-layout="sticky"] .guide-list-num {
+  position: absolute; top: 7px; right: 7px; width: 22px; height: 22px;
+  font-size: 14px; opacity: 0.5;
+}
+/* the label (and its marker) keeps clear of the number in the corner */
+.guide-list[data-layout="sticky"] .guide-list-label { margin-right: 22px; }
+.guide-list[data-layout="sticky"] .guide-list-detail { color: inherit; opacity: 0.78; font-size: 14px; }
+.guide-list[data-layout="sticky"] .guide-list-item[data-state="focus"] {
+  z-index: 1; rotate: 0deg; scale: 1.05; translate: 0 -3px;
+  box-shadow: 0 0 0 2px var(--gl-accent), 0 18px 28px -14px rgba(23, 18, 5, 0.5);
+}
+.guide-list[data-layout="sticky"] .guide-list-item[data-state="focus"] .guide-list-num,
+.guide-list[data-layout="sticky"] .guide-list-item[data-state="done"] .guide-list-num {
+  opacity: 1; background: var(--gl-strong); color: var(--gl-on-strong);
+}
+
+/* chips: short names as pills */
+.guide-list[data-layout="chips"] .guide-list-items {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 8px;
+  padding: 4px 2px 6px;
+}
+.guide-list[data-layout="chips"] .guide-list-item {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+  padding: 4px 14px 4px 5px; border-radius: 9999px;
+  border: 1.5px solid var(--gl-edge); background: var(--gl-paper); color: var(--gl-ink);
+  transition: scale 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  animation: guide-list-pop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.guide-list[data-layout="chips"] .guide-list-num {
+  width: 24px; height: 24px; font-size: 13.5px;
+  background: rgba(255, 255, 255, 0.8); color: var(--gl-ink);
+}
+.guide-list[data-layout="chips"] .guide-list-text { flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+.guide-list[data-layout="chips"] .guide-list-detail { color: inherit; opacity: 0.75; font-size: 14px; }
+.guide-list[data-layout="chips"] .guide-list-item[data-state="focus"] {
+  scale: 1.08; border-color: var(--gl-accent); background: var(--gl-paper-2);
+  box-shadow: 0 0 0 3px var(--gl-glow), 0 10px 18px -10px var(--gl-accent);
+}
+.guide-list[data-layout="chips"] .guide-list-item[data-state="focus"] .guide-list-num { background: var(--gl-strong); color: var(--gl-on-strong); }
+/* the pill itself is the highlight; a marker inside it would be one too many */
+.guide-list[data-layout="chips"] .guide-list-item[data-state="focus"] .guide-list-label::before { display: none; }
+
+/* a narrow board (a phone, a small window) takes fewer columns */
+@container (max-width: 430px) {
+  .guide-list[data-layout="sticky"] .guide-list-items[data-cols="3"] { --gl-cols: 2; }
+}
+@container (max-width: 340px) {
+  .guide-list[data-layout="cards"] .guide-list-items[data-cols] { --gl-cols: 1; }
+  .guide-list[data-layout="sticky"]:not([data-density="short"]) .guide-list-items[data-cols] { --gl-cols: 1; }
+  /* two short notes side by side on a phone: smaller writing, so words aren't split */
+  .guide-list[data-layout="sticky"] .guide-list-items { --gl-gap: 10px; }
+  .guide-list[data-layout="sticky"] .guide-list-item { min-height: 84px; padding: 13px 10px 10px; }
+  .guide-list[data-layout="sticky"] .guide-list-label { margin-right: 18px; font-size: 16px; }
+  .guide-list[data-layout="sticky"] .guide-list-detail { font-size: 13px; }
+  .guide-list[data-layout="sticky"] .guide-list-num { top: 5px; right: 5px; width: 20px; height: 20px; font-size: 12.5px; }
+}
+
+@keyframes guide-list-write {
+  from { clip-path: inset(-12px 100% -12px -12px); }
+  to   { clip-path: inset(-12px -12px -12px -12px); }
+}
+@keyframes guide-list-rise { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@keyframes guide-list-stick {
+  from { opacity: 0; transform: translateY(-14px) scale(1.08) rotate(-4deg); }
+  55%  { opacity: 1; }
+}
+@keyframes guide-list-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  70%  { opacity: 1; transform: scale(1.06); }
+}
+@keyframes guide-list-tick { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .guide-list-item,
+  .guide-list-tick,
   .guide-list-item[data-state="focus"] .guide-list-label::before { animation-duration: 0.01ms; }
+  .guide-list-item,
+  .guide-list-num,
+  .guide-list-text { transition-duration: 0.01ms; }
 }
 
 /* ---- Teach mode whiteboard: timeline, scale, Venn ------------------------ */
@@ -1360,4 +1607,81 @@ html[data-an-sheet="ink"] { --an-sheet-bg: hsl(240 6% 5%); }
 .an-sheet-grain {
   background-image: radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.05) 1px, transparent 0);
   background-size: 22px 22px;
+}
+
+/* ---------------------------------------------------------------------------
+   The uploaded PDF (src/components/pdf/PdfDocument.tsx): each page is a canvas
+   under an invisible, selectable text layer whose paragraphs are real p/h2/li
+   boxes over their lines, so Teach mode's pointer and marks land on the PDF's
+   own words. Pages stay white in dark mode: it's the document as printed.
+--------------------------------------------------------------------------- */
+.pdf-doc { display: flex; flex-direction: column; align-items: center; gap: 18px; width: 100%; }
+.pdf-page {
+  position: relative; flex-shrink: 0; overflow: hidden; border-radius: 6px; background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 10px 30px -12px rgba(0, 0, 0, 0.18);
+}
+.dark .pdf-page { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 30px -12px rgba(0, 0, 0, 0.6); }
+.pdf-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pdf-text { position: absolute; inset: 0; line-height: 1; }
+.pdf-text ul { margin: 0; padding: 0; list-style: none; }
+.pdf-text .pdf-block { position: absolute; margin: 0; padding: 0; font: inherit; letter-spacing: normal; }
+.pdf-text .pdf-block > span {
+  position: absolute; white-space: pre; transform-origin: 0 0; font-family: sans-serif; font-weight: 400;
+  line-height: 1; color: transparent; cursor: text;
+}
+.pdf-text ::selection { background: rgba(236, 72, 153, 0.28); color: transparent; }
+.pdf-page-num {
+  position: absolute; right: 8px; bottom: 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.55);
+  padding: 1px 7px; font-size: 10.5px; font-weight: 600; color: #fff; pointer-events: none;
+}
+
+/* ---- Teach mode board: "Did you know?" facts card ----------------------- */
+.guide-facts {
+  container-type: inline-size;
+  width: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  font-family: "Patrick Hand", cursive;
+  color: hsl(var(--foreground));
+}
+.guide-facts-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; font-size: 20px; line-height: 1.2; }
+.guide-facts-badge {
+  border-radius: 999px; background: #fde68a; color: #78350f;
+  padding: 1px 10px; font-size: 15px;
+}
+.dark .guide-facts-badge { background: #fbbf24; color: #1c1917; }
+.guide-facts-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 0; padding: 0; list-style: none; }
+@container (min-width: 380px) {
+  .guide-facts-grid[data-count="2"], .guide-facts-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
+}
+.guide-facts-item {
+  display: flex; flex-direction: column; gap: 2px;
+  border-radius: 14px; border: 1.5px solid var(--gf-edge); background: var(--gf-paper);
+  padding: 10px 14px 12px;
+  animation: guide-facts-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.guide-facts-item[data-hue="amber"]  { --gf-paper: #fef3c7; --gf-edge: #fcd77f; --gf-strong: #b45309; --gf-ink: #78350f; }
+.guide-facts-item[data-hue="violet"] { --gf-paper: #ede9fe; --gf-edge: #c9bdfb; --gf-strong: #7c3aed; --gf-ink: #4c1d95; }
+.guide-facts-item[data-hue="teal"]   { --gf-paper: #ccfbf1; --gf-edge: #99e6d8; --gf-strong: #0f766e; --gf-ink: #134e4a; }
+.guide-facts-item[data-hue="pink"]   { --gf-paper: #fce7f3; --gf-edge: #f8bcdc; --gf-strong: #db2777; --gf-ink: #831843; }
+.guide-facts-value { font-size: 30px; line-height: 1.05; color: var(--gf-strong); }
+.guide-facts-text { font-size: 16px; line-height: 1.3; color: var(--gf-ink); }
+@keyframes guide-facts-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .guide-facts-item { animation: none; } }
+
+/* ---- Dashboard: the XP card lights up when you come back ------------------ */
+.xp-glow {
+  border-color: hsl(var(--chart-1) / 0.55);
+  animation: xp-glow 2.6s ease-out 1 both;
+}
+@keyframes xp-glow {
+  0% { box-shadow: 0 0 0 0 hsl(var(--chart-1) / 0), 0 0 0 0 hsl(var(--chart-1) / 0); }
+  25% { box-shadow: 0 0 0 4px hsl(var(--chart-1) / 0.22), 0 0 36px 6px hsl(var(--chart-1) / 0.38); }
+  60% { box-shadow: 0 0 0 3px hsl(var(--chart-1) / 0.14), 0 0 26px 4px hsl(var(--chart-1) / 0.24); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--chart-1) / 0), 0 0 0 0 hsl(var(--chart-1) / 0); }
+}
+.xp-gain { animation: xp-gain-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both; }
+@keyframes xp-gain-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .xp-glow { animation: none; box-shadow: 0 0 0 3px hsl(var(--chart-1) / 0.2); }
+  .xp-gain { animation: none; }
 }

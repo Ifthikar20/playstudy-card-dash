@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Clock, HelpCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { XP_RULES, XP_RULE_LABELS, formatStudyTime, studyXp } from "@/lib/xp";
@@ -9,19 +9,95 @@ import { cn } from "@/lib/utils";
   the exact rules. There are no levels and no tokens: XP is time studied plus
   progress made, and the split bar shows which half of it came from where.
 */
-export function XpCard({ xp, studySeconds = 0, className }: { xp: number; studySeconds?: number; className?: string }) {
+/** Where the dashboard remembers the XP it last showed, per account. */
+const seenKey = (who: string) => `an-xp-seen:${who}`;
+
+/**
+ * The welcome-back moment: while `welcome` is set (the dashboard passes the account
+ * id), the card lights up each time it's shown, and XP earned since it was last
+ * shown counts up to the new total with "+N XP" beside it.
+ */
+function useWelcome(total: number, welcome?: string) {
+  const [shown, setShown] = useState(total);
+  const [gain, setGain] = useState(0);
+  const [glow, setGlow] = useState(false);
+  const raf = useRef(0);
+  // What was on the card last visit, read once per visit (effects run twice in dev,
+  // and the second run would otherwise read back the total the first one saved).
+  const lastSeen = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (!welcome) {
+      setShown(total);
+      return;
+    }
+    if (lastSeen.current === undefined) {
+      try {
+        const raw = localStorage.getItem(seenKey(welcome));
+        lastSeen.current = raw === null ? null : Number(raw);
+      } catch {
+        lastSeen.current = null; // private mode: just the glow
+      }
+    }
+    const last = lastSeen.current;
+    try {
+      localStorage.setItem(seenKey(welcome), String(total));
+    } catch {
+      /* private mode */
+    }
+    setGlow(true);
+    const off = window.setTimeout(() => setGlow(false), 2600);
+    const from = last !== null && Number.isFinite(last) && last < total ? last : total;
+    setGain(total - from);
+    if (from === total || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(total);
+      return () => window.clearTimeout(off);
+    }
+    // Count up from what they saw last time.
+    const start = performance.now();
+    const ms = Math.min(1600, 500 + (total - from) * 8);
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      setShown(Math.round(from + (total - from) * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) raf.current = requestAnimationFrame(tick);
+    };
+    setShown(from);
+    raf.current = requestAnimationFrame(tick);
+    return () => {
+      window.clearTimeout(off);
+      cancelAnimationFrame(raf.current);
+    };
+  }, [total, welcome]);
+  return { shown, gain, glow };
+}
+
+export function XpCard({
+  xp,
+  studySeconds = 0,
+  className,
+  welcome,
+}: {
+  xp: number;
+  studySeconds?: number;
+  className?: string;
+  /** The account id, on the dashboard: light up on arrival and count up what's new. */
+  welcome?: string;
+}) {
   const [open, setOpen] = useState(false);
 
   const total = Math.max(0, Math.round(xp || 0));
+  const { shown, gain, glow } = useWelcome(total, welcome);
   const fromTime = Math.min(total, studyXp(studySeconds));
   const fromProgress = Math.max(0, total - fromTime);
   const timeShare = total ? (fromTime / total) * 100 : 0;
 
   return (
-    <div className={cn("rounded-2xl border border-border bg-card p-5", className)}>
+    <div className={cn("rounded-2xl border border-border bg-card p-5", glow && "xp-glow", className)}>
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-display text-3xl leading-none tabular-nums">{total.toLocaleString()}</p>
+          <p className="flex items-baseline gap-2">
+            <span className="font-display text-3xl leading-none tabular-nums">{shown.toLocaleString()}</span>
+            {glow && gain > 0 && <span className="xp-gain text-xs font-semibold tabular-nums text-chart-1">+{gain.toLocaleString()} XP</span>}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">XP earned</p>
         </div>
         <div className="shrink-0 text-right">

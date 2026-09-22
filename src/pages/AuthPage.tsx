@@ -12,6 +12,7 @@ import TurnstileWidget, {
 import { cn } from "@/lib/utils";
 import { SIGNUPS_OPEN } from "@/lib/signups";
 import { usePageMeta } from "@/lib/pageMeta";
+import { trackAction } from "@/lib/analytics";
 
 /*
   Auth — split screen in the editorial (cream / ink / serif) world.
@@ -120,7 +121,10 @@ export default function AuthPage() {
         mode === "signin"
           ? await authLogin(email, password, recaptchaToken || undefined, turnstileToken)
           : await authRegister(email, name, password, recaptchaToken || undefined, turnstileToken);
-      if (result.success) navigate("/dashboard");
+      if (result.success) {
+        trackAction(mode === "signin" ? "signed_in" : "signed_up");
+        navigate("/dashboard");
+      }
       else {
         setError(result.error || (mode === "signin" ? "Login failed" : "Registration failed"));
         // The token we just spent is single-use. Without a fresh one the next

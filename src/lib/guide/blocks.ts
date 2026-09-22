@@ -19,21 +19,42 @@ export interface GuideBlock {
   el: HTMLElement;
 }
 
-const CANDIDATES = "h1,h2,h3,h4,p,li,pre,table,img";
+// `.katex-display` is a formula on its own line: rehype-katex puts it straight in the
+// notes, outside any paragraph, so without it here the AI never saw a single display
+// equation and could never write one on the board.
+const CANDIDATES = "h1,h2,h3,h4,p,li,pre,table,img,.katex-display";
 
-/** Text of a block without its nested lists (so a parent `li` doesn't swallow its children). */
+/** The LaTeX source of a KaTeX-rendered formula (KaTeX keeps it in a MathML annotation). */
+function texOf(k: Element): string {
+  return k.querySelector('annotation[encoding="application/x-tex"]')?.textContent?.trim() ?? "";
+}
+
+/**
+ * Text of a block, as the AI should read it: without nested lists (so a parent `li`
+ * doesn't swallow its children), and with every formula as LaTeX - `$$…$$` on its own
+ * line, `$…$` inside a sentence - instead of KaTeX's glyph soup ("1f=v1−u1").
+ */
 function blockText(el: HTMLElement): string {
   if (el.tagName === "IMG") return (el as HTMLImageElement).alt || "";
-  if (el.tagName === "LI" && el.querySelector("ul,ol")) {
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll("ul,ol").forEach((n) => n.remove());
-    return clone.textContent || "";
+  if (el.classList.contains("katex-display")) {
+    const tex = texOf(el);
+    return tex ? `$$${tex}$$` : el.textContent || "";
   }
-  return el.textContent || "";
+  const nestedList = el.tagName === "LI" && !!el.querySelector("ul,ol");
+  if (!nestedList && !el.querySelector(".katex")) return el.textContent || "";
+  const clone = el.cloneNode(true) as HTMLElement;
+  if (nestedList) clone.querySelectorAll("ul,ol").forEach((n) => n.remove());
+  clone.querySelectorAll(".katex").forEach((k) => {
+    const tex = texOf(k);
+    const display = !!k.closest(".katex-display");
+    k.replaceWith(document.createTextNode(tex ? (display ? `$$${tex}$$` : `$${tex}$`) : k.textContent || ""));
+  });
+  return clone.textContent || "";
 }
 
 function kindOf(el: HTMLElement): string {
   const tag = el.tagName;
+  if (el.classList.contains("katex-display")) return "math";
   if (tag === "IMG") return "image";
   if (tag === "PRE") return "code";
   if (tag === "TABLE") return "table";
@@ -49,6 +70,7 @@ export function indexBlocks(root: HTMLElement): GuideBlock[] {
   root.querySelectorAll<HTMLElement>(CANDIDATES).forEach((el) => {
     const tag = el.tagName;
     if (tag === "P" && el.parentElement?.tagName === "LI") return; // the li covers it
+    if (el.classList.contains("katex-display") && el.parentElement?.closest("p,li,td,th")) return; // its block covers it
     if (tag !== "PRE" && tag !== "IMG" && el.closest("pre")) return; // inside a code block
     if (tag === "P" && el.querySelector("img") && !(el.textContent || "").trim()) return; // the img is indexed itself
     const text = blockText(el).replace(/\s+/g, " ").trim();

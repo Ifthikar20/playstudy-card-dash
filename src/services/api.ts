@@ -130,6 +130,8 @@ export interface StudySession {
   fileContent?: string;  // Original file (base64)
   fileType?: string;  // File type: pdf, pptx, docx, txt
   pdfContent?: string;  // Converted PDF for PPTX files (base64)
+  /** There's a PDF to show in Full Study (the upload, or a deck converted to one); fetch it with fetchSessionPdf. */
+  hasPdf?: boolean;
   extractedTopics?: Topic[];
   sourceKind?: string | null;
   sourceUrl?: string | null;
@@ -321,21 +323,12 @@ export const fetchAppData = async (): Promise<AppData> => {
     return data;
   } catch (error) {
     console.error('[fetchAppData] ❌ Failed to fetch app data:', error);
-
-    // Try browser storage as fallback
-    const cachedSessions = BrowserStorage.loadSessions();
-    if (cachedSessions) {
-      console.log('[fetchAppData] 📂 Using browser storage fallback');
-      const mockData = getMockAppData();
-      return {
-        ...mockData,
-        studySessions: cachedSessions,
-      };
-    }
-
-    console.warn('[fetchAppData] ⚠️ No cached data available, returning mock data');
-    // Return mock data as final fallback
-    return getMockAppData();
+    // No stand-in data for someone who is signed in. This used to return demo data
+    // (sessions "1", "2", "3" and someone else's profile and stats): it looked real,
+    // every session opened from it failed, and the tab kept it even after the server
+    // came back. The error goes to useAppData instead, which shows "Couldn't reach
+    // the server" and keeps retrying until it answers.
+    throw error instanceof Error ? error : new Error(String(error));
   }
 };
 
@@ -583,6 +576,23 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
     console.error('Error fetching study session:', error);
     throw error;
   }
+};
+
+/**
+ * The session's PDF (the upload itself, or a slide deck converted to PDF) as bytes,
+ * for Full Study's PDF view. Fetched only when the student opens that view: the
+ * session list leaves the file out.
+ */
+export const fetchSessionPdf = async (sessionId: string, signal?: AbortSignal): Promise<ArrayBuffer> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Authentication required. Please log in again.');
+  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (response.status === 404) throw new Error("This session doesn't have a PDF.");
+  if (!response.ok) throw new Error("Couldn't load the PDF. Try again in a moment.");
+  return response.arrayBuffer();
 };
 
 /**

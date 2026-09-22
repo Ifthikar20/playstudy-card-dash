@@ -20,6 +20,7 @@ import { GuideCircuit } from "./GuideCircuit";
 import { GuideForces } from "./GuideForces";
 import { GuideGeometry } from "./GuideGeometry";
 import { GuideCode } from "./GuideCode";
+import { GuideFacts } from "./GuideFacts";
 import { VISUAL_FENCE } from "@/lib/notes/fences";
 
 /*
@@ -91,6 +92,8 @@ export function GuideVisual({ spec }: { spec: VisualSpec }) {
       return <GuideGeometry geometry={spec.data} />;
     case "code":
       return <GuideCode code={spec.data} />;
+    case "facts":
+      return <GuideFacts facts={spec.data} />;
     case "image":
       return <GuideImage image={spec.data} />;
   }
@@ -104,7 +107,7 @@ export function GuideVisual({ spec }: { spec: VisualSpec }) {
    drawing is identical — only the words are gone until you reveal them.
 -------------------------------------------------------------------------- */
 const BLANK = "?";
-const BLANKABLE: VisualKind[] = ["table", "list", "chart", "timeline", "scale", "diagram", "venn", "periodic", "circuit", "forces", "geometry", "code"];
+const BLANKABLE: VisualKind[] = ["table", "list", "chart", "timeline", "scale", "diagram", "venn", "periodic", "circuit", "forces", "geometry", "code", "facts"];
 
 export const canBlank = (spec: VisualSpec | null): boolean => !!spec && BLANKABLE.includes(spec.kind);
 
@@ -152,6 +155,10 @@ export function blankVisual(spec: VisualSpec): VisualSpec {
     case "code":
       if (clone.data.trace) clone.data.trace.rows = clone.data.trace.rows.map((r) => r.map(() => BLANK));
       break;
+    case "facts":
+      // remember the number from what it's about
+      clone.data.items = clone.data.items.map((it) => ({ ...it, value: BLANK }));
+      break;
   }
   return clone;
 }
@@ -183,6 +190,10 @@ export function visualToMarkdown(spec: VisualSpec, space = 0): string {
   if (spec.kind === "list") {
     const items = spec.data.items.map((it, i) => `${i + 1}. **${it.label}**${it.detail ? ` — ${it.detail}` : ""}`).join("\n");
     return `\n${spec.data.title ? `**${spec.data.title}**\n\n` : ""}${items}\n`;
+  }
+  if (spec.kind === "facts") {
+    const items = spec.data.items.map((it) => `- **${it.value}** — ${it.text}`).join("\n");
+    return `\n**${spec.data.title || "Fast facts"}**\n\n${items}\n`;
   }
   return `\n\`\`\`${VISUAL_FENCE}\n${JSON.stringify(spec, null, space)}\n\`\`\`\n`;
 }
@@ -227,6 +238,8 @@ export function visualSummary(spec: VisualSpec): string {
       return clip(spec.data.title || spec.data.items.map((it) => it.label).join(", "));
     case "code":
       return clip(spec.data.title || spec.data.language || spec.data.lines[0]);
+    case "facts":
+      return clip(spec.data.title || spec.data.items.map((it) => it.value).join(", "));
     case "forces":
       return clip(spec.data.title || spec.data.vectors.map((v) => v.label).filter(Boolean).join(", ") || "forces");
     case "geometry":

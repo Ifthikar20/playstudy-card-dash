@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { trackAction } from "@/lib/analytics";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Upload, FileText, ArrowRight, ArrowLeft, BookOpen, Clock, Youtube } from "lucide-react";
@@ -190,6 +192,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
       setCreatedSession(newSession);
       setCurrentSession(newSession);
       addSession(newSession);
+      trackAction("session_created", { from: uploadType, fileType: newSession.fileType ?? null });
 
       toast({
         title: "Session Created!",
@@ -280,12 +283,14 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
           <DialogTitle className="text-xl font-semibold tracking-tight">
             {step !== "upload" ? "Your notes are ready" : isProcessing ? "Creating your study session" : "Create study session"}
           </DialogTitle>
-          {step === "upload" && (
-            <p className="text-sm text-muted-foreground">
+          {step === "upload" ? (
+            <DialogDescription className="text-sm text-muted-foreground">
               {isProcessing
                 ? "AnotherNotes is reading your material and writing the notes and quizzes. Keep this open — it usually takes under a minute."
                 : "Paste text, upload a file, or add a YouTube link — AnotherNotes writes the notes and quizzes."}
-            </p>
+            </DialogDescription>
+          ) : (
+            <DialogDescription className="sr-only">The sections AnotherNotes wrote from your material.</DialogDescription>
           )}
         </DialogHeader>
 

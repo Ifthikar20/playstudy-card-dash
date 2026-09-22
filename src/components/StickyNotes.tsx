@@ -273,7 +273,8 @@ export function StickySelection({
   resolve,
 }: {
   sessionId: string;
-  resolve: (notesKey: string) => { topicId: number; title: string } | null;
+  /** topicId is null for text that isn't in a section's notes (a page of the uploaded PDF). */
+  resolve: (notesKey: string) => { topicId: number | null; title: string } | null;
 }) {
   const { toast } = useToast();
   const add = useStickyStore((s) => s.add);
@@ -481,7 +482,12 @@ export function StickyWall({ limit = 6 }: { limit?: number }) {
           <Skeleton className="h-36 rounded-2xl" />
         </div>
       ) : error ? (
-        <p className="mt-3 text-sm text-muted-foreground">{error}</p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {error}{" "}
+          <button type="button" onClick={() => void load(true)} className="font-medium text-foreground underline-offset-2 hover:underline">
+            Try now
+          </button>
+        </p>
       ) : notes.length === 0 && !composing ? (
         <button type="button" onClick={() => setComposing(true)} className="sticky-empty mt-3">
           <span className="font-medium text-foreground">Nothing kept yet.</span> Highlight anything while you study and choose{" "}

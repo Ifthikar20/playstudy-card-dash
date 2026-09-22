@@ -119,8 +119,8 @@ function ProviderList() {
 
 const SUMMARY: [lead: string, text: string][] = [
   [
-    "No ads, no trackers.",
-    "We don't show ads, we don't use advertising or analytics trackers, and we never sell your information.",
+    "No ads, no third-party trackers.",
+    "We don't show ads, we don't use advertising or third-party analytics trackers, and we never sell your information. We keep our own record of which pages are used and what goes wrong, so we can fix it.",
   ],
   [
     "Your material is used to help you study.",
@@ -229,6 +229,13 @@ const SECTIONS: Section[] = [
             device type, what was requested, and when. Our servers also log changes made to accounts, including which
             account made them and from which IP address. We use this to keep AnotherNotes secure, stop abuse and fix
             problems.
+          </li>
+          <li>
+            <B>Usage and error records.</B> Which pages of AnotherNotes are opened, a few actions (such as starting Teach
+            mode or creating a study session) and any errors, with a random ID for your browser and one for each visit,
+            plus the campaign tags or click IDs in the link you followed to reach us (such as utm_source). This stays on
+            our own servers. We use it to find and fix problems and to see which links bring people to AnotherNotes. It
+            never includes your notes, questions or answers.
           </li>
           <li>
             <B>Browser storage and cookies.</B> We keep your sign-in and some app data in your browser. See{" "}
@@ -448,7 +455,7 @@ const SECTIONS: Section[] = [
     title: "Cookies and browser storage",
     body: (
       <>
-        <p>We don't use advertising or analytics cookies, and we don't track you across other websites.</p>
+        <p>We don't use advertising or third-party analytics cookies, and we don't track you across other websites.</p>
         <List>
           <li>
             <B>Signing in.</B> Your sign-in token is kept in your browser's local storage, so you stay signed in until you
@@ -463,6 +470,10 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <B>Preferences.</B> A small cookie remembers whether the side menu is open.
+          </li>
+          <li>
+            <B>Visit IDs.</B> A random ID for your browser and one for each visit, and the campaign tags of the link that
+            brought you, so our own usage and error records can be told apart. They aren't shared with anyone.
           </li>
           <li>
             <B>Cloudflare.</B> Our network provider may set cookies it needs to protect the site from attacks and bots.
@@ -505,6 +516,9 @@ const SECTIONS: Section[] = [
         </li>
         <li>
           <B>Server logs:</B> kept for a limited period for security and troubleshooting, then deleted.
+        </li>
+        <li>
+          <B>Usage and error records:</B> 90 days, then deleted.
         </li>
         <li>
           <B>Backups:</B> where we keep backups, deleted information may remain in them for a limited period until they're

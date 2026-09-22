@@ -65,9 +65,12 @@ function decoded(url: string): Promise<void> {
 
 const cache = new Map<string, Promise<Ready>>();
 
-async function lookup(query: string): Promise<Ready> {
+async function lookup(query: string, match: string[]): Promise<Ready> {
   const token = getAuthToken();
-  const res = await fetch(`${API_URL}/guide/image?q=${encodeURIComponent(query)}`, {
+  // `must`: the backend only accepts a picture whose file is about one of these
+  // words, so "concave lens" can never come back as a picture of some other lens.
+  const must = match.length ? `&must=${encodeURIComponent(match.join(","))}` : "";
+  const res = await fetch(`${API_URL}/guide/image?q=${encodeURIComponent(query)}${must}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   if (!res.ok) throw new Error(String(res.status));
@@ -77,18 +80,23 @@ async function lookup(query: string): Promise<Ready> {
   return { url: data.url, caption: data.caption, source: data.source };
 }
 
-function imageFor(query: string): Promise<Ready> {
-  const hit = cache.get(query);
+function imageFor(query: string, match: string[] = [], found?: { url: string; source?: string; caption?: string }): Promise<Ready> {
+  const key = `${query}|${match.join(",")}`;
+  const hit = cache.get(key);
   if (hit) return hit;
-  const p = lookup(query);
-  cache.set(query, p);
-  p.catch(() => cache.delete(query)); // a failed lookup shouldn't poison the next try
+  // A lesson step arrives with the picture the server already found and checked:
+  // only decoding is left to do. A question's answer still asks for it here.
+  const p = found?.url
+    ? decoded(found.url).then(() => ({ url: found.url, caption: found.caption, source: found.source }))
+    : lookup(query, match);
+  cache.set(key, p);
+  p.catch(() => cache.delete(key)); // a failed lookup shouldn't poison the next try
   return p;
 }
 
-/** Start finding and decoding a photo before the step that shows it comes round. */
-export function prefetchGuideImage(query?: string | null): void {
-  if (query?.trim()) void imageFor(query.trim()).catch(() => undefined);
+/** Start finding and decoding a picture before the step that shows it comes round. */
+export function prefetchGuideImage(image?: GuideImageData | null): void {
+  if (image?.query?.trim()) void imageFor(image.query.trim(), image.match ?? [], image.url ? { url: image.url, source: image.source, caption: image.caption } : undefined).catch(() => undefined);
 }
 
 export function GuideImage({ image }: { image: GuideImageData }) {
@@ -97,14 +105,15 @@ export function GuideImage({ image }: { image: GuideImageData }) {
   useEffect(() => {
     let cancelled = false;
     setSt({ loading: true });
-    imageFor(image.query).then(
+    imageFor(image.query, image.match ?? [], image.url ? { url: image.url, source: image.source, caption: image.caption } : undefined).then(
       (r) => !cancelled && setSt({ loading: false, ...r }),
       () => !cancelled && setSt({ loading: false, failed: true }),
     );
     return () => {
       cancelled = true;
     };
-  }, [image.query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- match is part of the same request as query
+  }, [image.query, (image.match ?? []).join(",")]);
 
   if (st.loading) {
     return (
@@ -115,7 +124,12 @@ export function GuideImage({ image }: { image: GuideImageData }) {
     );
   }
   if (st.failed || !st.url) {
-    return <div className="guide-image guide-image-status">{image.caption || image.query}</div>;
+    // Say plainly there's no picture, rather than leave a caption on its own as if it were one.
+    return (
+      <div className="guide-image guide-image-status">
+        <span>No good picture of {image.caption || image.query} was found.</span>
+      </div>
+    );
   }
   const caption = image.caption || st.caption;
   return (

@@ -41,8 +41,9 @@ export interface PointerHandle {
   /** Highlighter marks over the quoted words. */
   underline(rects: HostRect[], color?: MarkColor): void;
   clearUnderline(): void;
-  /** Outline the block currently being explained (null clears it). */
-  focus(rect: HostRect | null, color?: MarkColor): void;
+  /** Outline the block currently being explained (null clears it). `above` draws it over
+   *  the whiteboard, for something on the board itself (a picture, a formula). */
+  focus(rect: HostRect | null, color?: MarkColor, opts?: { above?: boolean }): void;
   /** Stop mid-flight and stay exactly where the pointer is right now. */
   freeze(): void;
 }
@@ -104,7 +105,7 @@ export const GuidePointer = forwardRef<
     const pressRing = useRef<HTMLSpanElement | null>(null);
     const [shown, setShown] = useState(false);
     const [marks, setMarks] = useState<Array<HostRect & { color: MarkColor }>>([]);
-    const [focusRect, setFocusRect] = useState<(HostRect & { color: MarkColor }) | null>(null);
+    const [focusRect, setFocusRect] = useState<(HostRect & { color: MarkColor; above?: boolean }) | null>(null);
     const [bubbleLeft, setBubbleLeft] = useState(false);
 
     // ---- click gestures ---------------------------------------------------------
@@ -300,8 +301,8 @@ export const GuidePointer = forwardRef<
       clearUnderline() {
         setMarks([]);
       },
-      focus(rect, color = "pink") {
-        setFocusRect(rect ? { ...rect, color } : null);
+      focus(rect, color = "pink", opts) {
+        setFocusRect(rect ? { ...rect, color, above: !!opts?.above } : null);
       },
       freeze() {
         queue.current = [];
@@ -311,84 +312,95 @@ export const GuidePointer = forwardRef<
       },
     }));
 
+    const outline = focusRect && (
+      <span
+        className="guide-focus"
+        style={{
+          left: focusRect.x - 8,
+          top: focusRect.y - 6,
+          width: focusRect.w + 16,
+          height: focusRect.h + 12,
+          borderColor: `rgba(${RGB[focusRect.color]}, 0.5)`,
+          background: focusRect.above ? "transparent" : `rgba(${RGB[focusRect.color]}, 0.05)`,
+          boxShadow: `0 0 0 5px rgba(${RGB[focusRect.color]}, 0.07)`,
+        }}
+      />
+    );
     return createPortal(
-      <div ref={layerRef} aria-hidden className="pointer-events-none absolute inset-0 z-40">
-        {focusRect && (
-          <span
-            className="guide-focus"
-            style={{
-              left: focusRect.x - 8,
-              top: focusRect.y - 6,
-              width: focusRect.w + 16,
-              height: focusRect.h + 12,
-              borderColor: `rgba(${RGB[focusRect.color]}, 0.5)`,
-              background: `rgba(${RGB[focusRect.color]}, 0.05)`,
-              boxShadow: `0 0 0 5px rgba(${RGB[focusRect.color]}, 0.07)`,
-            }}
-          />
-        )}
-        {marks.map((m, i) => (
-          <span
-            key={`${m.x}-${m.y}-${i}`}
-            className={cn("guide-mark", `guide-mark-${m.color}`)}
-            style={{ left: m.x - 3, top: m.y - 1, width: m.w + 7, height: m.h + 3, animationDelay: `${i * 130}ms` }}
-          />
-        ))}
-        <div
-          ref={cursorRef}
-          className={cn("guide-cursor absolute left-0 top-0 will-change-transform", shown ? "opacity-100" : "opacity-0")}
-          style={{ transform: "translate(0px, 0px)" }}
-        >
-          <svg width="30" height="36" viewBox="0 0 30 36" className="guide-cursor-svg">
-            <path
-              d="M3 2 L3 27 L9.5 21.2 L14.2 32 L18.6 30.1 L14 19.6 L22.5 19.6 Z"
-              fill="#ec4899"
-              stroke="#ffffff"
-              strokeWidth="2"
-              strokeLinejoin="round"
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {/* Highlights and outlines belong to the page, so they stay under the
+            whiteboard (z 60) where it overlaps the notes. */}
+        <div className="absolute inset-0 z-40">
+          {!focusRect?.above && outline}
+          {marks.map((m, i) => (
+            <span
+              key={`${m.x}-${m.y}-${i}`}
+              className={cn("guide-mark", `guide-mark-${m.color}`)}
+              style={{ left: m.x - 3, top: m.y - 1, width: m.w + 7, height: m.h + 3, animationDelay: `${i * 130}ms` }}
             />
-          </svg>
-          {caption ? (
-            <div key={caption} className={cn("guide-bubble", bubbleLeft && "guide-bubble-left")}>
-              <div className="guide-bubble-head">
+          ))}
+        </div>
+        {/* The pointer, its clicks and its speech bubble ride above the whiteboard, so it
+            can go to a picture or a formula on the board and point at it. (Under one
+            z-40 layer it used to slide behind the board and vanish.) */}
+        <div ref={layerRef} className="absolute inset-0 z-[70]">
+          {focusRect?.above && outline}
+          <div
+            ref={cursorRef}
+            className={cn("guide-cursor absolute left-0 top-0 will-change-transform", shown ? "opacity-100" : "opacity-0")}
+            style={{ transform: "translate(0px, 0px)" }}
+          >
+            <svg width="30" height="36" viewBox="0 0 30 36" className="guide-cursor-svg">
+              <path
+                d="M3 2 L3 27 L9.5 21.2 L14.2 32 L18.6 30.1 L14 19.6 L22.5 19.6 Z"
+                fill="#ec4899"
+                stroke="#ffffff"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {caption ? (
+              <div key={caption} className={cn("guide-bubble", bubbleLeft && "guide-bubble-left")}>
+                <div className="guide-bubble-head">
+                  {speaker ? (
+                    <>
+                      <GuideBot kind={speaker.kind} variant="head" size={22} mood={speaking ? "talking" : "idle"} />
+                      {speaker.name}
+                    </>
+                  ) : (
+                    // The voice list hasn't arrived yet, so there's no name to show.
+                    "Tutor"
+                  )}
+                  {speaking && (
+                    <span className="guide-eq guide-eq-pink">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  )}
+                </div>
+                {caption}
+              </div>
+            ) : (
+              <div className={cn("guide-chip", speaker && "guide-chip-speaker")}>
                 {speaker ? (
                   <>
-                    <GuideBot kind={speaker.kind} variant="head" size={22} mood={speaking ? "talking" : "idle"} />
+                    <GuideBot kind={speaker.kind} variant="head" size={18} mood={speaking ? "talking" : "idle"} />
                     {speaker.name}
-                    <span className="guide-bubble-role">· AnotherNotes AI</span>
                   </>
                 ) : (
-                  "AnotherNotes AI"
+                  "Tutor"
                 )}
                 {speaking && (
-                  <span className="guide-eq guide-eq-pink">
+                  <span className="guide-eq">
                     <i />
                     <i />
                     <i />
                   </span>
                 )}
               </div>
-              {caption}
-            </div>
-          ) : (
-            <div className={cn("guide-chip", speaker && "guide-chip-speaker")}>
-              {speaker ? (
-                <>
-                  <GuideBot kind={speaker.kind} variant="head" size={18} mood={speaking ? "talking" : "idle"} />
-                  {speaker.name}
-                </>
-              ) : (
-                "AnotherNotes AI"
-              )}
-              {speaking && (
-                <span className="guide-eq">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>,
       host,

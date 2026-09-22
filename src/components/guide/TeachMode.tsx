@@ -47,6 +47,7 @@ import { GuidePointer, type Gesture, type MarkColor, type PointerHandle } from "
 import { GuideDock, botKind, type GuidePhase, type VoiceOption } from "./GuideDock";
 import { GuideBoard, type BoardHandle } from "./GuideBoard";
 import { prefetchGuideImage } from "./GuideImage";
+import { trackAction } from "@/lib/analytics";
 import { visualToMarkdown } from "./GuideVisual";
 
 /*
@@ -81,6 +82,15 @@ export interface TeachSection {
   index: number;
 }
 
+/**
+ * What the lesson walks through: the session's notes, or the uploaded PDF itself,
+ * one page per section (dbId -N for page N, which the backend knows as a PDF page).
+ */
+export type TeachSource = "notes" | "pdf";
+
+/** Said when the lesson moves on to the next page of a PDF; taking turns. */
+const PAGE_TURN_LINES = [(n: number) => `On to page ${n}.`, (n: number) => `Page ${n} now.`, (n: number) => `Turning to page ${n}.`];
+
 interface ScriptEntry {
   steps: GuideStep[];
   done: boolean;
@@ -93,6 +103,14 @@ const RATE_KEY = "an-guide-rate";
 const VOICE_KEY = "an-guide-voice2"; // { id: "server:<voice id>" | "browser:<voice name>", gender }
 const RATES = [0.85, 1, 1.15, 1.3];
 const NOT_READY = new Set(["notes-missing", "notes-empty"]);
+/** Said while the pointer lands on a note the answer just added; taking turns, so it never sounds canned. */
+const NOTE_ADDED_LINES = [
+  "Right here, in your notes.",
+  "It's in your notes now, just here.",
+  "I've written it into your notes, here.",
+  "You'll find it here whenever you come back.",
+];
+let noteAddedCount = 0;
 const QUIZ_ATTR = "data-guide-quiz";
 const QUIZ_BUTTON_ATTR = "data-guide-quiz-button";
 
@@ -193,6 +211,7 @@ export function TeachMode({
   onClose,
   boardEnabled = true,
   onBoardClose,
+  source = "notes",
 }: {
   sessionId: string;
   sections: TeachSection[];
@@ -200,7 +219,9 @@ export function TeachMode({
   onClose: () => void;
   boardEnabled?: boolean;
   onBoardClose?: () => void;
+  source?: TeachSource;
 }) {
+  const pdf = source === "pdf";
   const { toast } = useToast();
   const [phase, setPhase] = useState<GuidePhase>("loading");
   const [caption, setCaption] = useState<string | null>(null);
@@ -246,6 +267,7 @@ export function TeachMode({
     cancelListening(): void;
     close(): void;
     continueFrom(sectionIndex: number, blockId: string): void;
+    pause(): void;
   }>();
 
   const notesRoot = (sec: TeachSection) =>
@@ -322,10 +344,78 @@ export function TeachMode({
     return "yellow";
   };
 
+  // While the pointer rests on something on the whiteboard, this undoes the "stay on
+  // the board" listener (see pointToBoard). Every other kind of pointing calls it first.
+  const boardAnchor = useRef<(() => void) | null>(null);
+  const releaseBoard = () => {
+    boardAnchor.current?.();
+    boardAnchor.current = null;
+  };
+
+  /**
+   * The explainer goes to the board and rests on what it shows - the picture itself,
+   * a formula, the highlighted list item. The board is fixed to the screen, so the
+   * page isn't scrolled for it, and if the page scrolls while the pointer is there the
+   * pointer stays with the board instead of riding off with the notes. The next step
+   * about the notes brings it back.
+   */
+  const pointToBoard = (el: HTMLElement, first: boolean) => {
+    const p = pointer.current;
+    if (!p || !hostRef.current) return;
+    releaseBoard();
+    cancelAutoScroll();
+    p.clearUnderline();
+    // First look: loop round the picture and settle in its lower left, clear of what it
+    // shows. Staying on it for another step: press on another part of it, as a teacher
+    // would point at a different detail.
+    const spot = first ? { fx: 0.16, fy: 0.74 } : { fx: 0.25 + Math.random() * 0.5, fy: 0.3 + Math.random() * 0.4 };
+    const aim = (gesture: Gesture, duration?: number) => {
+      const target = el.querySelector<HTMLElement>("img.guide-image-img") ?? el;
+      const r = target.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+      const around = hostRect(r);
+      p.focus(around, "pink", { above: true });
+      p.moveTo(hostPoint(r.left + r.width * spot.fx, r.top + r.height * spot.fy), { gesture, around, duration });
+    };
+    aim(first ? "circle" : "press");
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => aim("none", 240));
+    };
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    boardAnchor.current = () => {
+      window.removeEventListener("scroll", onScroll, { capture: true });
+      cancelAnimationFrame(raf);
+    };
+  };
+
+  /**
+   * The board element showing `spec` once it's really there: after the previous visual
+   * has been wiped off, and for a picture once it has loaded. Null when the board is
+   * off or minimized, when no picture was found, or when it doesn't come in time.
+   */
+  const boardTarget = async (spec: VisualSpec, run: number): Promise<HTMLElement | null> => {
+    const limit = Date.now() + (spec.kind === "image" ? 6000 : 1500);
+    while (!cancelled(run) && board.current?.visible()) {
+      const el = board.current.showing(spec);
+      if (el) {
+        if (spec.kind !== "image") return el.querySelector<HTMLElement>("[data-board-focus]") ?? el;
+        const img = el.querySelector<HTMLImageElement>("img.guide-image-img");
+        if (img?.complete && img.naturalWidth > 0) return el;
+        if (!img && !el.querySelector(".guide-image-spinner")) return null; // no picture found
+      }
+      if (Date.now() > limit) return null;
+      await sleep(120);
+    }
+    return null;
+  };
+
   /** Scroll to and point at an arbitrary element (e.g. a heading or the quiz button). */
   const pointToElement = (el: HTMLElement, gesture: Gesture = "click", color: MarkColor = "pink") => {
     const p = pointer.current;
     if (!p || !hostRef.current) return;
+    releaseBoard();
     const r = el.getBoundingClientRect();
     void bringIntoView(el, r, { align: 0.4 });
     p.clearUnderline();
@@ -339,15 +429,20 @@ export function TeachMode({
     const host = hostRef.current;
     const p = pointer.current;
     if (!host || !p) return;
+    releaseBoard(); // back from the board to the notes
     const root = notesRoot(sec);
     if (!root) {
       p.clearUnderline();
       return;
     }
     if (!blockId) {
-      // A framing/recap step with no particular block: rest on the section title,
-      // or the first real block — never the whole notes container.
-      const heading = host.querySelector<HTMLElement>(`#section-${CSS.escape(sec.topicId)} h2`) ?? root.querySelector<HTMLElement>(`[${BLOCK_ATTR}]`) ?? root;
+      // A framing/recap step with no particular block: rest on the section title (a
+      // PDF page's first heading), or the first real block — never the whole container.
+      const heading =
+        host.querySelector<HTMLElement>(`#section-${CSS.escape(sec.topicId)} h2`) ??
+        (pdf ? root.querySelector<HTMLElement>(`h2[${BLOCK_ATTR}]`) : null) ??
+        root.querySelector<HTMLElement>(`[${BLOCK_ATTR}]`) ??
+        root;
       pointToElement(heading, Math.random() < 0.6 ? "circle" : "double", "orange");
       return;
     }
@@ -426,7 +521,7 @@ export function TeachMode({
     const secs = sectionsRef.current;
     if (!secs.length) {
       setPhase("error");
-      setError("There are no sections with notes to explain yet.");
+      setError(pdf ? "The PDF is still opening. Try again in a moment." : "There are no sections with notes to explain yet.");
       return;
     }
     let spoke = false;
@@ -435,8 +530,22 @@ export function TeachMode({
     for (let s = Math.max(0, fromSection); s < secs.length; s++) {
       const sec = secs[s];
       const entry = ensureScript(sec);
-      if (secs[s + 1]) ensureScript(secs[s + 1]); // prefetch the next section while this one plays
+      // Prefetch the next section while this one plays - the next one with something in
+      // it, so a picture-only PDF page doesn't leave the page after it unprepared.
+      for (let j = s + 1; j < Math.min(secs.length, s + 6); j++) {
+        const upcoming = ensureScript(secs[j]);
+        if (!upcoming.error || !NOT_READY.has(upcoming.error)) break;
+      }
       const startStep = s === fromSection ? Math.max(0, fromStep) : 0;
+      // Nothing here to explain (a PDF page that's only a picture, notes not written
+      // yet): say so and move on - before announcing it, so the announcement goes to
+      // the next page that does have something.
+      if (entry.error && NOT_READY.has(entry.error)) {
+        setCaption(pdf ? `Skipping page ${sec.index} — there's no text on it I can read.` : `Skipping “${sec.title}” — its notes aren't ready yet.`);
+        await sleep(1200);
+        if (cancelled(run)) return;
+        continue;
+      }
       // Resuming after the quiz invitation: this section is finished, roll on.
       if (entry.done && entry.steps.length > 0 && startStep >= entry.steps.length) {
         resumedPastEnd = true;
@@ -448,7 +557,7 @@ export function TeachMode({
       if (announceNext) {
         setPhase("speaking");
         setProgress({ step: 0, count: 0, title: sec.title });
-        const ok = await n.speak(`Next up: ${sec.title}.`);
+        const ok = await n.speak(pdf ? PAGE_TURN_LINES[s % PAGE_TURN_LINES.length](sec.index) : `Next up: ${sec.title}.`);
         if (!ok || cancelled(run)) return;
         announceNext = false;
       }
@@ -465,16 +574,15 @@ export function TeachMode({
         const b = board.current;
         const visual = visualOf(step);
         let hasVisual = !!visual;
-        // Aim the pointer at the board's visual; but if the board is closed,
-        // minimized or turned off there's nothing to point at, so follow the
-        // notes block/quote instead of freezing on a stale, unrelated spot.
-        const pointAtBoard = () =>
-          requestAnimationFrame(() => {
-            if (cancelled(run)) return;
-            const el = board.current?.lastLine();
-            if (el) pointToElement(el, "press", "pink");
-            else pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
-          });
+        // Take the pointer to the board's visual once it's really up (a picture once it
+        // has loaded); if the board is closed, minimized or turned off, or no picture
+        // was found, follow the notes block/quote instead of freezing on a stale spot.
+        const pointAtBoard = async (first: boolean) => {
+          const el = visual ? await boardTarget(visual, run) : null;
+          if (cancelled(run)) return;
+          if (el) pointToBoard(el, first);
+          else pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
+        };
         if (visual && b) {
           const fresh = b.draw(visual);
           if (visual.kind === "list" && (!fresh || visual.data.auto)) {
@@ -484,7 +592,7 @@ export function TeachMode({
             hasVisual = false;
             pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
           } else {
-            pointAtBoard();
+            void pointAtBoard(fresh);
           }
         } else {
           pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
@@ -495,24 +603,18 @@ export function TeachMode({
           n.prefetch(upcoming.say, j === 1 ? 2 : 1); // keeps the natural voice gap-free
           // Find and decode a coming photo now, so the board never shows a
           // half-painted picture while the voice is introducing it.
-          prefetchGuideImage(upcoming.image?.query);
+          prefetchGuideImage(upcoming.image);
         }
         if (hasVisual && board.current?.visible()) {
           await sleep(300); // a beat so the drawing appears before "take a look at this…"
           if (cancelled(run)) return;
         }
-        const finished = await n.speak(step.say);
+        const finished = await n.speak(step.say, step.tone);
         if (cancelled(run) || !finished) return;
         await sleep(hasVisual ? 850 : 400); // let a visual linger a moment before moving on
         if (cancelled(run)) return;
       }
       if (played === 0 && entry.error) {
-        if (NOT_READY.has(entry.error)) {
-          setCaption(`Skipping “${sec.title}” — its notes aren't ready yet.`);
-          await sleep(1200);
-          if (cancelled(run)) return;
-          continue;
-        }
         setPhase("error");
         setError(entry.error);
         return;
@@ -540,14 +642,22 @@ export function TeachMode({
     if (cancelled(run)) return;
     if (!spoke && !resumedPastEnd) {
       setPhase("error");
-      setError("The notes are still being written. Try again in a moment.");
+      setError(
+        pdf
+          ? "There's no text in this PDF I can read — it may be a scan. Switch to Notes to learn from it."
+          : "The notes are still being written. Try again in a moment.",
+      );
       return;
     }
     setPhase("done");
     board.current?.hide();
     pointer.current?.clearUnderline();
     pointer.current?.focus(null);
-    await n.speak("That's the end of your notes. Nice work. Tap the mic if you'd like to ask me anything.");
+    await n.speak(
+      pdf
+        ? "And that's the whole PDF. Nice work. Tap the mic if you'd like to ask me anything."
+        : "That's the end of your notes. Nice work. Tap the mic if you'd like to ask me anything.",
+    );
   };
 
   /**
@@ -586,6 +696,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     narrator.current?.cancel();
     askAbort.current?.abort();
     cancelAutoScroll();
+    releaseBoard();
     pointer.current?.freeze(); // stop mid-flight: nothing keeps moving after pause
     stopListening(false);
     setPhase("paused");
@@ -649,7 +760,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     // The script hasn't reached this block yet. Don't make the student wait for
     // it: explain the block right now, then rejoin the script past this point.
     const text = entry.blocks.find((b) => b.id === blockId)?.text ?? "";
-    await ask(`Explain this part of the notes in detail, as the next step of the lesson: "${text.slice(0, 220)}". Don't mention block ids.`, {
+    await ask(`Explain this part of the ${pdf ? "page" : "notes"} in detail, as the next step of the lesson: "${text.slice(0, 220)}". Don't mention block ids.`, {
       hidden: true,
       block: blockId,
       sectionIndex,
@@ -722,11 +833,11 @@ ${visualToMarkdown(spec)}`.trimStart();
             // "Draw me that": the answer may come with a visual. Put it on the board
             // and point at it; if the board is off, fall back to the notes as usual.
             if (t.visual && board.current) {
-              board.current.draw(t.visual);
-              requestAnimationFrame(() => {
+              const visual = t.visual;
+              const fresh = board.current.draw(visual);
+              void boardTarget(visual, run).then((el) => {
                 if (cancelled(run)) return;
-                const el = board.current?.lastLine();
-                if (el) pointToElement(el, "press", "pink");
+                if (el) pointToBoard(el, fresh);
                 else pointAt(sec, t.block, t.quote);
               });
               return;
@@ -777,7 +888,7 @@ ${visualToMarkdown(spec)}`.trimStart();
           const block = [...fresh].reverse().find((b) => key && b.text.toLowerCase().includes(key)) ?? fresh[fresh.length - 1];
           if (block) pointAt(sec, block.id, "");
         }
-        const said = await n.speak("Right here, in your notes.");
+        const said = await n.speak(NOTE_ADDED_LINES[noteAddedCount++ % NOTE_ADDED_LINES.length]);
         if (!said || cancelled(run)) return;
       }
       await sleep(700);
@@ -944,6 +1055,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     narrator.current?.cancel();
     askAbort.current?.abort();
     cancelAutoScroll();
+    releaseBoard();
     stopListening(false);
     hostRef.current?.classList.remove("guide-driving");
     onClose();
@@ -980,12 +1092,23 @@ ${visualToMarkdown(spec)}`.trimStart();
     }
   };
 
-  actions.current = { togglePlay, next, prev, mic, cancelListening, close, continueFrom };
+  actions.current = { togglePlay, next, prev, mic, cancelListening, close, continueFrom, pause };
 
   // ---- lifecycle -----------------------------------------------------------------
   useEffect(() => {
+    // Set when this Teach mode closes. The first lesson only starts once the voice
+    // list arrives (up to 6 s); a Teach mode closed and reopened in that window used
+    // to start its lesson anyway, talking over the new one.
+    let disposed = false;
+    const openedAt = Date.now();
+    trackAction("teach_start", { source, sections: sectionsRef.current.length });
     const n = new Narrator({ onCaption: setCaption });
     n.rate = rateRef.current;
+    // Another narrator (another tab, say) started talking: stop and show "paused"
+    // rather than leaving a silent "speaking" state behind.
+    n.onPreempted = () => {
+      if (!disposed) actions.current?.pause();
+    };
     narrator.current = n;
     if (import.meta.env.DEV) (window as unknown as { __gb?: unknown }).__gb = board;
     const stored = readVoicePref();
@@ -1034,7 +1157,9 @@ ${visualToMarkdown(spec)}`.trimStart();
     };
     (async () => {
       const sv = await Promise.race([fetchGuideVoices(), sleep(6000).then(() => null)]);
-      applyVoices(sv, await browserReady);
+      const vs = await browserReady;
+      if (disposed) return;
+      applyVoices(sv, vs);
       play(start, 0);
     })();
 
@@ -1046,9 +1171,12 @@ ${visualToMarkdown(spec)}`.trimStart();
     }, 30_000);
 
     return () => {
+      disposed = true;
+      trackAction("teach_end", { source, seconds: Math.round((Date.now() - openedAt) / 1000) });
       runRef.current++;
-      n.cancel();
+      n.dispose(); // silent for good, even if something still holds it
       cancelAutoScroll();
+      boardAnchor.current?.();
       uninstallScroll();
       askAbort.current?.abort();
       recognizer.current?.abort();
@@ -1149,7 +1277,8 @@ ${visualToMarkdown(spec)}`.trimStart();
           speaker={speaker && { name: speaker.name, kind: botKind(speaker) }}
         />
       )}
-      <GuideBoard ref={board} enabled={boardEnabled} onClose={onBoardClose} onPin={pinVisual} />
+      {/* A PDF can't be written into, so there's nothing to pin a drawing to. */}
+      <GuideBoard ref={board} enabled={boardEnabled} onClose={onBoardClose} onPin={pdf ? undefined : pinVisual} />
       <GuideDock
         phase={phase}
         question={question}
@@ -1165,6 +1294,7 @@ ${visualToMarkdown(spec)}`.trimStart();
         askOpen={askOpen}
         onToggleAsk={() => setAskOpen((v) => !v)}
         onAsk={ask}
+        unit={pdf ? "page" : "section"}
         sttMode={sttMode}
         onPlayPause={togglePlay}
         onMic={mic}

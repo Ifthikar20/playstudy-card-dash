@@ -27,6 +27,9 @@ export interface BoardHandle {
   clear(): void;
   hide(): void;
   lastLine(): HTMLElement | null;
+  /** The element showing `spec`, once it's really up: not while the previous visual is
+   *  still being wiped off, and not a copy the student is reviewing. Null until then. */
+  showing(spec: VisualSpec): HTMLElement | null;
   visible(): boolean;
 }
 
@@ -69,6 +72,9 @@ export const GuideBoard = forwardRef<
   const boardRef = useRef<HTMLDivElement | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const shownRef = useRef(false);
+  // Whether a visual can actually be seen right now (for visible()).
+  const onScreen = useRef(false);
+  onScreen.current = enabled && !minimized;
 
   // Drag the board by its header. Coordinates are clamped to keep it on screen and
   // saved so it stays put across visuals and reloads.
@@ -191,7 +197,11 @@ export const GuideBoard = forwardRef<
       },
       // the part being talked about (a list's highlighted item), else the whole visual
       lastLine: () => elRef.current?.querySelector<HTMLElement>("[data-board-focus]") ?? elRef.current,
-      visible: () => shownRef.current,
+      showing: (spec) => {
+        const el = elRef.current;
+        return el && el.dataset.mode === "writing" && el.dataset.visualKey === visualKey(spec) ? el : null;
+      },
+      visible: () => shownRef.current && onScreen.current,
     }),
     [],
   );
@@ -269,6 +279,7 @@ export const GuideBoard = forwardRef<
                 className="guide-board-line"
                 data-mode={reviewing != null ? "writing" : item.mode}
                 data-kind={displayed.kind}
+                data-visual-key={reviewing == null ? visualKey(item.spec) : undefined}
                 style={displayed.kind === "math" && scale !== 1 ? { transform: `scale(${scale})` } : undefined}
               >
                 <GuideVisual spec={displayed} />

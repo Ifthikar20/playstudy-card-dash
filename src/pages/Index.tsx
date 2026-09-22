@@ -4,6 +4,8 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   FolderInput,
   FolderPlus,
   Loader2,
@@ -54,6 +56,20 @@ import { folderLabelIcon, parseCover } from "@/lib/folderCovers";
 */
 
 const NEW_WINDOW_MS = 48 * 60 * 60 * 1000;
+/** Sessions per page of "Continue studying" - the list stays about as tall as the rail beside it. */
+const PAGE_SIZE = 8;
+
+/** Page buttons to show: all of them when there are few, else the ends and the pages around the current one. */
+function pageList(current: number, count: number): (number | "gap")[] {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i);
+  const keep = new Set([0, count - 1, current - 1, current, current + 1].filter((p) => p >= 0 && p < count));
+  const out: (number | "gap")[] = [];
+  [...keep].sort((a, b) => a - b).forEach((p, i, all) => {
+    if (i > 0 && p - all[i - 1] > 1) out.push("gap");
+    out.push(p);
+  });
+  return out;
+}
 
 function completionOf(s: StudySession): number {
   const topics = s.extractedTopics ?? [];
@@ -72,6 +88,7 @@ export default function Index() {
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<number | "none" | null>(null);
   const [toDelete, setToDelete] = useState<StudySession | null>(null);
+  const [page, setPage] = useState(0);
 
   const firstName = (userProfile?.name || "there").split(" ")[0];
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -80,6 +97,14 @@ export default function Index() {
     const list = activeFolder == null ? studySessions : studySessions.filter((s) => s.folderId === activeFolder);
     return [...list].sort((a, b) => completionOf(a) - completionOf(b));
   }, [studySessions, activeFolder]);
+  // One page of them. Clamped, so deleting the last session on the last page lands on the one before.
+  const pageCount = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageSessions = sessions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const pickFolder = (id: number | null) => {
+    setActiveFolder(id);
+    setPage(0);
+  };
   const nextUp = useMemo(() => [...studySessions].sort((a, b) => completionOf(a) - completionOf(b)).find((s) => completionOf(s) < 100), [studySessions]);
   const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
   // When a folder is selected, the "Next up" card wears that folder's cover as
@@ -251,7 +276,7 @@ export default function Index() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Continue studying</p>
               <div className="flex flex-wrap items-center gap-1.5">
-                <FolderChip label="All" active={activeFolder == null} onClick={() => setActiveFolder(null)} />
+                <FolderChip label="All" active={activeFolder == null} onClick={() => pickFolder(null)} />
                 {folders.map((f) => (
                   <FolderChip
                     key={f.id}
@@ -260,7 +285,7 @@ export default function Index() {
                     active={activeFolder === f.id}
                     dropping={dropTarget === f.id}
                     dragging={!!dragged}
-                    onClick={() => setActiveFolder(activeFolder === f.id ? null : f.id)}
+                    onClick={() => pickFolder(activeFolder === f.id ? null : f.id)}
                     onDragOver={(e) => { e.preventDefault(); setDropTarget(f.id); }}
                     onDragLeave={() => setDropTarget(null)}
                     onDrop={(e) => onDrop(e, f)}
@@ -303,77 +328,129 @@ export default function Index() {
                   )}
                 </div>
               ) : (
-                <ul className="divide-y divide-border">
-                  {sessions.map((s) => {
-                    const pct = completionOf(s);
-                    const isNew = !!s.createdAt && Date.now() - s.createdAt < NEW_WINDOW_MS;
-                    const folder = s.folderId != null ? folderById.get(s.folderId) : undefined;
-                    return (
-                      <li
-                        key={s.id}
-                        draggable
-                        onDragStart={(e) => { setDragged(s.id); e.dataTransfer.setData("text/plain", s.id); e.dataTransfer.effectAllowed = "move"; }}
-                        onDragEnd={() => { setDragged(null); setDropTarget(null); }}
-                        className={cn("group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/50", dragged === s.id && "opacity-40")}
-                      >
-                        <span className="hidden w-20 shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{s.time || "—"}</span>
-                        <button type="button" onClick={() => open(s)} className="min-w-0 flex-1 text-left">
-                          <span className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{s.title}</span>
-                            {isNew && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">New</span>}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-muted-foreground">
-                            {s.topics} topic{s.topics === 1 ? "" : "s"}
-                            {folder ? ` · ${folderLabelIcon(folder.icon)}${folder.name}` : ""}
-                          </span>
-                        </button>
-                        {/* On a phone the bar costs more room than the title can spare, so only the number rides along. */}
-                        <div className="flex w-10 shrink-0 items-center gap-2 sm:w-28">
-                          <div className="hidden h-1 flex-1 overflow-hidden rounded-full bg-muted sm:block">
-                            <div className={cn("h-full rounded-full", pct >= 100 ? "bg-success" : "bg-chart-1")} style={{ width: `${Math.max(2, pct)}%` }} />
+                <>
+                  <ul className="divide-y divide-border">
+                    {pageSessions.map((s) => {
+                      const pct = completionOf(s);
+                      const isNew = !!s.createdAt && Date.now() - s.createdAt < NEW_WINDOW_MS;
+                      const folder = s.folderId != null ? folderById.get(s.folderId) : undefined;
+                      return (
+                        <li
+                          key={s.id}
+                          draggable
+                          onDragStart={(e) => { setDragged(s.id); e.dataTransfer.setData("text/plain", s.id); e.dataTransfer.effectAllowed = "move"; }}
+                          onDragEnd={() => { setDragged(null); setDropTarget(null); }}
+                          className={cn("group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/50", dragged === s.id && "opacity-40")}
+                        >
+                          <span className="hidden w-20 shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{s.time || "—"}</span>
+                          <button type="button" onClick={() => open(s)} className="min-w-0 flex-1 text-left">
+                            <span className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium">{s.title}</span>
+                              {isNew && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">New</span>}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {s.topics} topic{s.topics === 1 ? "" : "s"}
+                              {folder ? ` · ${folderLabelIcon(folder.icon)}${folder.name}` : ""}
+                            </span>
+                          </button>
+                          {/* On a phone the bar costs more room than the title can spare, so only the number rides along. */}
+                          <div className="flex w-10 shrink-0 items-center gap-2 sm:w-28">
+                            <div className="hidden h-1 flex-1 overflow-hidden rounded-full bg-muted sm:block">
+                              <div className={cn("h-full rounded-full", pct >= 100 ? "bg-success" : "bg-chart-1")} style={{ width: `${Math.max(2, pct)}%` }} />
+                            </div>
+                            <span className="w-8 text-right text-xs font-semibold tabular-nums">{pct}%</span>
                           </div>
-                          <span className="w-8 text-right text-xs font-semibold tabular-nums">{pct}%</span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="size-8" onClick={() => open(s)} aria-label="Open">
-                                <ArrowRight className="size-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">Open</TooltipContent>
-                          </Tooltip>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="size-8" aria-label="More">
-                                <MoreHorizontal className="size-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="min-w-48">
-                              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Move to</DropdownMenuLabel>
-                              {folders.length === 0 && (
-                                <DropdownMenuItem onSelect={() => setShowCreateFolder(true)}>
-                                  <FolderPlus /> Create a folder first
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8" onClick={() => open(s)} aria-label="Open">
+                                  <ArrowRight className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">Open</TooltipContent>
+                            </Tooltip>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+                                  <MoreHorizontal className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-48">
+                                <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">Move to</DropdownMenuLabel>
+                                {folders.length === 0 && (
+                                  <DropdownMenuItem onSelect={() => setShowCreateFolder(true)}>
+                                    <FolderPlus /> Create a folder first
+                                  </DropdownMenuItem>
+                                )}
+                                {folders.map((f) => (
+                                  <DropdownMenuItem key={f.id} onSelect={() => moveTo(s, f)} disabled={s.folderId === f.id}>
+                                    <FolderInput />
+                                    <span className="truncate">{folderLabelIcon(f.icon)}{f.name}</span>
+                                    {s.folderId === f.id && <Check className="ml-auto" />}
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => setToDelete(s)} className="text-destructive focus:text-destructive">
+                                  <Trash2 /> Delete session
                                 </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {pageCount > 1 && (
+                    <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-2.5">
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {currentPage * PAGE_SIZE + 1}–{Math.min(sessions.length, (currentPage + 1) * PAGE_SIZE)} of {sessions.length}
+                      </span>
+                      <nav aria-label="Pages of sessions" className="flex items-center gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          disabled={currentPage === 0}
+                          onClick={() => setPage(currentPage - 1)}
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="size-4" />
+                        </Button>
+                        {pageList(currentPage, pageCount).map((p, i) =>
+                          p === "gap" ? (
+                            <span key={`gap-${i}`} className="w-5 text-center text-xs text-muted-foreground">
+                              …
+                            </span>
+                          ) : (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setPage(p)}
+                              aria-label={`Page ${p + 1}`}
+                              aria-current={p === currentPage ? "page" : undefined}
+                              className={cn(
+                                "h-7 min-w-7 rounded-md px-1.5 text-xs font-medium tabular-nums transition-colors",
+                                p === currentPage ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                               )}
-                              {folders.map((f) => (
-                                <DropdownMenuItem key={f.id} onSelect={() => moveTo(s, f)} disabled={s.folderId === f.id}>
-                                  <FolderInput />
-                                  <span className="truncate">{folderLabelIcon(f.icon)}{f.name}</span>
-                                  {s.folderId === f.id && <Check className="ml-auto" />}
-                                </DropdownMenuItem>
-                              ))}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onSelect={() => setToDelete(s)} className="text-destructive focus:text-destructive">
-                                <Trash2 /> Delete session
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                            >
+                              {p + 1}
+                            </button>
+                          ),
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          disabled={currentPage >= pageCount - 1}
+                          onClick={() => setPage(currentPage + 1)}
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="size-4" />
+                        </Button>
+                      </nav>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
@@ -443,9 +520,16 @@ export default function Index() {
         {/* Right rail — a column beside the content on desktop; on tablet it
             becomes a two-up row under it rather than three stacked full-width
             cards you have to scroll past. */}
-        <aside className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+        {/* self-start + content-start: the rail keeps its own height. As a grid item it
+            used to stretch to the full height of the long column beside it and share
+            that height out between its cards, which drew them tall and mostly empty. */}
+        <aside className="grid content-start gap-4 self-start sm:grid-cols-2 xl:grid-cols-1">
           <StatRail items={statItems} loading={!isInitialized} />
-          {isInitialized ? <XpCard xp={xp} studySeconds={userProfile?.studySeconds ?? 0} /> : <Skeleton className="h-28 rounded-2xl" />}
+          {isInitialized ? (
+            <XpCard xp={xp} studySeconds={userProfile?.studySeconds ?? 0} welcome={userProfile?.id ?? "me"} />
+          ) : (
+            <Skeleton className="h-28 rounded-2xl" />
+          )}
           <div className="sm:col-span-2 xl:col-span-1">
             <StreakCard />
           </div>

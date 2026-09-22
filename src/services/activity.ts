@@ -77,15 +77,22 @@ export interface ActivityDays {
   longestStreak: number;
 }
 
+/** GET that answers null whenever there's nothing to show - an error status or no server at all. */
+async function getOrNull<T>(path: string): Promise<T | null> {
+  if (!authService.getToken()) return null;
+  try {
+    const res = await fetch(`${API_URL}${path}`, { headers: headers() });
+    return res.ok ? ((await res.json()) as T) : null;
+  } catch {
+    return null; // unreachable server: the card shows its empty state instead of an uncaught error
+  }
+}
+
 /** Per-day interaction for the streak heatmap (up to 400 days). */
 export async function fetchActivityDays(days = 400): Promise<ActivityDays | null> {
-  if (!authService.getToken()) return null;
-  const res = await fetch(`${API_URL}/activity/days?days=${days}`, { headers: headers() });
-  return res.ok ? res.json() : null;
+  return getOrNull<ActivityDays>(`/activity/days?days=${days}`);
 }
 
 export async function fetchActivitySummary(): Promise<ActivitySummary | null> {
-  if (!authService.getToken()) return null;
-  const res = await fetch(`${API_URL}/activity/summary`, { headers: headers() });
-  return res.ok ? res.json() : null;
+  return getOrNull<ActivitySummary>("/activity/summary");
 }

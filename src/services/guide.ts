@@ -69,10 +69,28 @@ export interface GuideMolecule {
   title?: string;
 }
 
-/** A real photo fetched from Wikipedia for a concrete real-world subject. */
+/** A real picture (photo or textbook diagram) the backend finds on the web for a real subject. */
 export interface GuideImage {
   query: string;
   caption?: string;
+  /** Words the picture must be about ("concave"), so a picture of the wrong kind is never shown. */
+  match?: string[];
+  /** The picture the server already found and checked for this step (lesson steps carry it). */
+  url?: string;
+  /** The page it came from. */
+  source?: string;
+}
+
+/** A "did you know" card: a few striking facts about the subject, each a short value and one line. */
+export interface GuideFacts {
+  title?: string;
+  items: { value: string; text: string }[];
+}
+
+/** How a step is said (from the backend's speaking_styles.json): the id plus the prosody for the browser voice. */
+export interface GuideTone {
+  rate: number;
+  pitch: number;
 }
 
 /** A comparison table: 2-4 columns, 2-8 rows. The first column header may be blank. */
@@ -186,6 +204,10 @@ export interface GuideStep {
   block: string | null;
   quote: string;
   say: string;
+  /** Speaking style id ("curious", "story", "calm", …) the line was written in. */
+  style?: string;
+  /** That style's rate and pitch, applied when the browser's own voice is speaking. */
+  tone?: GuideTone;
   /** Optional line of LaTeX to write on the Teach mode whiteboard for this step. */
   draw?: string | null;
   /** "replace" starts a fresh board (a new, unrelated equation); otherwise the line is appended. */
@@ -224,6 +246,8 @@ export interface GuideStep {
   geometry?: GuideGeometry | null;
   /** Optional code snippet with a highlighted line. */
   code?: GuideCode | null;
+  /** Optional "did you know" card of facts about the subject. */
+  facts?: GuideFacts | null;
 }
 
 /**
@@ -247,6 +271,7 @@ export type VisualSpec =
   | { kind: "forces"; data: GuideForces }
   | { kind: "geometry"; data: GuideGeometry }
   | { kind: "code"; data: GuideCode }
+  | { kind: "facts"; data: GuideFacts }
   | { kind: "image"; data: GuideImage };
 
 export type VisualKind = VisualSpec["kind"];
@@ -269,6 +294,7 @@ export const VISUAL_LABEL: Record<VisualKind, string> = {
   forces: "Forces",
   geometry: "Figure",
   code: "Code",
+  facts: "Fast facts",
   image: "Picture",
 };
 
@@ -289,6 +315,7 @@ export function visualOf(step: GuideStep): VisualSpec | null {
   if (step.forces) return { kind: "forces", data: step.forces };
   if (step.geometry) return { kind: "geometry", data: step.geometry };
   if (step.code) return { kind: "code", data: step.code };
+  if (step.facts) return { kind: "facts", data: step.facts };
   if (step.image) return { kind: "image", data: step.image };
   if (step.draw) return { kind: "math", data: { latex: step.draw, labels: step.draw_labels, replace: step.draw_mode === "replace" } };
   return null;

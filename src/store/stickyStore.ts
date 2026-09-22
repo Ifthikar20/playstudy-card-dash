@@ -32,6 +32,11 @@ interface StickyState {
 
 const byNewest = (a: StickyNote, b: StickyNote) => b.created_at.localeCompare(a.created_at) || b.id - a.id;
 
+/** Loads that found no server at all, in a row; retried every few seconds up to about five minutes. */
+let unreachableTries = 0;
+const RETRY_MS = 5000;
+const MAX_RETRIES = 60;
+
 export const useStickyStore = create<StickyState>((set, get) => ({
   notes: [],
   loaded: false,
@@ -43,8 +48,18 @@ export const useStickyStore = create<StickyState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const notes = await listStickyNotes();
+      unreachableTries = 0;
       set({ notes: notes.sort(byNewest), loaded: true, loading: false });
     } catch (e) {
+      // fetch() rejects with a TypeError when nothing answers (the server restarting, or
+      // not started locally). Try again shortly instead of leaving the wall on
+      // "Failed to fetch" until the page is reloaded.
+      if (e instanceof TypeError) {
+        const retrying = ++unreachableTries <= MAX_RETRIES;
+        set({ loading: false, error: retrying ? "Couldn't reach the server. Trying again…" : "Couldn't reach the server." });
+        if (retrying) window.setTimeout(() => void get().load(), RETRY_MS);
+        return;
+      }
       set({ loading: false, error: e instanceof Error ? e.message : "Could not load your sticky notes" });
     }
   },

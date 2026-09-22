@@ -173,7 +173,7 @@ export function AppSidebar({ onSearch }: { onSearch: () => void }) {
   const activeSeconds = usePresenceStore((s) => s.activeSeconds);
   const { session } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-  const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
+  const { isMobile, setOpenMobile, collapse } = useSidebar();
   const org = session?.org ?? null;
 
   /*
@@ -231,9 +231,11 @@ export function AppSidebar({ onSearch }: { onSearch: () => void }) {
                 better than SidebarRail, which is tabIndex={-1}. That rule never
                 matches inside the mobile Sheet, where this is opacity-1 and
                 becomes the close button the Sheet lacks ([&>button]:hidden). */}
+            {/* collapse(), not toggle: while the rail is peeking out on hover it is
+                technically still collapsed, and a toggle there pinned it OPEN. */}
             <SidebarMenuAction
               showOnHover
-              onClick={toggleSidebar}
+              onClick={collapse}
               aria-label={isMobile ? "Close navigation" : "Collapse sidebar"}
               title={isMobile ? "Close navigation" : "Collapse sidebar (Ctrl+B)"}
               className="text-muted-foreground"
