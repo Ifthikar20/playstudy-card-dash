@@ -93,6 +93,10 @@ export interface SessionUser {
   auth_provider: 'password' | SsoProvider;
   org_role: 'owner' | 'admin' | 'member' | null;
   account_kind: AccountKind;
+  /** The key that opens the tutor's microphone ("KeyM", "Alt+Space"); null = the default. */
+  voice_key: string | null;
+  /** How the Teach mode tutors look ("male:owl,female:fox"); null = the defaults. */
+  guide_avatar?: string | null;
   /** Learners this account follows. > 0 means the Family section has content. */
   child_count: number;
   /** Adults who can see this account's progress. */
@@ -130,6 +134,10 @@ export interface OnboardingPayload {
   teacher_type?: TeacherType;
   work_email?: string;
   org_name?: string;
+  /** The talk key picked on the last screen, e.g. "KeyM" or "Alt+Space". */
+  voice_key?: string;
+  /** The tutors' looks picked on the screen before it, e.g. "male:owl,female:fox". */
+  guide_avatar?: string;
 }
 
 /** Thrown by completeOnboarding when the org identity must come from SSO. */
@@ -507,6 +515,26 @@ class AuthService {
       throw new Error(typeof data?.detail === 'string' ? data.detail : 'Could not save your answer');
     }
     return data as Session;
+  }
+
+  /** Change the Teach mode talk key later; null puts it back to the default. */
+  async setVoiceKey(voiceKey: string | null): Promise<void> {
+    const res = await fetch(`${API_URL}/auth/voice-key`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
+      body: JSON.stringify({ voice_key: voiceKey }),
+    });
+    if (!res.ok) throw new Error('Could not save that key');
+  }
+
+  /** Change how the Teach mode tutors look later; null puts them back to the defaults. */
+  async setGuideAvatar(value: string | null): Promise<void> {
+    const res = await fetch(`${API_URL}/auth/guide-avatar`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
+      body: JSON.stringify({ guide_avatar: value }),
+    });
+    if (!res.ok) throw new Error('Could not save that look');
   }
 
   /** Which organization owns this email domain, and how it signs in. */

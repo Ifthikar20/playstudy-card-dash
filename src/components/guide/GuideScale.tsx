@@ -20,6 +20,9 @@ const fmt = (v: number, unit?: string) => {
   return unit ? `${n}${unit === "%" ? "%" : " " + unit}` : n;
 };
 
+/** Where the tutor's pointer touches a part (data-part-at), in this SVG's own units. */
+const partAt = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+
 export function GuideScale({ scale }: { scale: GuideScaleData }) {
   const { title, unit, min, max, log, marks, ranges } = scale;
   // a log scale (pH-like, or orders of magnitude) positions by the exponent
@@ -37,8 +40,14 @@ export function GuideScale({ scale }: { scale: GuideScaleData }) {
     <div className="guide-scale">
       {title && <div className="guide-chart-title">{title}</div>}
       <svg viewBox={`0 0 ${W} 196`} width="100%" className="guide-chart-svg" role="img">
+        {/* a range is pointed at in its middle, on the bar itself; a mark at its pin's base */}
         {ranges.map((r, i) => (
-          <g key={"r" + i}>
+          <g
+            key={"r" + i}
+            data-board-part={`ranges.${i}`}
+            data-board-label={r.label || undefined}
+            data-part-at={partAt((t(r.from) + t(r.to)) / 2, BAR_Y)}
+          >
             <rect x={t(r.from)} y={BAR_Y - 13} width={Math.max(2, t(r.to) - t(r.from))} height={26} rx={7} fill={BAND[i % BAND.length]} />
             <text x={(t(r.from) + t(r.to)) / 2} y={BAR_Y + 34} className="guide-chart-label" textAnchor="middle" style={{ fill: COLORS[i % COLORS.length] }}>
               {r.label}
@@ -63,7 +72,12 @@ export function GuideScale({ scale }: { scale: GuideScaleData }) {
           const color = COLORS[m.i % COLORS.length];
           const dir = m.above ? -1 : 1;
           return (
-            <g key={"m" + m.i}>
+            <g
+              key={"m" + m.i}
+              data-board-part={`marks.${m.i}`}
+              data-board-label={m.label ? `${m.label} ${fmt(m.at, unit)}` : fmt(m.at, unit)}
+              data-part-at={partAt(m.x, BAR_Y)}
+            >
               <line x1={m.x} y1={BAR_Y} x2={m.x} y2={BAR_Y + dir * 30} className="guide-scale-pin" style={{ stroke: color }} />
               <circle cx={m.x} cy={BAR_Y} r={6} fill={color} />
               <text

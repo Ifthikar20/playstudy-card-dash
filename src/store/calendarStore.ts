@@ -23,7 +23,8 @@ export interface CalendarEvent {
   sessionId?: string;
   notes?: string;
   location?: string;
-  source: "manual" | "import";
+  /** "plan" days are generated from an exam study plan and can't be edited here. */
+  source: "manual" | "import" | "plan";
   /** iCalendar UID, used to dedupe repeat imports */
   uid?: string;
 }

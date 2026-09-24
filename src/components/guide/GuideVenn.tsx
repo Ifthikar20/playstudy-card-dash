@@ -16,6 +16,14 @@ const SPOTS2: Record<string, [number, number]> = { a: [138, 132], b: [342, 132],
 const SPOTS3: Record<string, [number, number]> = {
   a: [158, 92], b: [322, 92], c: [240, 232], ab: [240, 88], ac: [176, 176], bc: [304, 176], abc: [240, 146],
 };
+/** Where the tutor's pointer touches each set (sets.i): inside that circle and no other,
+ *  and clear of the items written there, so pointing at "set A" can't be mistaken for
+ *  pointing at an overlap or at one item. */
+const SET_TIPS2: [number, number][] = [[128, 196], [352, 196]];
+const SET_TIPS3: [number, number][] = [[120, 140], [360, 140], [240, 274]];
+
+/** A data-part-at value, in this SVG's own units. */
+const partAt = ([x, y]: [number, number]) => `${x} ${y}`;
 
 function Region({ items, at }: { items: string[]; at: [number, number] }) {
   const [x, y] = at;
@@ -46,13 +54,25 @@ export function GuideVenn({ venn }: { venn: GuideVennData }) {
         { cx: 302, cy: 132, r: 104 },
       ];
   const height = three ? 316 : 268;
+  const setTips = three ? SET_TIPS3 : SET_TIPS2;
 
   return (
     <div className="guide-venn">
       {title && <div className="guide-chart-title">{title}</div>}
       <svg viewBox={`0 0 ${W} ${height}`} width="100%" className="guide-chart-svg" role="img">
         {circles.map((c, i) => (
-          <circle key={i} cx={c.cx} cy={c.cy} r={c.r} fill={FILLS[i]} stroke={COLORS[i]} strokeWidth={2} />
+          <circle
+            key={i}
+            cx={c.cx}
+            cy={c.cy}
+            r={c.r}
+            fill={FILLS[i]}
+            stroke={COLORS[i]}
+            strokeWidth={2}
+            data-board-part={sets[i] ? `sets.${i}` : undefined}
+            data-board-label={sets[i] || undefined}
+            data-part-at={sets[i] ? partAt(setTips[i]) : undefined}
+          />
         ))}
         {sets.slice(0, 3).map((label, i) => {
           const c = circles[i];
@@ -64,8 +84,13 @@ export function GuideVenn({ venn }: { venn: GuideVennData }) {
             </text>
           );
         })}
+        {/* a region (regions.ab, ...) is its items, pointed at where they're written */}
         {Object.entries(regions).map(([key, items]) =>
-          spots[key] && items.length ? <Region key={key} items={items} at={spots[key]} /> : null,
+          spots[key] && items.length ? (
+            <g key={key} data-board-part={`regions.${key}`} data-board-label={items.join(", ")} data-part-at={partAt(spots[key])}>
+              <Region items={items} at={spots[key]} />
+            </g>
+          ) : null,
         )}
       </svg>
     </div>

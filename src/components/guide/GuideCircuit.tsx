@@ -102,13 +102,51 @@ function Symbol({ part }: { part: GuideCircuitPart }) {
   }
 }
 
-/** A symbol placed on the loop, with its label outside the wire. */
-function Placed({ part, cx, cy, vertical, labelBelow = true }: { part: GuideCircuitPart; cx: number; cy: number; vertical?: boolean; labelBelow?: boolean }) {
+/** How the tutor's pointer names a part: its label with what it is ("10 ohm resistor"). */
+const partName = (p: GuideCircuitPart) => (!p.label ? p.type : p.label.toLowerCase().includes(p.type) ? p.label : `${p.label} ${p.type}`);
+
+/**
+ * A symbol placed on the loop, with its label outside the wire.
+ *
+ * `anchor` is the part id the tutor's pointer aims at. It sits on the translated group
+ * so the outline hugs the symbol, not its label, and the tip lands on the symbol's
+ * centre, which is 0 0 in that group's own units. `alias` is a second id for the same
+ * symbol: the battery is "battery" and also its place in the component list. The alias
+ * carries no label of its own: two anchors with the same words tie when the pointer
+ * matches a spoken name ("the battery"), and a tie points at nothing.
+ */
+function Placed({
+  part,
+  anchor,
+  alias,
+  cx,
+  cy,
+  vertical,
+  labelBelow = true,
+}: {
+  part: GuideCircuitPart;
+  anchor: string;
+  alias?: string;
+  cx: number;
+  cy: number;
+  vertical?: boolean;
+  labelBelow?: boolean;
+}) {
+  const name = partName(part);
+  const symbol = (
+    <g transform={`translate(${cx} ${cy})${vertical ? " rotate(-90)" : ""}`} data-board-part={anchor} data-board-label={name} data-part-at="0 0">
+      <Symbol part={part} />
+    </g>
+  );
   return (
     <g>
-      <g transform={`translate(${cx} ${cy})${vertical ? " rotate(-90)" : ""}`}>
-        <Symbol part={part} />
-      </g>
+      {alias ? (
+        <g data-board-part={alias} data-board-label="" data-part-at={`${cx} ${cy}`}>
+          {symbol}
+        </g>
+      ) : (
+        symbol
+      )}
       {part.label && (
         <text x={vertical ? cx - 30 : cx} y={vertical ? cy + 4 : labelBelow ? cy + 30 : cy - 22} className="guide-chart-label" textAnchor={vertical ? "end" : "middle"}>
           {part.label}
@@ -123,6 +161,10 @@ export function GuideCircuit({ circuit }: { circuit: GuideCircuitData }) {
   const wire = { stroke: STROKE, strokeWidth: 2.4, fill: "none" };
   const battery = components.find((c) => c.type === "battery") || { type: "battery" };
   const rest = components.filter((c) => c !== battery);
+  // Pointer ids use a part's place in the ORIGINAL list (what the lesson step and the
+  // server see), not its place on the drawing, which pulls the battery out first.
+  const cid = (p: GuideCircuitPart) => `components.${components.indexOf(p)}`;
+  const batteryAlias = components.includes(battery) ? cid(battery) : undefined;
 
   if (layout === "parallel" && branches && branches.length >= 2) {
     const left = 56;
@@ -144,11 +186,18 @@ export function GuideCircuit({ circuit }: { circuit: GuideCircuitData }) {
             <g key={i}>
               <path d={`M${railA} ${y} L${railB} ${y}`} {...wire} />
               {branches[i].map((p, j) => (
-                <Placed key={j} part={p} cx={railA + ((j + 1) * (railB - railA)) / (branches[i].length + 1)} cy={y} labelBelow={false} />
+                <Placed
+                  key={j}
+                  part={p}
+                  anchor={`branches.${i}.${j}`}
+                  cx={railA + ((j + 1) * (railB - railA)) / (branches[i].length + 1)}
+                  cy={y}
+                  labelBelow={false}
+                />
               ))}
             </g>
           ))}
-          <Placed part={battery} cx={left} cy={(top + bottom) / 2} vertical />
+          <Placed part={battery} anchor="battery" alias={batteryAlias} cx={left} cy={(top + bottom) / 2} vertical />
         </svg>
       </div>
     );
@@ -169,12 +218,12 @@ export function GuideCircuit({ circuit }: { circuit: GuideCircuitData }) {
       {title && <div className="guide-chart-title">{title}</div>}
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="guide-chart-svg" role="img">
         <path d={`M${left} ${top} L${right} ${top} L${right} ${bottom} L${left} ${bottom} L${left} ${top}`} {...wire} />
-        <Placed part={battery} cx={left} cy={mid} vertical />
+        <Placed part={battery} anchor="battery" alias={batteryAlias} cx={left} cy={mid} vertical />
         {onTop.map((p, i) => (
-          <Placed key={"t" + i} part={p} cx={spread(onTop, i)} cy={top} labelBelow={false} />
+          <Placed key={"t" + i} part={p} anchor={cid(p)} cx={spread(onTop, i)} cy={top} labelBelow={false} />
         ))}
         {onBottom.map((p, i) => (
-          <Placed key={"b" + i} part={p} cx={spread(onBottom, i)} cy={bottom} />
+          <Placed key={"b" + i} part={p} anchor={cid(p)} cx={spread(onBottom, i)} cy={bottom} />
         ))}
       </svg>
     </div>

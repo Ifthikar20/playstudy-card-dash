@@ -16,8 +16,8 @@
  *            of another and delete it, Enter for a new paragraph or bullet
  *            anywhere, Backspace at the start to merge into the paragraph
  *            above, one undo stack for the whole section, and a debounced
- *            autosave instead of a network write per line. Escape, or clicking
- *            away, goes back to reading.
+ *            autosave instead of a network write per line. Escape goes back to
+ *            reading once what you typed is saved; clicking away only saves.
  *
  * WHY IT CANNOT CORRUPT NOTES
  *  - While writing, `textarea.value` IS the stored Markdown, byte for byte.
@@ -67,10 +67,23 @@ import {
 import { OneSheet, type OneSheetHandle } from "@/components/notes/OneSheet";
 
 export interface PaperNotesHandle {
-  /** Put the caret in the notes — the toolbar and keyboard entry point. */
-  startEditing: () => void;
+  /** Put the caret in the notes — the toolbar and keyboard entry point. At the
+   *  top by default; pass a source offset (clamped, so `Infinity` is the end)
+   *  to open somewhere else. On a sheet that is already open it only moves
+   *  focus, and the caret too when one is given. */
+  startEditing: (caret?: number) => void;
   stopEditing: () => void;
   isEditing: () => boolean;
+  /** Save anything typed and not yet saved. True when the server has it all
+   *  (always, while reading); false when it was refused or failed — `problem()`
+   *  says why. Await it before anything that locks the notes. */
+  flush: () => Promise<boolean>;
+  /** Type `text` at the caret, as the student would. When the sheet is closed it
+   *  opens at the END and the text goes in as soon as it is ready. False when
+   *  the notes cannot be written in (not editable, or locked). */
+  insertText: (text: string) => boolean;
+  /** Why the words on screen are not saved, or null. */
+  problem: () => string | null;
 }
 
 /* react-markdown passes the mdast node plus the hast properties as loose props.
@@ -139,17 +152,31 @@ export interface PaperNotesProps {
   locked: boolean;
   /** Persists the whole markdown body. Returns the server's copy, which we adopt. */
   onCommit: (next: string) => Promise<string | void>;
+  /** The notes may be empty, and may be saved empty: a student's own note. A
+   *  study section is never empty here — an empty one is the auto-writer's. */
+  allowEmpty?: boolean;
+  /** What an empty page says, in both states. */
+  placeholder?: string;
+  /** Open the writing surface as soon as the notes can be written in, with the
+   *  caret at the end — a note the student has just made, or come back to. */
+  openOnMount?: boolean;
+  /** Words dictation is still hearing, shown on the open sheet's status line. */
+  interim?: string;
 }
 
 export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function PaperNotes(
-  { md, guideKey, prose, canEdit, locked, onCommit },
+  { md, guideKey, prose, canEdit, locked, onCommit, allowEmpty = false, placeholder, openOnMount = false, interim },
   handleRef,
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<OneSheetHandle>(null);
   const [writing, setWriting] = useState<{ caret: number; at: number } | null>(null);
+  /* Text handed to `insertText` while the sheet was still closed. It goes in the
+     moment the sheet has mounted, in order. */
+  const queued = useRef<string[]>([]);
 
   const live = canEdit && !locked;
+  const blank = !md.trim();
   const { sanitized, toSrc } = useMemo(() => sanitizeWithMap(md), [md]);
 
   /* A click in the rendered prose → the exact source offset under the pointer.
@@ -187,9 +214,13 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
   const close = useCallback(() => setWriting(null), []);
 
   // Teach mode takes over, or editing is withdrawn: leave the writing surface so
-  // nothing can reflow under the guide's already-measured pointer rects.
+  // nothing can reflow under the guide's already-measured pointer rects. Whoever
+  // locks is expected to have awaited `flush` first; the sheet's own unmount
+  // flush is the safety net, and it reports a failure rather than dropping it.
   useEffect(() => {
-    if (!live) setWriting(null);
+    if (live) return;
+    queued.current = [];
+    setWriting(null);
   }, [live]);
 
   // Another writer landed a new copy under an open surface.
@@ -197,14 +228,45 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     if (writing) sheetRef.current?.external(md);
   }, [md, writing]);
 
+  // A fresh note opens ready to type in. Once only: after Escape it stays closed.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!openOnMount || autoOpened.current || !live) return;
+    autoOpened.current = true;
+    open(Infinity);
+  }, [live, open, openOnMount]);
+
+  // Text that arrived while the sheet was opening. The sheet's handle is attached
+  // in its layout phase, so by this passive effect it is there to take it.
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!writing || !sheet || !queued.current.length) return;
+    for (const text of queued.current.splice(0)) sheet.insertText(text);
+  }, [writing]);
+
   useImperativeHandle(
     handleRef,
     () => ({
-      startEditing: () => open(0),
+      startEditing: (caret?: number) => {
+        if (!live) return;
+        if (writing) sheetRef.current?.focus(caret);
+        else open(caret ?? 0);
+      },
       stopEditing: close,
       isEditing: () => !!writing,
+      // Nothing is ever unsaved while reading: only the sheet holds edits.
+      flush: () => (writing && sheetRef.current ? sheetRef.current.flush() : Promise.resolve(true)),
+      insertText: (text: string) => {
+        if (!live || !text) return false;
+        if (writing && sheetRef.current) return sheetRef.current.insertText(text);
+        // Open once, however many phrases arrive before the sheet is ready.
+        if (!queued.current.length) open(Infinity);
+        queued.current.push(text);
+        return true;
+      },
+      problem: () => sheetRef.current?.problem() ?? null,
     }),
-    [close, open, writing],
+    [close, live, open, writing],
   );
 
   const onClick = (e: React.MouseEvent) => {
@@ -214,6 +276,8 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     const sel = window.getSelection();
     // A drag-select belongs to the sticky-note flow, not to the editor.
     if (sel && !sel.isCollapsed) return;
+    // An empty note has no units to aim at: anywhere in it is the start.
+    if (blank) return open(0);
     const el = t.closest<HTMLElement>(`[${UNIT_ATTR}]`);
     if (!el || !rootRef.current?.contains(el)) return;
     // No arming, no "Edit notes" gate, no coarse-pointer bail: a tap on a phone
@@ -247,16 +311,35 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
           guideKey={guideKey}
           onCommit={onCommit}
           onClose={close}
+          allowEmpty={allowEmpty}
+          placeholder={placeholder}
+          interim={interim}
         />
       ) : (
-        <div
-          className={cn(prose, live && "cursor-text")}
-          data-guide-notes={guideKey}
-          {...(live ? { "data-an-live": "" } : {})}
-          onClick={onClick}
-        >
-          {tree}
-        </div>
+        <>
+          <div
+            className={cn(prose, live && "cursor-text")}
+            data-guide-notes={guideKey}
+            {...(live ? { "data-an-live": "" } : {})}
+            onClick={onClick}
+          >
+            {tree}
+          </div>
+          {/* Outside `data-guide-notes`, so no TreeWalker, quote finder or text
+              selection in the notes can ever pick the placeholder up as notes. */}
+          {blank && placeholder &&
+            (live ? (
+              <button
+                type="button"
+                onClick={() => open(0)}
+                className="mx-auto block w-full max-w-[78ch] cursor-text text-left text-[16px] leading-[1.75] text-muted-foreground/60"
+              >
+                {placeholder}
+              </button>
+            ) : (
+              <p className="mx-auto max-w-[78ch] text-[16px] leading-[1.75] text-muted-foreground/60">{placeholder}</p>
+            ))}
+        </>
       )}
     </div>
   );

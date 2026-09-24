@@ -7,9 +7,12 @@
  * the ticks carry over, try "Quiz me", narrow the board. Only registered when
  * import.meta.env.DEV is true - see App.tsx.
  *
- * Query string, for screenshots: ?focus=2&width=420&blank=1&only=looks|auto|facts
+ * Query string, for screenshots: ?focus=2&width=420&blank=1&only=looks|auto|facts|avatars|pointing
+ * (pointing takes its own options, see components/guide/DevPointingGallery.tsx)
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { DevAvatarGallery } from "@/components/guide/DevAvatarGallery";
+import { DevPointingGallery } from "@/components/guide/DevPointingGallery";
 import type { GuideFacts as GuideFactsData, GuideList as GuideListData } from "@/services/guide";
 import { GuideList, type ListLayout } from "@/components/guide/GuideList";
 import { GuideFacts } from "@/components/guide/GuideFacts";
@@ -224,7 +227,7 @@ function Board({ list, layout, width }: { list: GuideListData; layout?: ListLayo
           <span className="guide-board-dot guide-board-dot-min inline-block" />
           <span className="guide-board-dot guide-board-dot-full inline-block" />
         </span>
-        <span className="guide-board-minlabel">{info.look}</span>
+        <span className="guide-board-name">{info.look}</span>
         {info.overflow && <span className="ml-auto text-[11px] font-semibold normal-case text-red-500">overflows sideways</span>}
       </div>
       <div className="guide-board-body" ref={bodyRef}>
@@ -367,6 +370,19 @@ export default function DevBoardPage() {
         </label>
       </header>
       <main className="space-y-10 px-6 py-6">
+        {only === "pointing" && (
+          <Section
+            title="Pointing at parts"
+            note="The real board and pointer: the tip must land on the exact part being talked about, with the speech bubble off it."
+          >
+            <DevPointingGallery />
+          </Section>
+        )}
+        {only === "avatars" && (
+          <Section title="Tutor avatars" note="Teach mode's pointer avatars: each voice's default pointer, then every avatar at 96, 48, 34 (the pointer) and 20px, in the chosen mood.">
+            <DevAvatarGallery />
+          </Section>
+        )}
         {only === "facts" && (
           <Section title="Fast facts" note="The board's &quot;Did you know?&quot; card: a few striking facts about the subject.">
             {FACTS.map((f, i) => (

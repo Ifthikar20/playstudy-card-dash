@@ -18,6 +18,8 @@ import { createStudySessionWithAI, createStudySessionFromYouTube, analyzeContent
 import { fetchLoadingFacts } from "@/services/guide";
 import { LoadingFacts } from "@/components/LoadingFacts";
 import { useToast } from "@/hooks/use-toast";
+import { saveExamPlan } from "@/services/examPlans";
+import { todayIso, daysBetween } from "@/lib/examPlan";
 
 interface CreateStudySessionDialogProps {
   open: boolean;
@@ -41,6 +43,11 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
   const [topicCount, setTopicCount] = useState([4]);
   const [questionCount, setQuestionCount] = useState([10]);
   const [sessionTitle, setSessionTitle] = useState("");
+  // "Is this for an exam?" — asked once the session exists, so the plan can be
+  // laid out over its real sections before they even open the notes.
+  const [examOn, setExamOn] = useState(false);
+  const [examDate, setExamDate] = useState("");
+  const [examSittings, setExamSittings] = useState(2);
   const [createdSession, setCreatedSession] = useState<any>(null);
   const [contentAnalysis, setContentAnalysis] = useState<ContentAnalysis | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
@@ -256,6 +263,20 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
 
   const handleStartSession = () => {
     if (!createdSession) return;
+    if (examOn && examDate && daysBetween(todayIso(), examDate) >= 0) {
+      // Saved in the background: the questions for this session are still being
+      // written, so the call can take a while, and nobody should watch a spinner
+      // to get to their notes. The strip appears as soon as it lands.
+      void saveExamPlan(createdSession.id, { examDate, sittingsPerDay: examSittings })
+        .then((plan) => useAppStore.getState().setExamPlan(plan))
+        .catch((error) =>
+          toast({
+            title: "Couldn't make the study plan",
+            description: error instanceof Error ? error.message : "You can set it up on the study page.",
+            variant: "destructive",
+          }),
+        );
+    }
     navigate(`/dashboard/${createdSession.id}/full-study`);
 
     // Reset state
@@ -267,6 +288,9 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     setSelectedFile(null);
     setSessionTitle("");
     setCreatedSession(null);
+    setExamOn(false);
+    setExamDate("");
+    setExamSittings(2);
   };
 
   const canProceed =
@@ -475,6 +499,58 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
                 </div>
               </div>
             </div>
+            <div className="rounded-2xl border border-border p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={examOn}
+                  onChange={(e) => setExamOn(e.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-[hsl(var(--primary))]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">I'm studying this for an exam</span>
+                  <span className="block text-xs text-muted-foreground">
+                    We'll split it across the days you have left and keep the last ones for revision.
+                  </span>
+                </span>
+              </label>
+
+              {examOn && (
+                <div className="mt-4 space-y-3 pl-7">
+                  <div className="space-y-1.5">
+                    <label htmlFor="new-exam-date" className="text-xs font-medium">
+                      When is the exam?
+                    </label>
+                    <Input
+                      id="new-exam-date"
+                      type="date"
+                      min={todayIso()}
+                      value={examDate}
+                      onChange={(e) => setExamDate(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="block text-xs font-medium">How many times a day do you study?</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[1, 2, 3, 4].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setExamSittings(n)}
+                          className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                            examSittings === n ? "border-foreground bg-foreground text-background" : "border-border hover:border-foreground/40"
+                          }`}
+                        >
+                          {n}×
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-center gap-2 py-1 text-sm text-muted-foreground">
               <Clock size={16} />
               Estimated time: <span className="font-medium text-foreground">{getEstimatedTime()}</span>

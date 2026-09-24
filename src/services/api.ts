@@ -2,6 +2,8 @@
  * Unified API service for making a single call to fetch all application data
  */
 import { clearCachedUserData } from '@/lib/localData';
+import type { ExamPlan } from '@/lib/examPlan';
+import type { NoteCheck } from '@/services/notes';
 
 // Browser storage keys
 const STORAGE_KEYS = {
@@ -133,9 +135,12 @@ export interface StudySession {
   /** There's a PDF to show in Full Study (the upload, or a deck converted to one); fetch it with fetchSessionPdf. */
   hasPdf?: boolean;
   extractedTopics?: Topic[];
+  /** "note" for the student's own note (lib/notes/isNote.ts). */
   sourceKind?: string | null;
   sourceUrl?: string | null;
   sourceSnapshots?: string[] | null;
+  /** Last edit, in ms. */
+  updatedAt?: number | null;
 }
 
 export interface UserProfile {
@@ -165,6 +170,8 @@ export interface Folder {
 export interface AppData {
   studySessions: StudySession[];
   folders: Folder[];
+  /** Exam run-ups, one per session that has one (see lib/examPlan.ts). */
+  examPlans?: ExamPlan[];
   userProfile: UserProfile;
   stats: {
     totalSessions: number;
@@ -842,13 +849,48 @@ export const updateTopicProgress = async (
  * Update user XP
  */
 /**
+ * The message to show for a failed section edit. FastAPI's own validation errors
+ * (422) carry `detail` as a list of problems rather than a sentence; the first
+ * one's `msg` says what was wrong, where a generic fallback said nothing.
+ */
+const sectionErrorMessage = (err: { detail?: unknown }, fallback: string): string => {
+  const detail = err?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && typeof detail[0]?.msg === 'string') return detail[0].msg;
+  return fallback;
+};
+
+/**
  * Edit a Full Study section (title, short description, written notes).
  */
+/**
+ * Forget the browser's copy of one session. getStudySession serves that copy for five
+ * minutes, so after a section is changed it would hand back the OLD text the next time
+ * the page opens — and the next save would then write that old text over the new.
+ * Every write to a session's notes calls this.
+ */
+export const forgetCachedSession = (sessionId: string) => {
+  try {
+    localStorage.removeItem(`anothernotes_session_${sessionId}`);
+    localStorage.removeItem(`anothernotes_session_${sessionId}_timestamp`);
+  } catch {
+    /* private mode: there is no copy to forget */
+  }
+};
+
 export const updateTopicDetails = async (
   sessionId: string,
   topicDbId: number,
   patch: { title?: string; description?: string; notes?: string },
-): Promise<{ id: number; title: string; description: string; notes: string | null }> => {
+): Promise<{
+  id: number;
+  title: string;
+  description: string;
+  notes: string | null;
+  /** The tutor's questions about this section, moved to follow the edit. */
+  noteChecks?: NoteCheck[];
+  updatedAt?: number | null;
+}> => {
   const token = getAuthToken();
   const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}`, {
     method: 'PATCH',
@@ -857,8 +899,9 @@ export const updateTopicDetails = async (
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Failed to save section');
+    throw new Error(sectionErrorMessage(err, 'Failed to save section'));
   }
+  forgetCachedSession(sessionId);
   return response.json();
 };
 
@@ -875,6 +918,7 @@ export const generateTopicNotes = async (sessionId: string, topicDbId: number, f
     const err = await response.json().catch(() => ({}));
     throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to write notes');
   }
+  forgetCachedSession(sessionId);
   return (await response.json()).notes as string;
 };
 
@@ -897,6 +941,7 @@ export const generateSectionQuiz = async (
     const err = await response.json().catch(() => ({}));
     throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to build the quiz');
   }
+  forgetCachedSession(sessionId);
   const data = await response.json();
   return (data.questions ?? []).map((q: any): Question => ({
     id: String(q.id),
@@ -919,8 +964,9 @@ export const reviseTopicNotes = async (sessionId: string, topicDbId: number, ins
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to revise notes');
+    throw new Error(sectionErrorMessage(err, 'Failed to revise notes'));
   }
+  forgetCachedSession(sessionId);
   return (await response.json()).notes as string;
 };
 

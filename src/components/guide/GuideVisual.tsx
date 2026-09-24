@@ -41,13 +41,20 @@ export function GuideMathLine({ math }: { math: GuideMath }) {
     }
   }, [math.latex]);
   const labels = math.labels?.length ? math.labels : null;
+  // Pointer anchors: "formula" is the rendered line itself, "labels.i" each named symbol.
   return (
     <div className={`guide-math${labels ? " guide-math-labelled" : ""}`}>
-      {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : <span className="guide-board-raw">{math.latex}</span>}
+      {html ? (
+        <span dangerouslySetInnerHTML={{ __html: html }} data-board-part="formula" data-board-label={math.latex} />
+      ) : (
+        <span className="guide-board-raw" data-board-part="formula" data-board-label={math.latex}>
+          {math.latex}
+        </span>
+      )}
       {labels && (
         <div className="guide-math-keys">
           {labels.map((l, i) => (
-            <span key={i} className="guide-math-key">
+            <span key={i} className="guide-math-key" data-board-part={`labels.${i}`} data-board-label={`${l.part} ${l.meaning}`}>
               <span className="guide-math-part">{l.part}</span>
               <span className="guide-math-meaning">{l.meaning}</span>
             </span>

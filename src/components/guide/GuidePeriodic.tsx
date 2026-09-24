@@ -61,11 +61,35 @@ export function GuidePeriodic({ periodic }: { periodic: GuidePeriodicData }) {
   return (
     <div className="guide-periodic">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="guide-chart-svg" role="img">
-        {/* the element's group and period, tinted so "where it sits" is the picture */}
+        {/* the element's group and period, tinted so "where it sits" is the picture.
+            The tutor's pointer touches a group at the head of its column and a period
+            at the start of its row, where a teacher would put a finger. */}
         {!fBlock && (
           <>
-            <rect x={x(group) - 1} y={TOP - 1} width={CELL + 2} height={7 * (CELL + GAP)} rx={4} fill={color} opacity={0.12} />
-            <rect x={LEFT - 1} y={y(period) - 1} width={18 * (CELL + GAP)} height={CELL + 2} rx={4} fill={color} opacity={0.12} />
+            <rect
+              x={x(group) - 1}
+              y={TOP - 1}
+              width={CELL + 2}
+              height={7 * (CELL + GAP)}
+              rx={4}
+              fill={color}
+              opacity={0.12}
+              data-board-part="group"
+              data-board-label={`group ${group}`}
+              data-part-at={`${x(group) + CELL / 2} ${TOP + CELL / 2}`}
+            />
+            <rect
+              x={LEFT - 1}
+              y={y(period) - 1}
+              width={18 * (CELL + GAP)}
+              height={CELL + 2}
+              rx={4}
+              fill={color}
+              opacity={0.12}
+              data-board-part="period"
+              data-board-label={`period ${period}`}
+              data-part-at={`${LEFT + CELL / 2} ${y(period) + CELL / 2}`}
+            />
           </>
         )}
         {mainCells().map((c) => (
@@ -84,10 +108,12 @@ export function GuidePeriodic({ periodic }: { periodic: GuidePeriodicData }) {
             />
           )),
         )}
-        <rect x={cellX - 2} y={cellY - 2} width={CELL + 4} height={CELL + 4} rx={4} fill={color} className="guide-periodic-live" />
-        <text x={cellX + CELL / 2} y={cellY + CELL / 2 + 1} className="guide-periodic-symbol" textAnchor="middle" dominantBaseline="middle">
-          {symbol}
-        </text>
+        <g data-board-part="element" data-board-label={`${symbol} ${name}`} data-part-at={`${cellX + CELL / 2} ${cellY + CELL / 2}`}>
+          <rect x={cellX - 2} y={cellY - 2} width={CELL + 4} height={CELL + 4} rx={4} fill={color} className="guide-periodic-live" />
+          <text x={cellX + CELL / 2} y={cellY + CELL / 2 + 1} className="guide-periodic-symbol" textAnchor="middle" dominantBaseline="middle">
+            {symbol}
+          </text>
+        </g>
         <text x={LEFT} y={14} className="guide-chart-tick">
           {fBlock ? `${category}` : `group ${group} · period ${period}`}
         </text>

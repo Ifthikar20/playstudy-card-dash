@@ -12,6 +12,9 @@ import type { GuideChart as GuideChartData } from "@/services/guide";
 const COLORS = ["#ec4899", "#3b82f6", "#14b8a6", "#f59e0b", "#8b5cf6", "#84cc16", "#ef4444"];
 const W = 480;
 
+/** Where the tutor's pointer touches a part (data-part-at), in this SVG's own units. */
+const partAt = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+
 function fmt(v: number, unit?: string): string {
   const abs = Math.abs(v);
   let n: string;
@@ -36,8 +39,9 @@ function Bars({ data, unit }: { data: GuideChartData["data"]; unit?: string }) {
       {data.map((d, i) => {
         const y = top + i * rowH + rowH / 2;
         const bw = Math.max(2, (Math.abs(d.value) / max) * barMax);
+        // the pointer touches the end of the bar, just inside it, where its value is read
         return (
-          <g key={i}>
+          <g key={i} data-board-part={`data.${i}`} data-board-label={d.label} data-part-at={partAt(barX + bw - Math.min(4, bw / 2), y)}>
             <text x={labelW} y={y} className="guide-chart-label" textAnchor="end" dominantBaseline="middle">
               {d.label}
             </text>
@@ -78,7 +82,19 @@ function Pie({ data, unit }: { data: GuideChartData["data"]; unit?: string }) {
         const o = arc(a1, a2, r);
         const inn = arc(a1, a2, inner);
         const path = `M ${o.x1} ${o.y1} A ${r} ${r} 0 ${o.large} 1 ${o.x2} ${o.y2} L ${inn.x2} ${inn.y2} A ${inner} ${inner} 0 ${o.large} 0 ${inn.x1} ${inn.y1} Z`;
-        return <path key={i} d={path} fill={COLORS[i % COLORS.length]} className="guide-chart-slice" />;
+        // halfway round the slice and inside the ring, so the tip is on this slice's colour
+        const mid = (a1 + a2) / 2;
+        return (
+          <path
+            key={i}
+            d={path}
+            fill={COLORS[i % COLORS.length]}
+            className="guide-chart-slice"
+            data-board-part={`data.${i}`}
+            data-board-label={d.label}
+            data-part-at={partAt(cx + 0.6 * r * Math.cos(mid), cy + 0.6 * r * Math.sin(mid))}
+          />
+        );
       })}
       {data.map((d, i) => {
         const y = 24 + i * 30;
@@ -128,7 +144,17 @@ function Line({ data, unit }: { data: GuideChartData["data"]; unit?: string }) {
       <polyline points={pts} className="guide-chart-line" fill="none" stroke={COLORS[0]} />
       {data.map((d, i) => (
         <g key={"p" + i}>
-          <circle cx={x(i)} cy={y(d.value)} r={4.5} fill={COLORS[0]} className="guide-chart-dot" />
+          {/* the dot is the part: its label sits down at the axis, too far away to outline with it */}
+          <circle
+            cx={x(i)}
+            cy={y(d.value)}
+            r={4.5}
+            fill={COLORS[0]}
+            className="guide-chart-dot"
+            data-board-part={`data.${i}`}
+            data-board-label={d.label}
+            data-part-at={partAt(x(i), y(d.value))}
+          />
           <text x={x(i)} y={h - 12} className="guide-chart-label" textAnchor="middle">
             {d.label}
           </text>

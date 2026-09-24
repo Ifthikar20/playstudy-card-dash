@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { API_URL, getAuthToken } from "@/services/api";
 import type { GuideImage as GuideImageData } from "@/services/guide";
 
@@ -20,6 +20,9 @@ interface Ready {
   url: string;
   caption?: string;
   source?: string;
+  /** The picture's natural size, once decoded (0 when it never said). */
+  w?: number;
+  h?: number;
 }
 
 interface State extends Partial<Ready> {
@@ -37,8 +40,8 @@ function sourceName(url?: string): string {
   }
 }
 
-/** Resolve when the bitmap is in memory and painted-ready — never reject on a slow file. */
-function decoded(url: string): Promise<void> {
+/** Resolve with the natural size when the bitmap is in memory and painted-ready — never reject on a slow file. */
+function decoded(url: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
@@ -46,7 +49,7 @@ function decoded(url: string): Promise<void> {
     const done = () => {
       if (!settled) {
         settled = true;
-        resolve();
+        resolve({ w: img.naturalWidth, h: img.naturalHeight });
       }
     };
     img.onload = () => (img.decode ? img.decode().then(done, done) : done());
@@ -76,8 +79,8 @@ async function lookup(query: string, match: string[]): Promise<Ready> {
   if (!res.ok) throw new Error(String(res.status));
   const data = await res.json();
   if (!data?.url) throw new Error("no image");
-  await decoded(data.url);
-  return { url: data.url, caption: data.caption, source: data.source };
+  const size = await decoded(data.url);
+  return { url: data.url, caption: data.caption, source: data.source, ...size };
 }
 
 function imageFor(query: string, match: string[] = [], found?: { url: string; source?: string; caption?: string }): Promise<Ready> {
@@ -87,7 +90,7 @@ function imageFor(query: string, match: string[] = [], found?: { url: string; so
   // A lesson step arrives with the picture the server already found and checked:
   // only decoding is left to do. A question's answer still asks for it here.
   const p = found?.url
-    ? decoded(found.url).then(() => ({ url: found.url, caption: found.caption, source: found.source }))
+    ? decoded(found.url).then((size) => ({ url: found.url, caption: found.caption, source: found.source, ...size }))
     : lookup(query, match);
   cache.set(key, p);
   p.catch(() => cache.delete(key)); // a failed lookup shouldn't poison the next try
@@ -132,10 +135,28 @@ export function GuideImage({ image }: { image: GuideImageData }) {
     );
   }
   const caption = image.caption || st.caption;
+  // The natural size goes on the element: width/height keep its shape before layout,
+  // --ar lets the board size it to fill without letterboxing, and --nw caps how far a
+  // small photo is blown up (twice its own size, before it turns soft).
+  const sized = !!(st.w && st.h);
+  const vars = sized ? ({ "--ar": String(st.w! / st.h!), "--nw": `${st.w}px` } as CSSProperties) : undefined;
   return (
     <figure className="guide-image">
       {/* already decoded by the time this mounts, so it appears whole */}
-      <img className="guide-image-img" src={st.url} alt={caption || image.query} onError={() => setSt({ loading: false, failed: true })} />
+      <img
+        className="guide-image-img"
+        src={st.url}
+        alt={caption || image.query}
+        width={sized ? st.w : undefined}
+        height={sized ? st.h : undefined}
+        style={vars}
+        onLoad={(e) => {
+          // a picture that outlasted the decode wait arrives here with its size at last
+          const el = e.currentTarget;
+          if (!sized && el.naturalWidth > 0) setSt((prev) => ({ ...prev, w: el.naturalWidth, h: el.naturalHeight }));
+        }}
+        onError={() => setSt({ loading: false, failed: true })}
+      />
       <figcaption className="guide-image-caption">
         <span>{caption}</span>
         {st.source && (

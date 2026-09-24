@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/appStore";
 import { ArrowLeft } from "lucide-react";
 import { FolderGlyph, parseCover } from "@/lib/folderCovers";
+import { isNote } from "@/lib/notes/isNote";
 
 const SERIF = "'Instrument Serif', Georgia, 'Times New Roman', serif";
 
@@ -14,7 +15,8 @@ export default function FolderDetailPage() {
   const { studySessions, folders, setCurrentSession } = useAppStore();
 
   const folder = folders.find(f => f.id === Number(folderId));
-  const folderSessions = studySessions.filter(s => s.folderId === Number(folderId));
+  // A folder shelves study sessions; the student's own notes live in the sidebar.
+  const folderSessions = studySessions.filter(s => s.folderId === Number(folderId) && !isNote(s));
 
   const handleSessionClick = (session: any) => {
     setCurrentSession(session);

@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession, updateTopicProgress, updateUserXP } from '@/services/api';
 import { topicCompletionXp, type XpBreakdown } from '@/lib/xp';
 import { recordAnswers, type AnswerEventIn } from '@/services/activity';
+import type { ExamPlan } from '@/lib/examPlan';
+import type { NoteCheck } from '@/services/notes';
 
 export interface Question {
   id: string;
@@ -26,6 +28,9 @@ export interface Topic {
   isCategory?: boolean;
   parentTopicId?: string | null;
   subtopics?: Topic[];
+  /** What the tutor asked about these notes when they were last checked (services/notes.ts). */
+  noteChecks?: NoteCheck[] | null;
+  notesCheckedAt?: string | null;
 }
 
 export interface Folder {
@@ -56,10 +61,13 @@ export interface StudySession {
   hasPdf?: boolean;
   extractedTopics?: Topic[];
   folderId?: number | null;
-  /** Where the material came from (e.g. a YouTube video) + a few frame snapshots */
+  /** Where the material came from (e.g. a YouTube video) + a few frame snapshots.
+   *  "note" means the student's own note (lib/notes/isNote.ts), not study material. */
   sourceKind?: string | null;
   sourceUrl?: string | null;
   sourceSnapshots?: string[] | null;
+  /** Last edit, in ms — how notes are ordered in the sidebar and on the dashboard. */
+  updatedAt?: number | null;
 }
 
 interface AppState {
@@ -80,6 +88,18 @@ interface AppState {
   completeTopic: (sessionId: string, topicId: string) => void;
   /** Patch a section's editable fields in the store (title / description / notes). */
   updateTopic: (sessionId: string, topicId: string, patch: Partial<Pick<Topic, 'title' | 'description' | 'notes'>>) => void;
+  /** The same, found by the section's DATABASE id. The client-side topic ids differ between
+   *  the dashboard payload and a full session fetch, so anything the server answers about
+   *  a section (a save, a check, a fix) must be matched this way or it lands nowhere. */
+  updateTopicByDbId: (
+    sessionId: string,
+    dbId: number,
+    patch: Partial<Pick<Topic, 'title' | 'description' | 'notes' | 'noteChecks' | 'notesCheckedAt'>>,
+  ) => void;
+  /** Patch a session's own fields (a note's title after a rename, its updatedAt after a save). */
+  patchSession: (sessionId: string, patch: Partial<Pick<StudySession, 'title' | 'updatedAt'>>) => void;
+  /** Drop a session from the store (a note deleted from its own page). */
+  removeSession: (sessionId: string) => void;
   /** Replace a section's quiz with a freshly generated set and reset its progress. */
   setTopicQuestions: (sessionId: string, topicId: string, questions: Question[]) => void;
   resetTopic: (sessionId: string, topicId: string) => void;
@@ -116,6 +136,12 @@ interface AppState {
   /** Record one answered question (any mode) and schedule a flush. */
   logAnswer: (event: AnswerEventIn) => void;
   syncPendingProgress: () => Promise<void>;
+
+  // Exam study plans, keyed by study session id: what to study today, and when the exam is.
+  examPlans: Record<string, ExamPlan>;
+  /** Save (or replace) one session's plan after the server has laid it out. */
+  setExamPlan: (plan: ExamPlan) => void;
+  clearExamPlan: (sessionId: string) => void;
 
   // Stats
   stats: {
@@ -296,6 +322,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         studySeconds: data.userProfile.studySeconds ?? 0,
       },
       stats: data.stats,
+      examPlans: Object.fromEntries((data.examPlans ?? []).map((p) => [p.sessionId, p])),
     });
   },
 
@@ -699,6 +726,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     return { studySessions, currentSession: current };
   }),
 
+  updateTopicByDbId: (sessionId, dbId, patch) => set((state) => {
+    const apply = (topics: Topic[]): Topic[] =>
+      topics.map((t) => (t.db_id === dbId ? { ...t, ...patch } : t.subtopics ? { ...t, subtopics: apply(t.subtopics) } : t));
+    const touched = (s: StudySession | null) =>
+      s && s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s;
+    return {
+      studySessions: state.studySessions.map((s) => touched(s) as StudySession),
+      currentSession: touched(state.currentSession),
+    };
+  }),
+
+  patchSession: (sessionId, patch) => set((state) => ({
+    studySessions: state.studySessions.map((s) => (s.id === sessionId ? { ...s, ...patch } : s)),
+    currentSession: state.currentSession?.id === sessionId ? { ...state.currentSession, ...patch } : state.currentSession,
+  })),
+
+  removeSession: (sessionId) => set((state) => ({
+    studySessions: state.studySessions.filter((s) => s.id !== sessionId),
+    currentSession: state.currentSession?.id === sessionId ? null : state.currentSession,
+  })),
+
   setTopicQuestions: (sessionId, topicId, questions) => set((state) => {
     const apply = (topics: Topic[]): Topic[] =>
       topics.map((t) =>
@@ -877,6 +925,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     await Promise.all([...progressPromises, xpPromise, answersPromise]);
     console.log('✅ All pending progress synced');
   },
+
+  examPlans: {},
+  setExamPlan: (plan) => set((state) => ({ examPlans: { ...state.examPlans, [plan.sessionId]: plan } })),
+  clearExamPlan: (sessionId) =>
+    set((state) => {
+      const { [sessionId]: gone, ...rest } = state.examPlans;
+      return { examPlans: rest };
+    }),
 
   // Stats - Start with defaults, will be populated by API
   stats: {

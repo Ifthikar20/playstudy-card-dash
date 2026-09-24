@@ -393,6 +393,14 @@ export interface Intent {
 
 const EMPTY_INTENT: Intent = {};
 
+/** How strict `guardDoc` is about the document as a whole, as opposed to what one
+ *  edit declares. */
+export interface GuardOptions {
+  /** A student's own note may be cleared to nothing. A study section may not:
+   *  an empty section body is what tells the auto-writer to write it again. */
+  allowEmpty?: boolean;
+}
+
 const tally = (parts: string[]) => {
   const m = new Map<string, number>();
   for (const p of parts) m.set(p, (m.get(p) ?? 0) + 1);
@@ -426,7 +434,8 @@ const sameMultiset = (x: string[], y: string[]) =>
  *         MULTISETS, so free typing proves "no atom changed at all" rather than
  *         "no atom changed by much", and a deliberate removal proves it removed
  *         exactly the one block it said it would.
- *  KEPT   marksWellFormed, and the empty-body refusal.
+ *  KEPT   marksWellFormed, and the empty-body refusal — unless the caller says
+ *         the document is one that may be empty (`allowEmpty`, a student's note).
  *  DROPPED the `blocks delta <= 1` clamp: Enter legitimately adds blocks, and a
  *         paste legitimately adds several. Nothing replaces it as a magnitude
  *         bound; the byte-identity proof below is what stands in its place.
@@ -435,9 +444,16 @@ const sameMultiset = (x: string[], y: string[]) =>
  *         that fails the save the day anything in this path starts EMITTING
  *         Markdown instead of copying it.
  */
-export function guardDoc(before: string, after: string, intent: Intent = EMPTY_INTENT): GuardResult {
+export function guardDoc(
+  before: string,
+  after: string,
+  intent: Intent = EMPTY_INTENT,
+  opts: GuardOptions = {},
+): GuardResult {
   if (before === after) return { ok: true };
-  if (!after.trim())
+  // Clearing a note still goes through every check below: a pinned block in it
+  // has to be declared to go, exactly as when it is taken out on its own.
+  if (!opts.allowEmpty && !after.trim())
     return { ok: false, why: "An empty body would be rewritten by the AI on your next visit." };
 
   const [s, e] = changedRange(before, after);

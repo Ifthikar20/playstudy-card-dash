@@ -2,8 +2,12 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { createPortal } from "react-dom";
 import { Check, Loader2, Mic, Pause, Play, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useVoiceKey, voiceKeyBadge, voiceKeyLabel } from "@/lib/voiceKey";
 import type { SttMode } from "@/lib/guide/speech";
-import { GuideBot, type BotKind, type BotMood } from "./GuideBot";
+import type { VoiceOption } from "@/lib/guide/voice";
+import { AVATARS, accentVars, setAvatar, useAvatar } from "@/lib/guide/avatars";
+import type { BotKind, BotMood } from "./GuideBot";
+import { GuideAvatar } from "./GuideAvatar";
 
 /*
   Teach mode's controls: the tutor standing in the bottom-right corner with one
@@ -15,17 +19,16 @@ import { GuideBot, type BotKind, type BotMood } from "./GuideBot";
 export type GuidePhase = "loading" | "speaking" | "paused" | "listening" | "thinking" | "answering" | "done" | "error";
 
 /** One of the two voices on offer, and the character that goes with it. */
-export interface VoiceOption {
-  /** "server:<id>" for a natural voice, "browser:<name>" for the browser's own. */
-  id: string;
-  name: string;
-  gender: "female" | "male" | null;
-  /** A few words about how it sounds ("bright", "warm"). */
-  desc?: string;
-}
+export type { VoiceOption } from "@/lib/guide/voice";
 
 export const botKind = (voice: { gender?: "female" | "male" | null } | null | undefined): BotKind =>
   voice?.gender === "female" ? "female" : voice?.gender === "male" ? "male" : "neutral";
+
+/** A voice's avatar, as the student has picked it for that voice (a hook per voice). */
+function VoiceAvatar({ kind, mood, size, full, title }: { kind: BotKind; mood: BotMood; size: number; full?: boolean; title?: string }) {
+  const avatar = useAvatar(kind);
+  return <GuideAvatar avatar={avatar.id} kind={kind} mood={mood} size={size} full={full} title={title} />;
+}
 
 /** Below this the whiteboard lies across the bottom of the screen, so the tutor stands smaller
  *  (and index.css lifts the board) to leave the board's own buttons clear. */
@@ -104,11 +107,16 @@ export function GuideDock(props: GuideDockProps) {
     return () => document.removeEventListener("pointerdown", onDown);
   }, [picking]);
 
+  const voiceKey = useVoiceKey();
+  const keyLabel = voiceKeyLabel(voiceKey);
+  const keyBadge = voiceKeyBadge(voiceKey);
   const busy = phase === "loading" || phase === "thinking";
   const playing = phase === "speaking" || phase === "answering" || phase === "listening" || busy;
   const listening = phase === "listening";
   const talking = phase === "speaking" || phase === "answering";
   const speaker = voices.find((v) => v.id === voiceId) ?? null;
+  const speakerKind = botKind(speaker);
+  const avatar = useAvatar(speakerKind);
   const mood: BotMood = talking || greeting ? "talking" : listening ? "listening" : busy ? "thinking" : "idle";
 
   let status: string;
@@ -136,6 +144,7 @@ export function GuideDock(props: GuideDockProps) {
     <div
       ref={dockRef}
       className="pointer-events-none fixed bottom-4 right-4 z-[130] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2"
+      style={accentVars(avatar.palette)}
       onKeyDown={(e) => {
         if (e.key === "Escape" && picking) {
           e.stopPropagation();
@@ -149,14 +158,22 @@ export function GuideDock(props: GuideDockProps) {
           type="button"
           className="guide-bot-stage"
           onClick={() => setPicking((p) => !p)}
-          aria-label={`${speaker.name} is reading. Change voice`}
+          aria-label={`${speaker.name} is reading. Change the voice or the look`}
         >
-          <GuideBot kind={botKind(speaker)} mood={mood} size={narrow ? 50 : 74} title={`${speaker.name} — tap to change voice`} />
+          <GuideAvatar
+            avatar={avatar.id}
+            kind={speakerKind}
+            mood={mood}
+            size={avatar.id === "pixel" ? (narrow ? 50 : 74) : narrow ? 48 : 64}
+            full
+            title={`${speaker.name} — tap to change the voice or the look`}
+          />
         </button>
       )}
-      {picking && voices.length > 1 && (
-        <div className="guide-voicemenu pointer-events-auto" role="menu" aria-label="Voice">
-          {voices.map((v) => (
+      {picking && speaker && (
+        <div className="guide-voicemenu pointer-events-auto" role="menu" aria-label="Voice and look">
+          {voices.length > 1 && <div className="guide-voicemenu-label">Voice</div>}
+          {voices.length > 1 && voices.map((v) => (
             <button
               key={v.id}
               type="button"
@@ -168,14 +185,32 @@ export function GuideDock(props: GuideDockProps) {
                 setPicking(false);
               }}
             >
-              <GuideBot kind={botKind(v)} mood={v.id === voiceId ? "talking" : "idle"} size={38} />
+              <VoiceAvatar kind={botKind(v)} mood={v.id === voiceId ? "talking" : "idle"} size={38} />
               <span className="flex flex-1 flex-col gap-0.5">
                 <span className="guide-voicemenu-name">{v.name}</span>
                 {v.desc && <span className="guide-voicemenu-desc">{v.desc}</span>}
               </span>
-              {v.id === voiceId && <Check className="size-4 text-pink-500" />}
+              {v.id === voiceId && <Check className="size-4" style={{ color: "var(--guide-accent-ink)" }} />}
             </button>
           ))}
+          {/* How this voice's tutor looks: the pointer's avatar and colour. Kept per voice. */}
+          <div className="guide-voicemenu-label">{speaker.name}'s look</div>
+          <div className="guide-avatar-grid" role="radiogroup" aria-label={`${speaker.name}'s look`}>
+            {AVATARS.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                role="radio"
+                aria-checked={a.id === avatar.id}
+                aria-label={a.name}
+                title={a.name}
+                className={cn("guide-avatar-pick", a.id === avatar.id && "is-on")}
+                onClick={() => setAvatar(speakerKind, a.id)}
+              >
+                <GuideAvatar avatar={a.id} kind={speakerKind} size={36} mood={a.id === avatar.id ? "talking" : "idle"} />
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {error && (
@@ -186,7 +221,7 @@ export function GuideDock(props: GuideDockProps) {
       {askOpen && (
         <form
           onSubmit={onSubmit}
-          className="guide-pop pointer-events-auto flex w-[min(440px,calc(100vw-2rem))] items-center gap-2 rounded-2xl border border-pink-500/30 bg-background/95 p-2 shadow-xl backdrop-blur"
+          className="guide-pop pointer-events-auto flex w-[min(440px,calc(100vw-2rem))] items-center gap-2 rounded-2xl guide-accent-edge border bg-background/95 p-2 shadow-xl backdrop-blur"
         >
           <input
             ref={inputRef}
@@ -201,12 +236,12 @@ export function GuideDock(props: GuideDockProps) {
               e.stopPropagation();
             }}
             placeholder={`Ask about this ${props.unit ?? "section"}…`}
-            className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-pink-500"
+            className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none guide-accent-focus"
           />
           <button
             type="submit"
             disabled={!draft.trim()}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3 text-xs font-semibold text-white disabled:opacity-50"
+            className="flex h-9 items-center gap-1.5 rounded-xl guide-accent-fill px-3 text-xs font-semibold disabled:opacity-50"
           >
             <Send className="size-3.5" />
             Ask
@@ -216,8 +251,10 @@ export function GuideDock(props: GuideDockProps) {
 
       <div
         className={cn(
-          "guide-pop pointer-events-auto flex items-center gap-1 rounded-full border border-pink-500/25 bg-background/95 py-1.5 pl-3 pr-1.5 shadow-2xl shadow-pink-500/10 backdrop-blur-md",
-          listening && "border-pink-500/60",
+          "guide-pop pointer-events-auto flex items-center gap-1 rounded-full guide-accent-edge border bg-background/95 py-1.5 pl-3 pr-1.5 shadow-2xl backdrop-blur-md",
+          // The whole bar breathes while the tutor is hearing you, so it's obvious
+          // the talk key worked without watching the little mic button.
+          listening && "guide-dock-live guide-accent-edge-strong",
         )}
       >
         <span className={cn("mr-1 truncate text-xs font-medium text-foreground", listening ? "max-w-[280px]" : "max-w-[200px]")} title={progress.title}>
@@ -230,7 +267,7 @@ export function GuideDock(props: GuideDockProps) {
           onClick={props.onPlayPause}
           title={playing ? "Pause (space)" : "Play (space)"}
           aria-label={playing ? "Pause" : "Play"}
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-fuchsia-500 text-white shadow-md shadow-pink-500/30 transition-transform hover:scale-105 active:scale-95"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full guide-accent-fill shadow-md transition-transform hover:scale-105 active:scale-95"
         >
           {playing ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}
         </button>
@@ -241,28 +278,28 @@ export function GuideDock(props: GuideDockProps) {
             sttMode === "none"
               ? "Voice input isn't available in this browser — type instead"
               : listening
-                ? "Done talking — send it (M)"
-                : "Talk to your tutor (press M)"
+                ? `Done talking — send it (${keyLabel})`
+                : `Talk to ${speaker?.name ?? "your tutor"} (press ${keyLabel})`
           }
           aria-label={listening ? "Stop listening and send" : "Ask by voice"}
-          aria-keyshortcuts="M"
+          aria-keyshortcuts={keyLabel}
           className={cn(
             "relative flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors",
-            listening ? "guide-mic-live border-pink-500 bg-pink-500 text-white" : "border-border text-foreground hover:bg-muted",
+            listening ? "guide-mic-live guide-accent-fill" : "border-border text-foreground hover:bg-muted",
             sttMode === "none" && "opacity-50",
           )}
         >
           <Mic className="size-4" />
           {sttMode !== "none" && (
-            // The shortcut is worth seeing, not just hovering for: M starts listening, M again sends.
+            // The key is worth seeing, not just hovering for: press it to listen, again to send.
             <kbd
               aria-hidden
               className={cn(
-                "absolute -right-1.5 -top-1.5 rounded-md border px-1 font-mono text-[9px] font-bold leading-4 shadow-sm",
-                listening ? "border-pink-500 bg-white text-pink-600" : "border-border bg-background text-muted-foreground",
+                "absolute -right-1.5 -top-1.5 max-w-[56px] truncate rounded-md border px-1 font-mono text-[9px] font-bold leading-4 shadow-sm",
+                listening ? "guide-accent-key bg-white" : "border-border bg-background text-muted-foreground",
               )}
             >
-              M
+              {keyBadge}
             </kbd>
           )}
         </button>
@@ -274,17 +311,18 @@ export function GuideDock(props: GuideDockProps) {
         >
           {rate}×
         </button>
-        {voices.length > 1 && speaker && (
+        {/* Who is teaching, by name, next to the mic they're heard through. */}
+        {speaker && (
           <button
             type="button"
             className="guide-voicebtn"
             onClick={() => setPicking((p) => !p)}
-            title={`${speaker.name} is reading — change voice`}
-            aria-label="Voice"
+            title={`${speaker.name} is reading — change the voice or the look`}
+            aria-label="Voice and look"
             aria-haspopup="menu"
             aria-expanded={picking}
           >
-            <GuideBot kind={botKind(speaker)} variant="head" size={20} mood={mood === "talking" ? "talking" : "idle"} />
+            <GuideAvatar avatar={avatar.id} kind={speakerKind} size={20} mood={mood === "talking" ? "talking" : "idle"} />
             <span className="hidden sm:inline">{speaker.name}</span>
           </button>
         )}

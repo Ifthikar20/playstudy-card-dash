@@ -205,6 +205,9 @@ export function GuideList({ list, layout: forced }: { list: GuideListData; layou
               data-state={state}
               data-hue={hueAt(i)}
               data-board-focus={state === "focus" ? "" : undefined}
+              // so the tutor's pointer can land on any item by name, not only the focused one
+              data-board-part={`items.${i}`}
+              data-board-label={item.label}
               style={style as CSSProperties}
             >
               <span className="guide-list-num" aria-hidden>

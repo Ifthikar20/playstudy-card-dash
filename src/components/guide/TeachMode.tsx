@@ -5,11 +5,17 @@ import { useAppStore } from "@/store/appStore";
 import { usePresenceStore } from "@/store/presenceStore";
 import {
   fetchGuideVoices,
+  fetchImageParts,
+  imagePartsContext,
+  prefetchImageParts,
   streamGuideAnswer,
   streamGuideScript,
   synthesizeSpeech,
   transcribeAudio,
   visualOf,
+  type GuideImage,
+  type GuidePoint,
+  type GuideRegion,
   type GuideStep,
   type GuideTurn,
   type GuideVoice,
@@ -29,6 +35,7 @@ import {
 import { bringIntoView, cancelAutoScroll, installScrollTakeover } from "@/lib/guide/scroll";
 import {
   Narrator,
+  splitSentences,
   browserVoiceName,
   browserVoicePair,
   createNativeRecognizer,
@@ -44,11 +51,41 @@ import {
   type VoiceGender,
 } from "@/lib/guide/speech";
 import { GuidePointer, type Gesture, type MarkColor, type PointerHandle } from "./GuidePointer";
-import { GuideDock, botKind, type GuidePhase, type VoiceOption } from "./GuideDock";
+import { GuideDock, botKind, type GuidePhase } from "./GuideDock";
+import {
+  RATES,
+  RATE_KEY,
+  VOICE_KEY,
+  applyVoice,
+  browserVoiceFor,
+  chosenVoice,
+  readStored,
+  readVoicePref,
+  voiceChoices,
+  writeStored,
+  type VoiceOption,
+} from "@/lib/guide/voice";
 import { GuideBoard, type BoardHandle } from "./GuideBoard";
 import { prefetchGuideImage } from "./GuideImage";
 import { trackAction } from "@/lib/analytics";
+import { matchesVoiceKey, voiceKeyLabel } from "@/lib/voiceKey";
+import { useTalkKey } from "@/lib/useTalkKey";
 import { visualToMarkdown } from "./GuideVisual";
+import {
+  BOARD_IMAGE,
+  hostPt,
+  labelSchedule,
+  locatePart,
+  partGesture,
+  pointAtPart,
+  restBeside,
+  restSpot,
+  spotOf,
+  aimPoint,
+  type PartSpot,
+  type Pt,
+  type ScheduledPart,
+} from "@/lib/guide/boardParts";
 
 /*
   Teach mode — AnotherNotes AI takes the wheel and teaches you your own notes.
@@ -99,9 +136,6 @@ interface ScriptEntry {
   waiters: Array<() => void>;
 }
 
-const RATE_KEY = "an-guide-rate";
-const VOICE_KEY = "an-guide-voice2"; // { id: "server:<voice id>" | "browser:<voice name>", gender }
-const RATES = [0.85, 1, 1.15, 1.3];
 const NOT_READY = new Set(["notes-missing", "notes-empty"]);
 /** Said while the pointer lands on a note the answer just added; taking turns, so it never sounds canned. */
 const NOTE_ADDED_LINES = [
@@ -131,7 +165,7 @@ interface AskOptions {
 /** A fragment of the answer's JSON header (block/quote/visual…) must never be read aloud or
  *  captioned. The backend strips the header itself; this is the last line of defence. */
 function looksLikeGuideJson(s: string): boolean {
-  return /^\s*[[{]\s*"/.test(s) || /"(block|quote|in_notes|visual|kind|items|label|detail|title)"\s*:/.test(s);
+  return /^\s*[[{]\s*"/.test(s) || /"(block|quote|in_notes|visual|kind|items|label|detail|title|point)"\s*:/.test(s);
 }
 
 function lastSentenceEnd(s: string): number {
@@ -143,66 +177,10 @@ function lastSentenceEnd(s: string): number {
 }
 
 const speakMs = (text: string, rate: number) => Math.max(1500, (text.split(/\s+/).length * 340) / rate);
-
-function readStored<T>(key: string, fallback: T): T {
-  try {
-    const v = localStorage.getItem(key);
-    return v == null ? fallback : (JSON.parse(v) as T);
-  } catch {
-    return fallback;
-  }
-}
-
-function writeStored(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* private mode */
-  }
-}
-
-/** The voice the student picked last time, and whose voice it was. The gender matters
- *  on its own: when the voices on offer change - a natural voice provider falls over,
- *  or they open the lesson on another machine - a student who chose the man's voice
- *  gets the man's voice again, and the character on screen still matches. */
-interface StoredVoice {
-  id: string;
-  gender: VoiceGender | null;
-}
-
-function readVoicePref(): StoredVoice | null {
-  const raw = readStored<string | { id?: string; gender?: string } | null>(VOICE_KEY, null);
-  if (typeof raw === "string") return { id: raw, gender: raw.startsWith("browser:") ? voiceGender(raw.slice(8)) : null };
-  if (raw && typeof raw.id === "string") {
-    return { id: raw.id, gender: raw.gender === "female" || raw.gender === "male" ? raw.gender : null };
-  }
-  return null;
-}
-
-/** The two voices on offer: the natural ones when the server has them, else the browser's own. */
-function voiceChoices(server: GuideVoice[], browser: SpeechSynthesisVoice[]): VoiceOption[] {
-  if (server.length) {
-    return server.map((v) => ({ id: `server:${v.id}`, name: v.name, gender: v.gender ?? null, desc: v.desc }));
-  }
-  return browserVoicePair(browser).map((v) => ({
-    id: `browser:${v.name}`,
-    name: browserVoiceName(v.name),
-    gender: voiceGender(v.name),
-    desc: "your device's own voice",
-  }));
-}
-
-/** The browser voice behind a choice. For a natural voice it's the stand-in if that voice
- *  fails mid-lesson, so it's the same gender and the face on screen still matches. */
-function browserVoiceFor(choice: VoiceOption, voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  if (choice.id.startsWith("browser:")) return voices.find((v) => v.name === choice.id.slice(8)) ?? null;
-  return browserVoicePair(voices).find((v) => voiceGender(v.name) === choice.gender) ?? pickVoice(voices);
-}
-
-function applyVoice(n: Narrator, choice: VoiceOption, voices: SpeechSynthesisVoice[]) {
-  n.serverVoice = choice.id.startsWith("server:") ? choice.id.slice(7) : null;
-  n.voice = browserVoiceFor(choice, voices) ?? n.voice;
-}
+/** Roughly how long one sentence takes to say, with no floor: for moving partway into it. */
+const lineMs = (text: string, rate: number) => (text.split(/\s+/).length * 340) / rate;
+/** Close enough that re-sending the pointer there would be a no-op (host px). */
+const near = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y) < 1.5;
 
 export function TeachMode({
   sessionId,
@@ -240,10 +218,17 @@ export function TeachMode({
   const [greeting, setGreeting] = useState(false); // a newly picked tutor saying hello
   const [voiceId, setVoiceIdState] = useState<string | null>(() => readVoicePref()?.id ?? null);
   const sttMode = useMemo(() => sttSupport(), []);
+  // The student's own talk key (onboarding / Settings) opens the mic, and sends. The
+  // shared hook owns the rule for when it counts: a plain key never fires while they
+  // type, a key with a modifier fires anywhere. `actions` is set further down; the
+  // hook only calls this on a keypress, long after.
+  const voiceKey = useTalkKey(() => actions.current?.mic());
 
   // Mutable state for the async flows — refs, so callbacks never go stale.
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
+  const voiceKeyRef = useRef(voiceKey);
+  voiceKeyRef.current = voiceKey;
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const rateRef = useRef(rate);
@@ -344,65 +329,242 @@ export function TeachMode({
     return "yellow";
   };
 
-  // While the pointer rests on something on the whiteboard, this undoes the "stay on
-  // the board" listener (see pointToBoard). Every other kind of pointing calls it first.
+  // While the pointer is on something on the whiteboard, this undoes the "stay on the
+  // board" listeners (see pointToBoard). Every other kind of pointing calls it first.
   const boardAnchor = useRef<(() => void) | null>(null);
+  // Bumped whenever the pointer leaves what it was doing on the board, so a part lookup
+  // that answers after the lesson has moved on can't pull the pointer back.
+  const boardSeq = useRef(0);
+  // Called with each sentence as the voice starts it, while the board is being explained
+  // (pointToBoard moves from part to part as each is named), and the last one started,
+  // for a hook that's only set once the step is already being spoken.
+  const captionHook = useRef<((sentence: string) => void) | null>(null);
+  const lastCaption = useRef<string | null>(null);
   const releaseBoard = () => {
+    boardSeq.current++;
     boardAnchor.current?.();
     boardAnchor.current = null;
+    captionHook.current = null;
   };
 
   /**
-   * The explainer goes to the board and rests on what it shows - the picture itself,
-   * a formula, the highlighted list item. The board is fixed to the screen, so the
-   * page isn't scrolled for it, and if the page scrolls while the pointer is there the
-   * pointer stays with the board instead of riding off with the notes. The next step
-   * about the notes brings it back.
+   * The explainer goes to the board and points at the exact part being talked about -
+   * the third colour band, side c, the resistor. Each part named in `points` is found on
+   * screen (a picture's from the regions the server located, a drawn visual's from its
+   * data-board-part anchors; a list's highlighted item when none is named), ringed
+   * tightly and touched with the tip, and as the voice names the next part the pointer
+   * moves on to it. When nothing can be found (the locator is off, a name is ambiguous)
+   * the whole visual is outlined and the pointer glides once to rest just outside its
+   * bottom-left corner and stays still: a press at a random spot would claim a part
+   * nobody located.
+   *
+   * The board is fixed to the screen, so the page isn't scrolled for it. Whenever
+   * anything moves - the page scrolls, the window or the board resizes, the board
+   * finishes sliding in - the pointer re-aims, so it stays on the part rather than
+   * riding off with the notes. The next step about the notes brings it back.
    */
-  const pointToBoard = (el: HTMLElement, first: boolean) => {
+  const pointToBoard = async (
+    el: HTMLElement,
+    first: boolean,
+    points: GuidePoint[],
+    run: number,
+    talk: { say?: string; image?: GuideImage | null } = {},
+  ) => {
     const p = pointer.current;
-    if (!p || !hostRef.current) return;
+    const host = hostRef.current;
+    if (!p || !host) return;
     releaseBoard();
     cancelAutoScroll();
     p.clearUnderline();
-    // First look: loop round the picture and settle in its lower left, clear of what it
-    // shows. Staying on it for another step: press on another part of it, as a teacher
-    // would point at a different detail.
-    const spot = first ? { fx: 0.16, fy: 0.74 } : { fx: 0.25 + Math.random() * 0.5, fy: 0.3 + Math.random() * 0.4 };
-    const aim = (gesture: Gesture, duration?: number) => {
-      const target = el.querySelector<HTMLElement>("img.guide-image-img") ?? el;
-      const r = target.getBoundingClientRect();
-      if (r.width < 2 || r.height < 2) return;
-      const around = hostRect(r);
-      p.focus(around, "pink", { above: true });
-      p.moveTo(hostPoint(r.left + r.width * spot.fx, r.top + r.height * spot.fy), { gesture, around, duration });
+    const seq = boardSeq.current;
+    const live = () => !cancelled(run) && boardSeq.current === seq && el.isConnected;
+    const img = el.querySelector<HTMLImageElement>(BOARD_IMAGE);
+    const whole: HTMLElement = img ?? el;
+    const wanted = (points ?? []).filter((pt) => pt && typeof pt.label === "string" && pt.label.trim()).slice(0, 3);
+    // A list's highlighted item is the part being explained, even when the step names none.
+    const focusEl = wanted.length ? null : el.querySelector<HTMLElement>("[data-board-focus]");
+    const count = wanted.length || (focusEl ? 1 : 0);
+    let regions: Record<string, GuideRegion> = {};
+    const boardBox = () => el.closest<HTMLElement>(".guide-board")?.getBoundingClientRect() ?? null;
+
+    /** Part i on screen right now, or null. Measured afresh every time: things move. */
+    const partAt = (i: number): PartSpot | null => {
+      if (i < 0 || i >= count) return null;
+      if (!wanted.length) return focusEl ? spotOf(focusEl) : null;
+      return locatePart(el, wanted[i], regions);
     };
-    aim(first ? "circle" : "press");
+    /** Where the tip goes for part i (host px): on it, or beside the whole visual when it isn't found. */
+    const aimFor = (i: number): { spot: PartSpot | null; tip: Pt } | null => {
+      const spot = partAt(i);
+      if (spot) return { spot, tip: hostPt(host, aimPoint(spot.box, spot.at, spot.exact)) };
+      const r = whole.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return null;
+      return { spot: null, tip: hostPt(host, restSpot(r)) };
+    };
+
+    let want = 0; // the part the voice is on
+    let sentTo: Pt | null = null; // where the tip was last sent (host px)
+    let resting = false; // beside the whole visual rather than on a part
+    let circled = !first; // a fresh visual gets one loop round its first part, then taps
+    /** "arrive": a real move, with a gesture. "follow": the same target moved on screen, catch up quietly. */
+    const go = (i: number, mode: "arrive" | "follow") => {
+      const aim = aimFor(i);
+      if (!aim) return;
+      const board = boardBox();
+      if (aim.spot) {
+        let gesture: Gesture = "none";
+        if (mode === "arrive") {
+          gesture = partGesture(aim.spot.box, !circled);
+          if (gesture === "circle") circled = true;
+        }
+        pointAtPart(p, host, aim.spot, { gesture, board, duration: mode === "follow" ? 240 : undefined });
+        resting = false;
+      } else {
+        // Already resting beside it: stay exactly where it is rather than glide there again.
+        if (mode === "arrive" && resting && sentTo && near(sentTo, aim.tip)) return;
+        restBeside(p, host, whole.getBoundingClientRect(), { board, duration: mode === "follow" ? 240 : 900 });
+        resting = true;
+      }
+      sentTo = aim.tip;
+    };
+
+    // A picture's parts come from the server's locator. Usually they're in already
+    // (asked for while the step before was being spoken); if not, the whole picture is
+    // outlined while we wait a little, and an answer that comes later still counts for
+    // as long as this step is being explained.
+    let late: Promise<Record<string, GuideRegion>> | null = null;
+    if (img && wanted.length) {
+      // The address exactly as the server issued it (the locator only works on those,
+      // and it's what the prefetch asked with), not the browser's normalised img.src.
+      const url = talk.image?.url || img.getAttribute("src") || img.currentSrc;
+      const lookup = fetchImageParts(
+        url,
+        wanted.map((w) => w.label),
+        imagePartsContext({ image: talk.image ?? null, say: talk.say ?? "" }),
+      );
+      let got = await Promise.race([lookup, sleep(150).then(() => null)]);
+      if (!live()) return;
+      if (!got) {
+        const r = img.getBoundingClientRect();
+        if (r.width >= 2 && r.height >= 2) p.focus(hostRect(r), "pink", { above: true });
+        got = await Promise.race([lookup, sleep(1650).then(() => null)]);
+        if (!live()) return;
+      }
+      if (got) regions = got;
+      else late = lookup;
+    }
+
+    // Moving from part to part as each is named. A lesson step's words are known in
+    // advance, so the moves are planned from them (and timed partway into a sentence
+    // when the name comes late in it); an answer streams in, so it's followed sentence
+    // by sentence, moving whenever one mentions a part.
+    const say = talk.say?.trim() ? talk.say : null;
+    const sentences = say ? splitSentences(say) : [];
+    const plan: ScheduledPart[] = say && wanted.length > 1 ? labelSchedule(say, wanted) : [];
+    let heard = 0;
+    const timers: number[] = [];
+    const moveOn = (i: number) => {
+      if (!live() || i === want) return;
+      want = i;
+      go(i, "arrive");
+    };
+    const onSentence = (sentence: string) => {
+      if (!live() || wanted.length < 2) return;
+      let due: ScheduledPart[];
+      if (say) {
+        let idx = sentences.indexOf(sentence, heard);
+        if (idx < 0) idx = sentences.indexOf(sentence);
+        if (idx < 0) return;
+        heard = idx;
+        due = plan.filter((e) => e.sentence === idx);
+      } else {
+        due = labelSchedule(sentence, wanted).filter((e) => e.heard);
+      }
+      for (const e of due) {
+        const ms = e.at < 0.12 ? 0 : e.at * lineMs(sentence, rateRef.current);
+        if (ms > 0) timers.push(window.setTimeout(() => moveOn(e.point), ms));
+        else moveOn(e.point);
+      }
+    };
+    // The voice may already be a sentence or two in (the picture took a moment): start
+    // on the part it has reached, not the first.
+    if (plan.length && lastCaption.current) {
+      const idx = sentences.indexOf(lastCaption.current);
+      if (idx > 0) {
+        heard = idx;
+        for (const e of plan) if (e.sentence < idx || (e.sentence === idx && e.at < 0.12)) want = e.point;
+      }
+    }
+    go(want, "arrive");
+    captionHook.current = onSentence;
+    if (late) {
+      void late.then((found) => {
+        if (!live() || !Object.keys(found).length) return;
+        regions = found;
+        go(want, "arrive");
+      });
+    }
+
+    // Stay on the part while things move. One re-aim per frame at most, and only when
+    // the target really moved - re-sending the same spot would cut a gesture short.
     let raf = 0;
-    const onScroll = () => {
+    const reaim = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => aim("none", 240));
+      raf = requestAnimationFrame(() => {
+        if (!live()) return;
+        const aim = aimFor(want);
+        if (!aim || (sentTo && near(sentTo, aim.tip))) return;
+        go(want, "follow");
+      });
     };
-    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    const boardEl = el.closest<HTMLElement>(".guide-board");
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(reaim) : null;
+    if (boardEl) ro?.observe(boardEl);
+    if (img) ro?.observe(img);
+    window.addEventListener("scroll", reaim, { capture: true, passive: true });
+    window.addEventListener("resize", reaim, { passive: true });
+    boardEl?.addEventListener("animationend", reaim);
+    boardEl?.addEventListener("transitionend", reaim);
     boardAnchor.current = () => {
-      window.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("scroll", reaim, { capture: true });
+      window.removeEventListener("resize", reaim);
+      boardEl?.removeEventListener("animationend", reaim);
+      boardEl?.removeEventListener("transitionend", reaim);
+      ro?.disconnect();
       cancelAnimationFrame(raf);
+      timers.forEach((t) => window.clearTimeout(t));
     };
   };
 
   /**
-   * The board element showing `spec` once it's really there: after the previous visual
-   * has been wiped off, and for a picture once it has loaded. Null when the board is
-   * off or minimized, when no picture was found, or when it doesn't come in time.
+   * Resolves once the board and what's on it have stopped moving - sliding in, widening
+   * for a picture, a drawing writing itself on - or after `ms`. Measured mid-animation,
+   * the tip would land a few pixels off the part.
+   */
+  const settled = async (el: HTMLElement, ms = 700) => {
+    const boardEl = el.closest<HTMLElement>(".guide-board");
+    const moving = [...(boardEl?.getAnimations?.() ?? []), ...(el.getAnimations?.({ subtree: true }) ?? [])].filter(
+      (a) => a.playState === "running" && a.effect?.getComputedTiming().iterations !== Infinity,
+    );
+    if (moving.length) await Promise.race([Promise.all(moving.map((a) => a.finished.catch(() => undefined))), sleep(ms)]);
+  };
+
+  /**
+   * The board element showing `spec` once it's really there and still: after the
+   * previous visual has been wiped off, for a picture once it has loaded, and once it
+   * has stopped animating. Null when the board is off or minimized, when no picture
+   * was found, or when it doesn't come in time.
    */
   const boardTarget = async (spec: VisualSpec, run: number): Promise<HTMLElement | null> => {
     const limit = Date.now() + (spec.kind === "image" ? 6000 : 1500);
     while (!cancelled(run) && board.current?.visible()) {
       const el = board.current.showing(spec);
       if (el) {
-        if (spec.kind !== "image") return el.querySelector<HTMLElement>("[data-board-focus]") ?? el;
-        const img = el.querySelector<HTMLImageElement>("img.guide-image-img");
-        if (img?.complete && img.naturalWidth > 0) return el;
+        const img = spec.kind === "image" ? el.querySelector<HTMLImageElement>(BOARD_IMAGE) : null;
+        if (spec.kind !== "image" || (img?.complete && img.naturalWidth > 0)) {
+          await settled(el);
+          return !cancelled(run) && el.isConnected ? el : null;
+        }
         if (!img && !el.querySelector(".guide-image-spinner")) return null; // no picture found
       }
       if (Date.now() > limit) return null;
@@ -574,26 +736,35 @@ export function TeachMode({
         const b = board.current;
         const visual = visualOf(step);
         let hasVisual = !!visual;
+        const points = step.point ?? [];
+        // The parts of this step's picture are looked up while the picture itself loads.
+        prefetchImageParts(step);
         // Take the pointer to the board's visual once it's really up (a picture once it
         // has loaded); if the board is closed, minimized or turned off, or no picture
         // was found, follow the notes block/quote instead of freezing on a stale spot.
         const pointAtBoard = async (first: boolean) => {
           const el = visual ? await boardTarget(visual, run) : null;
           if (cancelled(run)) return;
-          if (el) pointToBoard(el, first);
+          if (el) await pointToBoard(el, first, points, run, { say: step.say, image: step.image });
           else pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
         };
+        const onBoard = !visual && points.length && b?.visible() ? b.live() : null;
         if (visual && b) {
           const fresh = b.draw(visual);
-          if (visual.kind === "list" && (!fresh || visual.data.auto)) {
+          if (visual.kind === "list" && (!fresh || visual.data.auto) && !points.length) {
             // The list is already up and only its highlight moved on - or it's the
             // notes' own bullets, which the voice reads without announcing - so the
             // pointer follows the notes at normal pace while the board keeps track.
+            // (A step that names one of its items goes to the board to point at it.)
             hasVisual = false;
             pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
           } else {
             void pointAtBoard(fresh);
           }
+        } else if (onBoard) {
+          // It names a part of what's already on the board without drawing anything
+          // new: point at that part there, rather than wander back to the notes.
+          void pointToBoard(onBoard, false, points, run, { say: step.say });
         } else {
           pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
         }
@@ -602,8 +773,10 @@ export function TeachMode({
           if (!upcoming) continue;
           n.prefetch(upcoming.say, j === 1 ? 2 : 1); // keeps the natural voice gap-free
           // Find and decode a coming photo now, so the board never shows a
-          // half-painted picture while the voice is introducing it.
+          // half-painted picture while the voice is introducing it - and find the
+          // parts it will point at, so the pointer goes straight to them.
           prefetchGuideImage(upcoming.image);
+          prefetchImageParts(upcoming);
         }
         if (hasVisual && board.current?.visible()) {
           await sleep(300); // a beat so the drawing appears before "take a look at this…"
@@ -832,14 +1005,21 @@ ${visualToMarkdown(spec)}`.trimStart();
             if (cancelled(run)) return;
             // "Draw me that": the answer may come with a visual. Put it on the board
             // and point at it; if the board is off, fall back to the notes as usual.
+            const points = t.point ?? [];
             if (t.visual && board.current) {
               const visual = t.visual;
               const fresh = board.current.draw(visual);
               void boardTarget(visual, run).then((el) => {
                 if (cancelled(run)) return;
-                if (el) pointToBoard(el, fresh);
+                if (el) void pointToBoard(el, fresh, points, run, { image: visual.kind === "image" ? visual.data : null });
                 else pointAt(sec, t.block, t.quote);
               });
+              return;
+            }
+            // "Point at the gold band": a part of what's already on the board.
+            const onBoard = points.length && board.current?.visible() ? board.current.live() : null;
+            if (onBoard) {
+              void pointToBoard(onBoard, false, points, run);
               return;
             }
             pointAt(sec, t.block, t.quote);
@@ -1047,7 +1227,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     if (phaseRef.current !== "listening") return;
     stopListening(false);
     setPhase("paused");
-    setCaption("Never mind. Press M whenever you want to ask something.");
+    setCaption(`Never mind. Press ${voiceKeyLabel(voiceKeyRef.current)} whenever you want to ask something.`);
   };
 
   const close = () => {
@@ -1102,7 +1282,14 @@ ${visualToMarkdown(spec)}`.trimStart();
     let disposed = false;
     const openedAt = Date.now();
     trackAction("teach_start", { source, sections: sectionsRef.current.length });
-    const n = new Narrator({ onCaption: setCaption });
+    // Each sentence is also handed to the board, which moves from part to part as each is named.
+    const n = new Narrator({
+      onCaption: (text) => {
+        setCaption(text);
+        lastCaption.current = text;
+        if (text) captionHook.current?.(text);
+      },
+    });
     n.rate = rateRef.current;
     // Another narrator (another tab, say) started talking: stop and show "paused"
     // rather than leaving a silent "speaking" state behind.
@@ -1241,23 +1428,24 @@ ${visualToMarkdown(spec)}`.trimStart();
     };
   }, [hostRef]);
 
-  // Keyboard: space play/pause · ←/→ steps · M talk (M again sends) · Esc cancels the mic, otherwise closes.
+  // Keyboard: space play/pause · ←/→ steps · Esc cancels the mic, otherwise closes.
+  // The talk key is useTalkKey's (above). It is skipped here first, because the student
+  // may have chosen a plain arrow as their talk key, and one press must not do both.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (t?.closest?.(".guide-voicemenu")) return; // picking a tutor: let the menu have the keys
-      if (e.altKey || e.ctrlKey || e.metaKey) return; // browser and OS shortcuts are not ours
       const a = actions.current;
       if (!a) return;
+      if (matchesVoiceKey(e, voiceKeyRef.current)) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return; // browser and OS shortcuts are not ours
       if (e.key === " ") {
         e.preventDefault();
         if (!e.repeat) a.togglePlay();
       } else if (e.key === "ArrowRight") a.next();
       else if (e.key === "ArrowLeft") a.prev();
-      else if (e.key === "m" || e.key === "M") {
-        if (!e.repeat) a.mic(); // a held key must not flip the mic on and off
-      } else if (e.key === "Escape") {
+      else if (e.key === "Escape") {
         if (phaseRef.current === "listening") a.cancelListening();
         else a.close();
       }
@@ -1278,7 +1466,7 @@ ${visualToMarkdown(spec)}`.trimStart();
         />
       )}
       {/* A PDF can't be written into, so there's nothing to pin a drawing to. */}
-      <GuideBoard ref={board} enabled={boardEnabled} onClose={onBoardClose} onPin={pdf ? undefined : pinVisual} />
+      <GuideBoard ref={board} enabled={boardEnabled} title={progress.title} onClose={onBoardClose} onPin={pdf ? undefined : pinVisual} />
       <GuideDock
         phase={phase}
         question={question}

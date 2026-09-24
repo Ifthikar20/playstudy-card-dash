@@ -7,6 +7,7 @@ import {
   GraduationCap,
   Loader2,
   LogOut,
+  Mic,
   Presentation,
   User,
 } from "lucide-react";
@@ -14,25 +15,35 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   authService,
   SignInWithOrgError,
+  type OnboardingPayload,
   type OrgLookup,
   type SsoProvider,
   type TeacherType,
 } from "@/services/authService";
 import { cn } from "@/lib/utils";
+import { VoiceKeyPicker } from "@/components/VoiceKeyPicker";
+import { TutorLookPicker } from "@/components/TutorLookPicker";
+import { avatarFor, avatarsToString, setAvatars, type AvatarChoice } from "@/lib/guide/avatars";
+import { readVoiceKey, voiceKeyToString, writeVoiceKey, type VoiceKey } from "@/lib/voiceKey";
 
 /*
   First-login onboarding — a full-screen takeover shown until the role
   question is answered (session.next_route === "onboarding").
 
-    role ──► student ─────────────────────────────► done
-        └──► teacher ──► individual ──────────────► done
-                     └──► organization ──► work email ──► org found / new org ──► done
+    role ──► student ─────────────────────────────► tutors' look ──► talk key ──► done
+        └──► teacher ──► individual ──────────────► tutors' look ──► talk key ──► done
+                     └──► organization ──► work email ──► org found / new org ──► tutors' look ──► talk key ──► done
                                                       └──► different domain ──► hand off to that domain's SSO
+
+  Every path ends on the same two screens: how the tutors look (the avatar on each
+  voice's pointer), then the key that opens the tutor's microphone.
+  Nothing is saved until then — the answers are held in `pending` and sent in one
+  request, so a student who backs out is still asked the role question next time.
 
   Lives in the editorial (.lp) world like the auth screens.
 */
 
-type Step = "role" | "teacher" | "org";
+type Step = "role" | "teacher" | "org" | "look" | "voice";
 
 const PROVIDER_LABEL: Record<SsoProvider, string> = {
   google: "Google Workspace",
@@ -85,6 +96,12 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // last step: the answers waiting to be saved, and the talk key being chosen
+  const [pending, setPending] = useState<OnboardingPayload | null>(null);
+  const [cameFrom, setCameFrom] = useState<Step>("role");
+  const [voiceKey, setVoiceKey] = useState<VoiceKey>(() => readVoiceKey());
+  const [looks, setLooks] = useState<AvatarChoice>(() => ({ male: avatarFor("male"), female: avatarFor("female") }));
+
   // organization step
   const [workEmail, setWorkEmail] = useState("");
   const [lookup, setLookup] = useState<OrgLookup | null>(null);
@@ -112,6 +129,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
       if (e instanceof SignInWithOrgError) {
         const methods = e.org?.methods?.length ? e.org.methods : (Object.keys(providers) as SsoProvider[]).filter((p) => providers[p]);
         setHandoff({ domain: e.domain, methods });
+        setStep("org"); // the domain has to be settled before anything is saved
       } else {
         setError(e instanceof Error ? e.message : "Something went wrong");
       }
@@ -120,8 +138,16 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
     }
   };
 
+  /** Hold the answers and ask the last two questions; `submit` runs from there. */
+  const askVoiceKey = (payload: OnboardingPayload, from: Step) => {
+    setPending(payload);
+    setCameFrom(from);
+    setError("");
+    setStep("look");
+  };
+
   const chooseTeacher = (type: TeacherType) => {
-    if (type === "individual") return submit({ role: "teacher", teacher_type: "individual" });
+    if (type === "individual") return askVoiceKey({ role: "teacher", teacher_type: "individual" }, "teacher");
     setStep("org");
     setLookup(null);
     setHandoff(null);
@@ -149,12 +175,23 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
   };
 
   const confirmOrg = () =>
-    submit({
-      role: "teacher",
-      teacher_type: "organization",
-      work_email: workEmail.trim(),
-      org_name: lookup?.found ? undefined : orgName.trim() || undefined,
-    });
+    askVoiceKey(
+      {
+        role: "teacher",
+        teacher_type: "organization",
+        work_email: workEmail.trim(),
+        org_name: lookup?.found ? undefined : orgName.trim() || undefined,
+      },
+      "org",
+    );
+
+  /** Keep the key on this device too, so Teach mode has it before the next session refresh. */
+  const saveVoiceKey = () => {
+    if (!pending) return setStep("role");
+    writeVoiceKey(voiceKey);
+    setAvatars(looks);
+    return submit({ ...pending, voice_key: voiceKeyToString(voiceKey), guide_avatar: avatarsToString(looks) });
+  };
 
   const startSso = async (provider: SsoProvider, domain: string) => {
     if (provider === "saml") {
@@ -201,7 +238,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
                 icon={<GraduationCap className="size-5" />}
                 title="I'm a student"
                 body="Turn notes and slides into games, track your XP, and keep every subject in one place."
-                onClick={() => submit({ role: "student" })}
+                onClick={() => askVoiceKey({ role: "student" }, "role")}
                 disabled={busy}
               />
               <ChoiceCard
@@ -368,13 +405,74 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
             )}
           </>
         )}
+
+        {/* ---------------------------------------------------------- tutors' look */}
+        {step === "look" && (
+          <>
+            <button type="button" onClick={() => setStep(cameFrom)} className={cn(ghostLink, "mt-6 w-fit")}>
+              <ArrowLeft className="size-3.5" /> Back
+            </button>
+            <h1 className="lp-serif mt-4 text-[2.5rem] md:text-[3rem]">
+              Choose how your <em>tutors look</em>
+            </h1>
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
+              In Teach mode your tutor points at the notes as it explains them. Pick the face that rides on each
+              voice's pointer — it takes that face's colour. You can change it later in Settings.
+            </p>
+
+            <TutorLookPicker
+              value={looks}
+              onChange={(kind, id) => setLooks((l) => ({ ...l, [kind]: id }))}
+              tone="editorial"
+              className="mt-8"
+            />
+
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <button type="button" onClick={() => setStep("voice")} className={inkPill}>
+                Continue <ArrowRight className="size-4" />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* --------------------------------------------------------------- talk key */}
+        {step === "voice" && (
+          <>
+            <button type="button" onClick={() => setStep("look")} className={cn(ghostLink, "mt-6 w-fit")} disabled={busy}>
+              <ArrowLeft className="size-3.5" /> Back
+            </button>
+            <h1 className="lp-serif mt-4 text-[2.5rem] md:text-[3rem]">
+              One key to <em>talk to your tutor</em>
+            </h1>
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
+              When your tutor is teaching a page, press this key and it stops to listen — ask your question out loud and
+              the bar at the bottom glows while it hears you. You can change it later in Settings.
+            </p>
+
+            <VoiceKeyPicker value={voiceKey} onChange={setVoiceKey} tone="editorial" className="mt-8 max-w-xl" />
+
+            {error && (
+              <p className="mt-5 max-w-lg rounded-lg border border-[#c2483d]/30 bg-[#c2483d]/[0.06] px-3 py-2 text-[13px] text-[#a13a31]">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <button type="button" onClick={saveVoiceKey} disabled={busy} className={inkPill}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
+                Start learning
+              </button>
+              <span className="text-[12px] text-[var(--muted-2)]">Signed in as {user?.email ?? user?.username}</span>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
 }
 
 function StepDots({ step }: { step: Step }) {
-  const steps: Step[] = ["role", "teacher", "org"];
+  const steps: Step[] = ["role", "teacher", "org", "look", "voice"];
   const idx = steps.indexOf(step);
   return (
     <div className="flex items-center gap-1.5" aria-hidden>

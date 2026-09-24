@@ -1,11 +1,15 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { GuideBot, type BotKind } from "./GuideBot";
+import { accentVars, useAvatar } from "@/lib/guide/avatars";
+import type { BotKind } from "./GuideBot";
+import { AvatarArrow, GuideAvatar } from "./GuideAvatar";
 
 /*
-  The AI's pointer — a big pink cursor that lives inside the page (not the OS
-  cursor, which a web page can't move).
+  The AI's pointer — an arrow with the tutor's avatar riding beside it, living
+  inside the page (not the OS cursor, which a web page can't move). Arrow,
+  avatar, ripples, the speech bubble and the outline round the block all take
+  the avatar's colour, so each voice points in its own colour (lib/guide/avatars).
 
   Movement is animated frame by frame so it feels like a hand, not a tween:
   every flight follows a slightly curved path with a random bend, its own
@@ -18,6 +22,10 @@ import { GuideBot, type BotKind } from "./GuideBot";
   chosen by the caller) and the block gets a soft outline in the same hue.
   Positions are in the host element's coordinate space, so everything scrolls
   with the notes and stays glued to its target.
+
+  On the whiteboard it can point at one exact part (a colour band, side c): the
+  tip holds still on it, the avatar tucks out of the way, a tight ring goes round
+  the part, and the speech bubble moves off the board so it never covers it.
 */
 
 export interface HostRect {
@@ -34,16 +42,26 @@ export type MarkColor = "yellow" | "green" | "orange" | "blue" | "pink";
 
 export interface PointerHandle {
   /** Fly to a point (host coordinates) and perform `gesture` on arrival (default: click).
-   *  `around` (the target's rect) is needed for the "circle" gesture. */
-  moveTo(p: Pt, opts?: { gesture?: Gesture; around?: HostRect; duration?: number }): void;
+   *  `around` (the target's rect) is needed for the "circle" gesture.
+   *  `precise`: the tip is on one exact part (a colour band, side c), so the idle drift
+   *  stops and the avatar tucks further out of the way, smaller, until the next move.
+   *  `keepClear`: rects the speech bubble must not cover (the board, the part); it takes
+   *  the first spot left of, above or below them that covers none. */
+  moveTo(
+    p: Pt,
+    opts?: { gesture?: Gesture; around?: HostRect; duration?: number; precise?: boolean; keepClear?: HostRect[] },
+  ): void;
   /** After the current flight and gesture, drift along a phrase to `to` over `ms`. */
   glide(to: Pt, ms: number): void;
-  /** Highlighter marks over the quoted words. */
-  underline(rects: HostRect[], color?: MarkColor): void;
+  /** Highlighter marks over the quoted words. `color` is for all of them; a rect that
+   *  carries its own colour keeps it (the note review marks every open question in one
+   *  hue and the one being asked about in another). */
+  underline(rects: Array<HostRect & { color?: MarkColor }>, color?: MarkColor): void;
   clearUnderline(): void;
   /** Outline the block currently being explained (null clears it). `above` draws it over
-   *  the whiteboard, for something on the board itself (a picture, a formula). */
-  focus(rect: HostRect | null, color?: MarkColor, opts?: { above?: boolean }): void;
+   *  the whiteboard, for something on the board itself (a picture, a formula). `pad` and
+   *  `radius` fit it closer; `ring` makes it the tight, solid ring round one exact part. */
+  focus(rect: HostRect | null, color?: MarkColor, opts?: { above?: boolean; pad?: number; radius?: number; ring?: boolean }): void;
   /** Stop mid-flight and stay exactly where the pointer is right now. */
   freeze(): void;
 }
@@ -83,6 +101,9 @@ const RGB: Record<MarkColor, string> = {
   pink: "236, 72, 153",
 };
 
+/** "pink" is the pointer's default outline, so it means the tutor's colour. */
+const focusRgb = (color: MarkColor) => (color === "pink" ? "var(--guide-accent)" : RGB[color]);
+
 /** Whose voice is talking: the tutor's name and character, so it reads as a person teaching. */
 export interface Speaker {
   name: string;
@@ -105,8 +126,20 @@ export const GuidePointer = forwardRef<
     const pressRing = useRef<HTMLSpanElement | null>(null);
     const [shown, setShown] = useState(false);
     const [marks, setMarks] = useState<Array<HostRect & { color: MarkColor }>>([]);
-    const [focusRect, setFocusRect] = useState<(HostRect & { color: MarkColor; above?: boolean }) | null>(null);
+    const kind: BotKind = speaker?.kind ?? "neutral";
+    const avatar = useAvatar(kind);
+    const [focusRect, setFocusRect] = useState<
+      (HostRect & { color: MarkColor; above?: boolean; pad?: number; radius?: number; ring?: boolean }) | null
+    >(null);
     const [bubbleLeft, setBubbleLeft] = useState(false);
+    // Pointing at one exact part: no drift, and the avatar out of the way (see moveTo).
+    const [precise, setPrecise] = useState(false);
+    const preciseRef = useRef(false);
+    // What the speech bubble must stay off (the board, the part), from the last moveTo,
+    // and where that put it: an offset from the tip, or null for the usual spot beside it.
+    const clearRef = useRef<{ p: Pt; rects: HostRect[] } | null>(null);
+    const bubbleRef = useRef<HTMLDivElement | null>(null);
+    const [bubbleAt, setBubbleAt] = useState<{ left: number; top: number } | null>(null);
 
     // ---- click gestures ---------------------------------------------------------
     const ripple = (size = 18, delay = 0, ms = 800) => {
@@ -163,8 +196,9 @@ export const GuidePointer = forwardRef<
       if (!el) return;
       let dx = 0;
       let dy = 0;
-      if (!queue.current.length && speakingRef.current) {
-        // Idle while talking: a barely-there drift, like a hand at rest.
+      if (!queue.current.length && speakingRef.current && !preciseRef.current) {
+        // Idle while talking: a barely-there drift, like a hand at rest. Not while it's
+        // on one exact part: a band a few pixels wide can't have the tip wander off it.
         dx = Math.sin(now / 1300) * 1.4;
         dy = Math.cos(now / 1700) * 1.0;
       }
@@ -257,6 +291,57 @@ export const GuidePointer = forwardRef<
       };
     };
 
+    /**
+     * Put the speech bubble where it covers neither the board nor the part being
+     * pointed at: left of them, above, below, then right, taking the first spot that's
+     * clear and on screen. Failing that, anywhere that at least leaves the part itself
+     * visible; failing that, the usual spot beside the pointer. Worked out for where the
+     * pointer is going, from the bubble's real size, so it's re-run when the words change.
+     */
+    const placeBubble = () => {
+      const c = clearRef.current;
+      if (!c || !c.rects.length) {
+        setBubbleAt(null);
+        return;
+      }
+      const el = bubbleRef.current;
+      const w = el?.offsetWidth || 300;
+      const h = el?.offsetHeight || 72;
+      const hr = host.getBoundingClientRect();
+      // the visible part of the page, in host coordinates
+      const view = { x: -hr.left + 8, y: -hr.top + 8, w: window.innerWidth - 16, h: window.innerHeight - 16 };
+      const gap = 14;
+      const overlaps = (a: HostRect, b: HostRect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+      const onScreen = (b: HostRect) => b.x >= view.x && b.y >= view.y && b.x + b.w <= view.x + view.w && b.y + b.h <= view.y + view.h;
+      const clampY = (y: number) => Math.max(view.y, Math.min(y, view.y + view.h - h));
+      const clampX = (x: number) => Math.max(view.x, Math.min(x, view.x + view.w - w));
+      const around = (r: HostRect): HostRect[] => [
+        { x: r.x - gap - w, y: clampY(c.p.y - 24), w, h },
+        { x: clampX(c.p.x - w / 2), y: r.y - gap - h, w, h },
+        { x: clampX(c.p.x - w / 2), y: r.y + r.h + gap, w, h },
+        { x: r.x + r.w + gap, y: clampY(c.p.y - 24), w, h },
+      ];
+      const all = c.rects.reduce((u, r) => {
+        const x = Math.min(u.x, r.x);
+        const y = Math.min(u.y, r.y);
+        return { x, y, w: Math.max(u.x + u.w, r.x + r.w) - x, h: Math.max(u.y + u.h, r.y + r.h) - y };
+      });
+      const part = c.rects[c.rects.length - 1];
+      const spot =
+        around(all).find((b) => onScreen(b) && !c.rects.some((r) => overlaps(b, r))) ??
+        around(part).find((b) => onScreen(b) && !overlaps(b, part)) ??
+        null;
+      setBubbleAt((prev) => {
+        const next = spot ? { left: Math.round(spot.x - c.p.x), top: Math.round(spot.y - c.p.y) } : null;
+        return prev && next && prev.left === next.left && prev.top === next.top ? prev : next;
+      });
+    };
+    // A new sentence is a new size of bubble.
+    useLayoutEffect(() => {
+      if (clearRef.current) placeBubble();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [caption]);
+
     useImperativeHandle(ref, () => ({
       moveTo(p, opts = {}) {
         const from = { ...pos.current };
@@ -289,6 +374,10 @@ export const GuidePointer = forwardRef<
         segStart.current = 0;
         setShown(true);
         setBubbleLeft(p.x > host.clientWidth - 400);
+        preciseRef.current = !!opts.precise;
+        setPrecise(!!opts.precise);
+        clearRef.current = opts.keepClear?.length ? { p, rects: opts.keepClear } : null;
+        placeBubble();
         ensureLoop();
       },
       glide(to, ms) {
@@ -296,13 +385,23 @@ export const GuidePointer = forwardRef<
         ensureLoop();
       },
       underline(rects, color = "yellow") {
-        setMarks(rects.map((r) => ({ ...r, color })));
+        const next = rects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h, color: r.color ?? color }));
+        // Callers that re-place on every resize send the same marks again and again;
+        // keeping the old array means no re-render and no replayed highlighter sweep.
+        setMarks((prev) =>
+          prev.length === next.length &&
+          prev.every((m, i) => m.x === next[i].x && m.y === next[i].y && m.w === next[i].w && m.h === next[i].h && m.color === next[i].color)
+            ? prev
+            : next,
+        );
       },
       clearUnderline() {
         setMarks([]);
       },
       focus(rect, color = "pink", opts) {
-        setFocusRect(rect ? { ...rect, color, above: !!opts?.above } : null);
+        setFocusRect(
+          rect ? { ...rect, color, above: !!opts?.above, pad: opts?.pad, radius: opts?.radius, ring: !!opts?.ring } : null,
+        );
       },
       freeze() {
         queue.current = [];
@@ -312,29 +411,40 @@ export const GuidePointer = forwardRef<
       },
     }));
 
+    const padX = focusRect?.pad ?? 8;
+    const padY = focusRect?.pad ?? 6;
     const outline = focusRect && (
       <span
-        className="guide-focus"
+        className={cn("guide-focus", focusRect.ring && "guide-focus-part")}
         style={{
-          left: focusRect.x - 8,
-          top: focusRect.y - 6,
-          width: focusRect.w + 16,
-          height: focusRect.h + 12,
-          borderColor: `rgba(${RGB[focusRect.color]}, 0.5)`,
-          background: focusRect.above ? "transparent" : `rgba(${RGB[focusRect.color]}, 0.05)`,
-          boxShadow: `0 0 0 5px rgba(${RGB[focusRect.color]}, 0.07)`,
+          left: focusRect.x - padX,
+          top: focusRect.y - padY,
+          width: focusRect.w + padX * 2,
+          height: focusRect.h + padY * 2,
+          borderRadius: focusRect.radius,
+          // The default outline is the tutor's own colour; a caller's highlighter hue wins.
+          // A ring round one part is solid, with a thin white halo so it shows on any photo.
+          borderColor: focusRect.ring ? `rgb(${focusRgb(focusRect.color)})` : `rgba(${focusRgb(focusRect.color)}, 0.5)`,
+          background: focusRect.above ? "transparent" : `rgba(${focusRgb(focusRect.color)}, 0.05)`,
+          boxShadow: focusRect.ring
+            ? `0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 5px rgba(${focusRgb(focusRect.color)}, 0.22)`
+            : `0 0 0 5px rgba(${focusRgb(focusRect.color)}, 0.07)`,
         }}
       />
     );
+    // Off the board and the part (placeBubble), else beside the pointer as usual.
+    const bubbleStyle = bubbleAt ? { left: bubbleAt.left, top: bubbleAt.top, right: "auto" } : undefined;
     return createPortal(
-      <div aria-hidden className="pointer-events-none absolute inset-0">
+      // data-guide-layer marks this as an overlay, so code watching the page for real
+      // changes (the note review's MutationObserver) can ignore the pointer's own ripples.
+      <div aria-hidden data-guide-layer="" className="pointer-events-none absolute inset-0" style={accentVars(avatar.palette)}>
         {/* Highlights and outlines belong to the page, so they stay under the
             whiteboard (z 60) where it overlaps the notes. */}
         <div className="absolute inset-0 z-40">
           {!focusRect?.above && outline}
           {marks.map((m, i) => (
             <span
-              key={`${m.x}-${m.y}-${i}`}
+              key={`${m.x}-${m.y}-${m.color}-${i}`}
               className={cn("guide-mark", `guide-mark-${m.color}`)}
               style={{ left: m.x - 3, top: m.y - 1, width: m.w + 7, height: m.h + 3, animationDelay: `${i * 130}ms` }}
             />
@@ -347,26 +457,31 @@ export const GuidePointer = forwardRef<
           {focusRect?.above && outline}
           <div
             ref={cursorRef}
-            className={cn("guide-cursor absolute left-0 top-0 will-change-transform", shown ? "opacity-100" : "opacity-0")}
+            className={cn(
+              "guide-cursor absolute left-0 top-0 will-change-transform",
+              shown ? "opacity-100" : "opacity-0",
+              precise && "guide-cursor-precise",
+            )}
             style={{ transform: "translate(0px, 0px)" }}
           >
-            <svg width="30" height="36" viewBox="0 0 30 36" className="guide-cursor-svg">
-              <path
-                d="M3 2 L3 27 L9.5 21.2 L14.2 32 L18.6 30.1 L14 19.6 L22.5 19.6 Z"
-                fill="#ec4899"
-                stroke="#ffffff"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <AvatarArrow color={avatar.palette.base} />
+            <GuideAvatar
+              className="guide-cursor-avatar"
+              avatar={avatar.id}
+              kind={kind}
+              size={34}
+              mood={speaking ? "talking" : "idle"}
+            />
             {caption ? (
-              <div key={caption} className={cn("guide-bubble", bubbleLeft && "guide-bubble-left")}>
+              <div
+                key={caption}
+                ref={bubbleRef}
+                className={cn("guide-bubble", bubbleAt ? "guide-bubble-free" : bubbleLeft && "guide-bubble-left")}
+                style={bubbleStyle}
+              >
                 <div className="guide-bubble-head">
                   {speaker ? (
-                    <>
-                      <GuideBot kind={speaker.kind} variant="head" size={22} mood={speaking ? "talking" : "idle"} />
-                      {speaker.name}
-                    </>
+                    speaker.name
                   ) : (
                     // The voice list hasn't arrived yet, so there's no name to show.
                     "Tutor"
@@ -382,12 +497,9 @@ export const GuidePointer = forwardRef<
                 {caption}
               </div>
             ) : (
-              <div className={cn("guide-chip", speaker && "guide-chip-speaker")}>
+              <div ref={bubbleRef} className={cn("guide-chip", speaker && "guide-chip-speaker")} style={bubbleStyle}>
                 {speaker ? (
-                  <>
-                    <GuideBot kind={speaker.kind} variant="head" size={18} mood={speaking ? "talking" : "idle"} />
-                    {speaker.name}
-                  </>
+                  speaker.name
                 ) : (
                   "Tutor"
                 )}

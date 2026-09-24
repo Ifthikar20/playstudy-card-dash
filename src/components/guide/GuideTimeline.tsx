@@ -13,6 +13,9 @@ const PAD = 40;
 const AXIS_Y = 132;
 const COLORS = ["#ec4899", "#3b82f6", "#14b8a6", "#f59e0b", "#8b5cf6", "#84cc16"];
 
+/** Where the tutor's pointer touches a part (data-part-at), in this SVG's own units. */
+const partAt = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+
 /** 1914 → "1914", -3000 → "3000 BC". Fractional years (a month) lose the fraction. */
 function yearLabel(y: number): string {
   const whole = Math.trunc(y);
@@ -69,8 +72,15 @@ export function GuideTimeline({ timeline }: { timeline: GuideTimelineData }) {
           const dir = e.above ? -1 : 1;
           const labelY = AXIS_Y + dir * 52;
           const lines = wrap(e.label);
+          // events.i counts the events as they arrive (the server sorts them by year);
+          // the pointer touches the event's dot on the line, which never moves
           return (
-            <g key={e.i}>
+            <g
+              key={e.i}
+              data-board-part={`events.${e.i}`}
+              data-board-label={`${e.date || yearLabel(e.year)} ${e.label}`}
+              data-part-at={partAt(e.dotX, AXIS_Y)}
+            >
               <path
                 d={`M${e.dotX} ${AXIS_Y + dir * 6} L${e.dotX} ${AXIS_Y + dir * 26} L${e.labelX} ${AXIS_Y + dir * 38}`}
                 className="guide-timeline-leader"

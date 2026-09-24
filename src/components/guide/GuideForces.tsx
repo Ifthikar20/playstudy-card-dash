@@ -68,13 +68,16 @@ export function GuideForces({ forces }: { forces: GuideForcesData }) {
       y = seg.y2;
       return seg;
     });
+    const sum = resultant ? `resultant ${resultant.magnitude}${unit ? " " + unit : ""} at ${resultant.angle}°` : "";
+    // The tutor's pointer touches an arrow halfway along its shaft (data-part-at): the
+    // head is where the next arrow starts, and the label sits off to one side.
     return (
       <div className="guide-forces">
         {title && <div className="guide-chart-title">{title}</div>}
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="guide-chart-svg" role="img">
           {defs}
           {legs.map((s, i) => (
-            <g key={i}>
+            <g key={i} data-board-part={`vectors.${i}`} data-board-label={label(s.v)} data-part-at={`${(s.x1 + s.x2) / 2} ${(s.y1 + s.y2) / 2}`}>
               <Arrow {...s} />
               <text x={(s.x1 + s.x2) / 2 + 8} y={(s.y1 + s.y2) / 2 - 8} className="guide-chart-label" style={{ fill: s.color }}>
                 {label(s.v)}
@@ -82,12 +85,12 @@ export function GuideForces({ forces }: { forces: GuideForcesData }) {
             </g>
           ))}
           {resultant && (
-            <>
+            <g data-board-part="resultant" data-board-label={sum} data-part-at={`${(96 + x) / 2} ${(214 + y) / 2}`}>
               <Arrow x1={96} y1={214} x2={x} y2={y} color="#64748b" dashed />
               <text x={(96 + x) / 2 - 6} y={(214 + y) / 2 + 22} className="guide-chart-value" textAnchor="middle" style={{ fill: "#64748b" }}>
-                {`resultant ${resultant.magnitude}${unit ? " " + unit : ""} at ${resultant.angle}°`}
+                {sum}
               </text>
-            </>
+            </g>
           )}
         </svg>
       </div>
@@ -104,12 +107,14 @@ export function GuideForces({ forces }: { forces: GuideForcesData }) {
       {title && <div className="guide-chart-title">{title}</div>}
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="guide-chart-svg" role="img">
         {defs}
-        <rect x={cx - box / 2} y={cy - box / 2} width={box} height={box} rx={8} className="guide-forces-body" />
-        {body && (
-          <text x={cx} y={cy + 4} className="guide-chart-label" textAnchor="middle">
-            {body.length > 9 ? body.slice(0, 8) + "…" : body}
-          </text>
-        )}
+        <g data-board-part="body" data-board-label={body || "body"} data-part-at={`${cx} ${cy}`}>
+          <rect x={cx - box / 2} y={cy - box / 2} width={box} height={box} rx={8} className="guide-forces-body" />
+          {body && (
+            <text x={cx} y={cy + 4} className="guide-chart-label" textAnchor="middle">
+              {body.length > 9 ? body.slice(0, 8) + "…" : body}
+            </text>
+          )}
+        </g>
         {vectors.map((v, i) => {
           const { dx, dy } = dir(v.angle);
           const len = Math.max(44, (v.magnitude ?? 1) * scale);
@@ -123,7 +128,7 @@ export function GuideForces({ forces }: { forces: GuideForcesData }) {
           // centred there it would collide with the title or the body's own label
           const upright = Math.abs(dx) < 0.3;
           return (
-            <g key={i}>
+            <g key={i} data-board-part={`vectors.${i}`} data-board-label={label(v)} data-part-at={`${(x1 + x2) / 2} ${(y1 + y2) / 2}`}>
               <Arrow x1={x1} y1={y1} x2={x2} y2={y2} color={color} />
               <text
                 x={upright ? x2 + 10 : x2 + dx * 8}

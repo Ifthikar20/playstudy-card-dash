@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   addDays,
   addMonths,
@@ -37,6 +38,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { useAppStore } from "@/store/appStore";
 import { KIND_LABELS, useCalendarStore, type CalendarEvent, type EventKind } from "@/store/calendarStore";
 import { useToast } from "@/hooks/use-toast";
+import { planCalendarEvents } from "@/lib/examPlan";
+import { isNote } from "@/lib/notes/isNote";
 import { cn } from "@/lib/utils";
 
 /*
@@ -125,7 +128,10 @@ function rangeTitle(view: View, date: Date) {
 
 export default function CalendarPage() {
   const { toast } = useToast();
-  const { userProfile, studySessions } = useAppStore();
+  const { userProfile, studySessions: allSessions, examPlans } = useAppStore();
+  // An exam or class links to study material, not to one of the student's own notes.
+  const studySessions = useMemo(() => allSessions.filter((s) => !isNote(s)), [allSessions]);
+  const navigate = useNavigate();
   const { events, load, add, update, remove, importIcs } = useCalendarStore();
 
   const [view, setView] = useState<View>("week");
@@ -137,12 +143,17 @@ export default function CalendarPage() {
     if (userProfile?.id) load(userProfile.id);
   }, [userProfile?.id, load]);
 
+  // Exam study plans put their own days on the calendar. They are generated from
+  // the plan rather than kept in the calendar store, so they follow it whenever it
+  // changes — and they can't be edited or deleted here (see openEdit).
+  const planEvents = useMemo(() => planCalendarEvents(Object.values(examPlans)), [examPlans]);
+
   const parsed = useMemo(
     () =>
-      events
+      [...events, ...planEvents]
         .map((e) => ({ ...e, startDate: parseISO(e.start), endDate: e.end ? parseISO(e.end) : undefined }))
         .sort((a, b) => a.startDate.getTime() - b.startDate.getTime()),
-    [events],
+    [events, planEvents],
   );
   const eventsOn = (day: Date) => parsed.filter((e) => isSameDay(e.startDate, day));
   const upcoming = parsed.filter((e) => e.startDate >= startOfDay(new Date())).slice(0, 5);
@@ -151,7 +162,14 @@ export default function CalendarPage() {
     setFocus((d) => (view === "day" ? addDays(d, dir) : view === "week" ? addWeeks(d, dir) : addMonths(d, dir)));
 
   const openNew = (date = focus, kind: EventKind = "exam") => setDraft(emptyDraft(date, kind));
-  const openEdit = (e: CalendarEvent) => setDraft(draftFromEvent(e));
+  const openEdit = (e: CalendarEvent) => {
+    // A plan day belongs to its study session — that's where it can be changed.
+    if (e.source === "plan") {
+      if (e.sessionId) navigate(`/dashboard/${e.sessionId}/full-study`);
+      return;
+    }
+    setDraft(draftFromEvent(e));
+  };
 
   const saveDraft = () => {
     if (!draft || !draft.title.trim()) return;
@@ -325,7 +343,8 @@ export default function CalendarPage() {
             />
           )}
 
-          {events.length === 0 && (
+          {/* Nothing of their own AND no plan days: only then is the calendar really empty. */}
+          {parsed.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-24">
               <EmptyState
                 className="pointer-events-auto w-full max-w-sm bg-card/95 backdrop-blur"

@@ -41,7 +41,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, Lock, Mic } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { HEADING_COLORS, atomSignature, reanchor } from "@/lib/notes/units";
 import { atomDelta, buildSheet, changedRange, guardDoc, type Sheet, type SheetAtom, type SheetRun } from "@/lib/notes/sheet";
 import { type BlockItem, searchBlocks } from "@/lib/notes/blocks";
@@ -189,16 +191,35 @@ export interface OneSheetProps {
   onCommit: (next: string) => Promise<string | void>;
   /** Leave the writing surface and go back to rendered prose. */
   onClose: () => void;
+  /** The document may be saved empty — a student's own note, which they are
+   *  allowed to clear. A study section never is (see guardDoc). */
+  allowEmpty?: boolean;
+  /** Shown, faintly, while the sheet has nothing in it. */
+  placeholder?: string;
+  /** Words still being heard by dictation, not yet typed in. Shown on the
+   *  status line so the student can see they are being heard. */
+  interim?: string;
 }
 
 export interface OneSheetHandle {
   /** Another writer landed a new copy of the notes under us. */
   external: (md: string) => void;
-  flush: () => Promise<void>;
+  /** Save what is on screen now. True once the server has it (or there was
+   *  nothing to save); false when it was refused or the request failed, in which
+   *  case `problem()` says why and the words stay on screen, unsaved. */
+  flush: () => Promise<boolean>;
+  /** Type `text` at the caret as though the student had: it lands on the native
+   *  undo stack, the guarded autosave picks it up, and a pinned block is never
+   *  typed into. False when it could not go in. */
+  insertText: (text: string) => boolean;
+  /** Put focus back in the sheet, optionally moving the caret (clamped). */
+  focus: (caret?: number) => void;
+  /** Why the words on screen are not saved, or null when they are. */
+  problem: () => string | null;
 }
 
 export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSheet(
-  { initial, caret, guideKey, onCommit, onClose },
+  { initial, caret, guideKey, onCommit, onClose, allowEmpty = false, placeholder, interim },
   handleRef,
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -229,9 +250,23 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
   /* Set only while the Remove command is applying its own edit, so the
      `beforeinput` refusal does not block the one deletion it has just proved. */
   const applying = useRef(false);
+  /* The save on its way to the server, if any. A flush that arrives meanwhile
+     waits for it and then saves whatever it did not carry — returning early
+     instead left words typed during a slow save unsaved until the next edit. */
+  const inflight = useRef<Promise<boolean> | null>(null);
+  /* Why the words on screen are not saved, for whoever awaited `flush` and got
+     false. Kept in a ref as well as state because it is read after unmount. */
+  const problemRef = useRef<string | null>(null);
+  /* False once unmounted: the last flush still runs then, but nothing may set
+     state, and a failure has to be reported some other way. */
+  const alive = useRef(true);
+  /* The student chose "Show me the new version": their unsaved words are
+     being given up on purpose, so the unmount flush must not save them over it. */
+  const discarded = useRef(false);
 
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
+  const [empty, setEmpty] = useState(!initial);
   const [locked, setLocked] = useState<SheetAtom | null>(null);
   const [conflict, setConflict] = useState(false);
   const [menu, setMenu] = useState<{ from: number; query: string; anchor: Anchor } | null>(null);
@@ -257,61 +292,85 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
     liveValue.current = el.value;
     sheetRef.current = buildSheet(el.value);
     paint(ink, sheetRef.current.runs);
+    setEmpty(!el.value);
+  }, []);
+
+  /** Record why the words on screen are not saved. Always false, for `flush`. */
+  const refuse = useCallback((why: string) => {
+    problemRef.current = why;
+    if (alive.current) setBlocked(why);
+    return false;
   }, []);
 
   /* ---------------------------------------------------------------- *
    * Refusal 3 — the only one trusted.
    * ---------------------------------------------------------------- */
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<boolean> => {
     window.clearTimeout(idleTimer.current);
     window.clearTimeout(maxTimer.current);
     idleTimer.current = 0;
     maxTimer.current = 0;
+    const pending = inflight.current;
+    if (pending) {
+      await pending;
+      return flushRef.current();
+    }
     const el = taRef.current;
-    if (busyRef.current) return;
     const next = el ? el.value : liveValue.current;
     const base = baseRef.current;
-    if (next === base) return;
+    if (next === base) {
+      problemRef.current = null;
+      return true;
+    }
 
     const { gone, made } = atomDelta(base, next);
     const rm = [...consent.current.remove];
     const ad = [...consent.current.add];
     const authorised = gone.every((sig) => take(rm, sig)) && made.every((sig) => take(ad, sig));
     const g = authorised
-      ? guardDoc(base, next, { removeAtoms: gone, addAtoms: made })
+      ? guardDoc(base, next, { removeAtoms: gone, addAtoms: made }, { allowEmpty })
       : { ok: false, why: "that would change a pinned diagram, formula, table or code block" };
-    if (!g.ok) {
-      // The student's words are NEVER reverted. They stay on screen, unsaved,
-      // with a reason — they may simply be mid-way through closing a <mark>.
-      setBlocked(g.why ?? "That change wasn't saved.");
-      return;
+    // The student's words are NEVER reverted. They stay on screen, unsaved,
+    // with a reason — they may simply be mid-way through closing a <mark>.
+    if (!g.ok) return refuse(g.why ?? "That change wasn't saved.");
+    problemRef.current = null;
+    if (alive.current) {
+      setBlocked(null);
+      setBusy(true);
     }
-    setBlocked(null);
     busyRef.current = true;
     sending.current = next;
-    setBusy(true);
-    try {
-      const server = await onCommit(next);
-      const adopted = typeof server === "string" ? server : next;
-      baseRef.current = adopted;
-      // The base now carries the change, so the permissions are spent.
-      for (const sig of gone) take(consent.current.remove, sig);
-      for (const sig of made) take(consent.current.add, sig);
-      // Adopt the server's normalisation only if nothing was typed meanwhile.
-      if (adopted !== next && el && el.value === next) {
-        el.value = adopted;
-        const at = Math.min(lastCaret.current, adopted.length);
-        el.setSelectionRange(at, at);
-        repaint();
+    const run = (async () => {
+      try {
+        const server = await onCommit(next);
+        const adopted = typeof server === "string" ? server : next;
+        baseRef.current = adopted;
+        // The base now carries the change, so the permissions are spent.
+        for (const sig of gone) take(consent.current.remove, sig);
+        for (const sig of made) take(consent.current.add, sig);
+        // Adopt the server's normalisation only if nothing was typed meanwhile.
+        if (adopted !== next && el && el.value === next) {
+          el.value = adopted;
+          const at = Math.min(lastCaret.current, adopted.length);
+          el.setSelectionRange(at, at);
+          repaint();
+        }
+        return true;
+      } catch (e) {
+        return refuse(e instanceof Error ? e.message : "Couldn't save — we'll keep trying.");
+      } finally {
+        busyRef.current = false;
+        sending.current = null;
+        if (alive.current) setBusy(false);
       }
-    } catch (e) {
-      setBlocked(e instanceof Error ? e.message : "Couldn't save — we'll keep trying.");
+    })();
+    inflight.current = run;
+    try {
+      return await run;
     } finally {
-      busyRef.current = false;
-      sending.current = null;
-      setBusy(false);
+      if (inflight.current === run) inflight.current = null;
     }
-  }, [onCommit, repaint]);
+  }, [allowEmpty, onCommit, refuse, repaint]);
 
   const flushRef = useRef(flush);
   flushRef.current = flush;
@@ -465,6 +524,7 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
 
   /* Leaving the page, the route or the tab must not lose the last keystrokes. */
   useEffect(() => {
+    alive.current = true; // StrictMode runs this cleanup once and mounts again
     const onHide = () => {
       if (document.visibilityState === "hidden") void flushRef.current();
     };
@@ -474,7 +534,26 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
     return () => {
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("beforeunload", onUnload);
-      void flushRef.current();
+      alive.current = false;
+      if (discarded.current) return;
+      // The surface is going, so its "Not saved — …" line goes with it. A
+      // refusal or a failed request here used to vanish without a word; now it
+      // says so, wherever the student has gone, and offers their words back.
+      void flushRef.current().then((ok) => {
+        if (ok) return;
+        const words = liveValue.current;
+        const why = problemRef.current;
+        toast({
+          variant: "destructive",
+          title: "Your last changes weren't saved",
+          description: why ? `${why.charAt(0).toUpperCase()}${why.slice(1)}.`.replace(/\.\.$/, ".") : "The notes couldn't be saved.",
+          action: (
+            <ToastAction altText="Copy the unsaved notes" onClick={() => void navigator.clipboard?.writeText(words)}>
+              Copy them
+            </ToastAction>
+          ),
+        });
+      });
     };
   }, []);
 
@@ -515,6 +594,39 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
     const sel = v.slice(s, e);
     insert(open + sel + close, s, e);
     el.setSelectionRange(s + open.length, s + open.length + sel.length);
+  };
+
+  /** Back into the sheet, the caret where it was unless told otherwise. A
+   *  blurred textarea keeps its selection, so plain focus() is enough for that. */
+  const focusAt = (at?: number) => {
+    const el = taRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    if (at == null) return;
+    const p = Math.max(0, Math.min(at, el.value.length));
+    el.setSelectionRange(p, p);
+    lastCaret.current = p;
+  };
+
+  /* Text from outside the keyboard — dictation. It goes through `insert`, so
+     it is the same edit as typing: one native undo step per call, the guarded
+     autosave, and the frozen blocks. execCommand does not raise `beforeinput`,
+     so refusal 1 is applied here by hand. */
+  const insertText = (text: string): boolean => {
+    const el = taRef.current;
+    if (!el || !text) return false;
+    // execCommand only types into the focused element.
+    if (document.activeElement !== el) focusAt();
+    const s = el.selectionStart ?? 0;
+    const e = el.selectionEnd ?? 0;
+    const hit = sheetRef.current.frozen.find(([fs, fe]) => s < fe && e > fs);
+    if (hit) {
+      show(atomIn(sheetRef.current, hit));
+      return false;
+    }
+    insert(text);
+    setBlocked(null);
+    return true;
   };
 
   /* ---------------------------------------------------------------- *
@@ -662,15 +774,26 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation(); // don't let Teach mode's window handler close the lesson
-      void flushRef.current().then(onClose);
+      // Only once the words are saved. If they were refused (half a <mark>) or
+      // the request failed, closing would throw them away; the sheet stays, and
+      // the status line below already says why.
+      void flushRef.current().then((ok) => ok && onClose());
       return;
     }
     const mod = e.metaKey || e.ctrlKey;
     if (mod && !e.altKey) {
       const k = e.key.toLowerCase();
-      if (k === "b") return e.preventDefault(), wrap("**", "**");
-      if (k === "i") return e.preventDefault(), wrap("*", "*");
-      if (k === "h" && e.shiftKey) return e.preventDefault(), wrap("<mark>", "</mark>");
+      // A shortcut handled here stops here. The sidebar folds on ⌘/Ctrl+B from a
+      // window listener, and bolding a word used to fold it too, reflowing the
+      // whole page under the caret.
+      const own = (open: string, close: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        wrap(open, close);
+      };
+      if (k === "b") return own("**", "**");
+      if (k === "i") return own("*", "*");
+      if (k === "h" && e.shiftKey) return own("<mark>", "</mark>");
       return; // ⌘K stays the app's command palette
     }
     const v = el.value;
@@ -695,6 +818,26 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
       if (quote && quote[2].trim()) {
         e.preventDefault();
         return insert(`\n${quote[1]}`);
+      }
+      /* A line of prose: Enter starts a new paragraph, as in Notion. One newline
+         is only a soft break in Markdown, so the line typed here would join the
+         one above the moment the notes are read. Shift+Enter keeps that soft
+         break; inside a code block, a formula or a table Enter stays a newline. */
+      const above = v.slice(0, lineStart).split("\n");
+      const inFence = above.filter((l) => /^\s*(```|~~~)/.test(l)).length % 2 === 1;
+      const inMath = above.filter((l) => /^\s*\$\$\s*$/.test(l)).length % 2 === 1;
+      const lineEnd = v.indexOf("\n", at);
+      const whole = v.slice(lineStart, lineEnd < 0 ? v.length : lineEnd);
+      if (
+        line.trim() &&
+        !inFence &&
+        !inMath &&
+        !/^\s*\|/.test(whole) &&
+        !/^\s*(```|~~~|\$\$)/.test(whole) &&
+        !hits(sheetRef.current.frozen, at, at)
+      ) {
+        e.preventDefault();
+        return insert("\n\n");
       }
       return; // native newline, native undo
     }
@@ -814,24 +957,50 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
     [repaint],
   );
 
-  useImperativeHandle(handleRef, () => ({ external, flush }), [external, flush]);
+  /* No dependency list: `insertText` and `focusAt` close over this render's
+     helpers, and the handle is only an object — rebuilding it costs nothing. */
+  useImperativeHandle(handleRef, () => ({
+    external,
+    flush,
+    insertText,
+    focus: focusAt,
+    problem: () => problemRef.current,
+  }));
 
   return (
     <>
       {conflict && (
         <div className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-an-chrome="">
           <span>These notes changed somewhere else while you were writing.</span>
-          <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={onClose}>
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={() => {
+              // Their unsaved words are given up on purpose; the unmount flush
+              // would otherwise save them straight over the newer copy.
+              discarded.current = true;
+              onClose();
+            }}
+          >
             Show me the new version
           </button>
         </div>
       )}
       <div className="an-sheet relative mx-auto max-w-[78ch]" data-guide-notes={guideKey}>
         <div ref={inkRef} data-an-ink="" aria-hidden="true" />
+        {/* Under the textarea, which is transparent, so it shows through and the
+            caret sits on its first letter — the way a native placeholder looks.
+            Not the native one: this textarea's text colour is transparent. */}
+        {placeholder && empty && (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 select-none text-muted-foreground/60">
+            {placeholder}
+          </div>
+        )}
         <textarea
           ref={taRef}
           data-an-input=""
           aria-label="Your notes for this section. Type anywhere; Escape goes back to reading."
+          aria-placeholder={placeholder}
           defaultValue={initial}
           spellCheck
           autoCapitalize="sentences"
@@ -856,6 +1025,14 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
         />
       )}
       <div className="mx-auto mt-2 flex max-w-[78ch] flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground" data-an-chrome="">
+        {/* Live dictation first: it is what the student is watching for. It sits
+            beside the rest rather than replacing it, so a refusal is never hidden. */}
+        {interim && (
+          <span className="flex min-w-0 items-center gap-1.5 text-foreground/80">
+            <Mic className="size-3 shrink-0 text-chart-1" />
+            <span className="italic">{interim}</span>
+          </span>
+        )}
         {busy ? (
           <span className="flex items-center gap-1.5">
             <Loader2 className="size-3 animate-spin" /> Saving…
@@ -895,7 +1072,7 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
               Keep it
             </button>
           </span>
-        ) : (
+        ) : interim ? null : (
           <span>Writing · type / to add a block · saves itself · Esc to go back to reading</span>
         )}
       </div>

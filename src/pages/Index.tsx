@@ -41,6 +41,8 @@ import { XpCard } from "@/components/XpCard";
 import { StreakCard } from "@/components/StreakCard";
 import { SourceLogo } from "@/components/SourceLogo";
 import { StickyWall } from "@/components/StickyNotes";
+import { ExamPlanCard } from "@/components/exam/ExamPlanCard";
+import { NotesWall } from "@/components/notes/NotesWall";
 import { useAppStore, type Folder, type StudySession } from "@/store/appStore";
 import { moveSessionToFolder } from "@/services/folder-api";
 import { fetchAppData, deleteStudySession } from "@/services/api";
@@ -48,6 +50,7 @@ import { connectSource, disconnectSource, listSources, type NoteSource } from "@
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { folderLabelIcon, parseCover } from "@/lib/folderCovers";
+import { isNote } from "@/lib/notes/isNote";
 
 /*
   Dashboard — after the Flow reference: one greeting, a single ink banner,
@@ -80,7 +83,11 @@ function completionOf(s: StudySession): number {
 export default function Index() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isInitialized, studySessions, folders, stats, userProfile, xp, setCurrentSession, initializeFromAPI } = useAppStore();
+  const { isInitialized, studySessions: allSessions, folders, stats, userProfile, xp, setCurrentSession, initializeFromAPI } =
+    useAppStore();
+  // The student's own notes are sessions under the hood, but they aren't study material:
+  // they live in the sidebar's Notes group and the notes wall below, never in this list.
+  const studySessions = useMemo(() => allSessions.filter((s) => !isNote(s)), [allSessions]);
 
   const [showCreateSession, setShowCreateSession] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -271,6 +278,9 @@ export default function Index() {
             </section>
           )}
 
+          {/* An exam coming up: what today's plan asks for, per session. */}
+          <ExamPlanCard />
+
           {/* Sessions */}
           <section>
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -457,6 +467,9 @@ export default function Index() {
 
           {/* Everything the student decided was worth keeping */}
           <StickyWall />
+
+          {/* A page of their own: written or talked into, then checked. */}
+          <NotesWall />
 
           {/* Sources */}
           <section>

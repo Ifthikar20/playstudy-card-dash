@@ -32,9 +32,11 @@ import ProfilePage from "./pages/ProfilePage";
 import FamilyPage from "./pages/FamilyPage";
 import ChildDetailPage from "./pages/ChildDetailPage";
 import FullStudyPage from "./pages/FullStudyPage";
+import NewNotePage from "./pages/NewNotePage";
 import NotFound from "./pages/NotFound";
 import DevLoginPage from "./pages/DevLoginPage";
 import DevBoardPage from "./pages/DevBoardPage";
+import DevShellPage from "./pages/DevShellPage";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +80,8 @@ const AppContent = () => {
         {import.meta.env.DEV && <Route path="/dev-login" element={<DevLoginPage />} />}
         {/* Dev-only: the whiteboard's list looks in light and dark (tree-shaken from prod builds) */}
         {import.meta.env.DEV && <Route path="/dev-board" element={<DevBoardPage />} />}
+        {/* Dev-only: the app shell around filler content, for checking the sidebar (tree-shaken from prod builds) */}
+        {import.meta.env.DEV && <Route path="/dev-shell" element={<DevShellPage />} />}
 
         {/* Protected routes - require authentication */}
         <Route
@@ -90,6 +94,11 @@ const AppContent = () => {
         >
           <Route index element={<Index />} />
           <Route path="folders" element={<StudyFolders />} />
+          {/* A note of the student's own. It is a one-section study session, so it
+              opens on the very same screen as Full Study (FullStudyPage), in its
+              note mode. "new" makes one and replaces itself with the real URL. */}
+          <Route path="note/new" element={<NewNotePage />} />
+          <Route path="note/:sessionId" element={<FullStudyPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="folder/:folderId" element={<FolderDetailPage />} />
           <Route path="profile" element={<ProfilePage />} />

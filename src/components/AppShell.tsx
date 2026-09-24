@@ -2,16 +2,17 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarDays,
-  ChevronsLeft,
-  ChevronsRight,
   Folder,
   GraduationCap,
   LayoutGrid,
   Menu,
+  NotebookPen,
+  Plus,
   Settings,
 } from "lucide-react";
-import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider, readSidebarCookie, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -33,6 +34,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { useQueryClient } from "@tanstack/react-query";
 import { parentalKeys } from "@/services/parental";
 import { useAppStore } from "@/store/appStore";
+import { NEW_NOTE_PATH, isNote, notePath } from "@/lib/notes/isNote";
 import { startPresenceTracking } from "@/store/presenceStore";
 import { cn } from "@/lib/utils";
 import { applySheetAttr, useSheet } from "@/lib/studySurface";
@@ -61,25 +63,33 @@ import { applySheetAttr, useSheet } from "@/lib/studySurface";
   would strand those pages. On the study surface the two things the strip
   carried both have homes in the page's own header row: `ShellTrigger` is
   exported from here and rendered there (it is the ONLY touch affordance for
-  navigation, and therefore for search, on a phone and on a collapsed rail), and
+  navigation, and therefore for search, on a phone), and
   the breadcrumb's job is done by a real back link beside the `<h1>`, which
   already prints the session title.
 */
 
-/** The routes that render without the top strip. Both spellings of the study
- *  page: with a session id, and the session-less entry that keeps old links
- *  working (App.tsx). Anything added here MUST render <ShellTrigger /> itself. */
-const BARE_ROUTE = /^\/dashboard\/(?:[^/]+\/)?full-study\/?$/;
+/** The routes that render without the top strip: the two spellings of the study
+ *  page (with a session id, and the session-less entry that keeps old links
+ *  working — App.tsx), and a blank note, which is a document the student writes
+ *  rather than a page of app furniture. Anything added here MUST render
+ *  <ShellTrigger /> itself, and inherits the chosen study sheet. */
+const BARE_ROUTE = /^\/dashboard\/(?:note\/[^/]+|(?:[^/]+\/)?full-study)\/?$/;
 
 const SIDEBAR_WIDTH = "13.75rem"; // 220px expanded (narrower than stock shadcn)
 const SIDEBAR_WIDTH_ICON = "3rem"; // 48px icon rail
 
 /*
-  Tablets. An iPad in portrait is 768–1024 CSS px wide: enough for the desktop
-  layout, but not enough to spend 220px of it on navigation — session titles
-  start truncating three words in. So the sidebar drops to its icon rail in
-  that range and comes back the moment the tablet is turned to landscape.
-  A student who opens it by hand keeps it open until the next rotation.
+  The sidebar rests as its 48px icon rail on every screen from tablet up, and
+  slides out over the page on hover (ui/sidebar.tsx). 220px of navigation was
+  width taken from the notes and Teach mode's board for nothing most of the time.
+  A student who docks it open with the fold button (or Ctrl+B) keeps it open: that
+  choice is saved (the sidebar:docked cookie) and wins on every later load.
+
+  Tablets. Turning one re-decides only for a student who docked it: the rail in
+  portrait (an iPad in portrait is too narrow to spend 220px on navigation), docked
+  again in landscape. Only a real ROTATION does — the listener used to fire on any
+  width crossing 1024px, so dragging a desktop window narrower folded the sidebar.
+  A rotation's choice is not saved; the student's own is.
 */
 const TABLET_RAIL = "(min-width: 768px) and (max-width: 1023.98px)";
 const isTabletPortrait = () => typeof window !== "undefined" && window.matchMedia(TABLET_RAIL).matches;
@@ -87,8 +97,11 @@ const isTabletPortrait = () => typeof window !== "undefined" && window.matchMedi
 function TabletRail() {
   const { setOpen } = useSidebar();
   useEffect(() => {
-    const mql = window.matchMedia(TABLET_RAIL);
-    const apply = (e: MediaQueryListEvent) => setOpen(!e.matches);
+    // A desktop window made taller than it is wide flips (orientation: portrait)
+    // too; only a touch device can actually be turned.
+    if (navigator.maxTouchPoints === 0) return;
+    const mql = window.matchMedia("(orientation: portrait)");
+    const apply = () => setOpen(!window.matchMedia(TABLET_RAIL).matches && readSidebarCookie() === true, { persist: false });
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
   }, [setOpen]);
@@ -105,54 +118,30 @@ interface Crumb {
 }
 
 /*
-  Does this device have a hover-capable pointer? A touch tablet sits at md+,
-  where the sidebar's own collapse control is `showOnHover` (md:opacity-0) and
-  SidebarRail is a 16px, tabIndex={-1}, hover-only strip — so without a mouse
-  there would be no visible way to re-collapse an expanded sidebar. On those
-  devices the strip keeps its trigger.
-*/
-const HOVER_POINTER = "(hover: hover) and (pointer: fine)";
+  The one control the top strip may render, and only on a phone, where the
+  sidebar is a sheet and this is the only way into navigation (and so into
+  search). On a desktop or tablet the sidebar always shows its own fold button —
+  beside the logo when open, under it in the rail — so a second one up here would
+  just be the same button twice.
 
-function useHoverPointer() {
-  const [hover, setHover] = useState(
-    () => typeof window === "undefined" || !window.matchMedia || window.matchMedia(HOVER_POINTER).matches,
-  );
-  useEffect(() => {
-    const mql = window.matchMedia(HOVER_POINTER);
-    const apply = (e: MediaQueryListEvent) => setHover(e.matches);
-    mql.addEventListener("change", apply);
-    return () => mql.removeEventListener("change", apply);
-  }, []);
-  return hover;
-}
-
-/*
-  The one control the top strip may render — and it renders nothing at all on a
-  hover-capable desktop with the sidebar already open, which is what makes the
-  top "purely empty" there. Collapsing is then done from the sidebar's own brand
-  row, the rail, or Ctrl+B.
-
-  It also fixes a live a11y bug: `state` only tracks the desktop rail, so on a
-  phone aria-expanded used to report `true` while the Sheet was shut.
+  `isMobile` comes from ui/sidebar.tsx and is right on the first render, so a
+  phone no longer flashes the desktop chevron here before the menu icon.
 */
 export function ShellTrigger() {
-  const { state, toggleSidebar, isMobile, openMobile } = useSidebar();
-  const hoverPointer = useHoverPointer();
-  const collapsed = state === "collapsed";
+  const { toggleSidebar, isMobile, openMobile } = useSidebar();
 
-  if (!isMobile && !collapsed && hoverPointer) return null;
+  if (!isMobile) return null;
 
-  const expanded = isMobile ? openMobile : !collapsed;
-  const label = isMobile ? "Open navigation" : expanded ? "Collapse sidebar" : "Expand sidebar";
+  const label = "Open navigation";
 
   return (
     <Button
       variant="ghost"
       size="icon"
       onClick={toggleSidebar}
-      aria-expanded={expanded}
+      aria-expanded={openMobile}
       aria-label={label}
-      title={isMobile ? label : `${label} (Ctrl+B)`}
+      title={label}
       // The glyph stays small so the strip still reads as empty, but the
       // TOUCH TARGET is extended past it with an invisible ::after. This
       // project sets a 14px root (index.css), so `size-9` computes to 31.5px
@@ -166,13 +155,7 @@ export function ShellTrigger() {
         "after:absolute after:-inset-2 after:content-['']",
       )}
     >
-      {isMobile ? (
-        <Menu className="size-4" />
-      ) : expanded ? (
-        <ChevronsLeft className="size-4" />
-      ) : (
-        <ChevronsRight className="size-4" />
-      )}
+      <Menu className="size-4" />
     </Button>
   );
 }
@@ -207,6 +190,12 @@ function useCrumbs(): Crumb[] {
           ?.find((c) => c.id === second);
       return [...crumbs, { label: "Family", to: "/dashboard/family" }, { label: cached?.name ?? "Learner" }];
     }
+    // A note of their own: a session underneath, so its title is in the store.
+    if (first === "note") {
+      const note = studySessions.find((s) => s.id === second) ?? (currentSession?.id === second ? currentSession : null);
+      const title = note?.title && note.title !== "Untitled note" ? note.title : "Untitled";
+      return [...crumbs, { label: "Notes" }, { label: second === "new" ? "New note" : title }];
+    }
     if (MODE_LABELS[first]) return [...crumbs, { label: MODE_LABELS[first] }];
 
     // /dashboard/:sessionId/:mode
@@ -224,6 +213,17 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const navigate = useNavigate();
   const { studySessions, folders, setCurrentSession } = useAppStore();
 
+  // A note is a study session underneath (lib/notes/isNote.ts), but here it is
+  // its own kind of thing: it opens at its own URL and is listed on its own.
+  const sessions = useMemo(() => studySessions.filter((s) => !isNote(s)), [studySessions]);
+  const notes = useMemo(
+    () =>
+      studySessions
+        .filter(isNote)
+        .sort((a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0)),
+    [studySessions],
+  );
+
   const go = (to: string) => {
     onOpenChange(false);
     navigate(to);
@@ -231,7 +231,10 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Search sessions and folders…" />
+      {/* The dialog's name for screen readers (Radix logs an error without one). */}
+      <DialogTitle className="sr-only">Search</DialogTitle>
+      <DialogDescription className="sr-only">Jump to a page, a study session, a note or a folder.</DialogDescription>
+      <CommandInput placeholder="Search sessions, notes and folders…" />
       <CommandList>
         <CommandEmpty>No results.</CommandEmpty>
         <CommandGroup heading="Pages">
@@ -247,12 +250,15 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
           <CommandItem onSelect={() => go("/dashboard/profile")}>
             <Settings className="mr-2 size-4" /> Profile &amp; Settings
           </CommandItem>
+          <CommandItem value="new note write dictate" onSelect={() => go(NEW_NOTE_PATH)}>
+            <Plus className="mr-2 size-4" /> New note
+          </CommandItem>
         </CommandGroup>
-        {studySessions.length > 0 && (
+        {sessions.length > 0 && (
           <>
             <CommandSeparator />
             <CommandGroup heading="Study sessions">
-              {studySessions.map((s) => (
+              {sessions.map((s) => (
                 <CommandItem
                   key={s.id}
                   value={`session ${s.title}`}
@@ -261,6 +267,24 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
                   <GraduationCap className="mr-2 size-4 text-muted-foreground" />
                   <span className="truncate">{s.title}</span>
                   <span className="ml-auto text-xs tabular-nums text-muted-foreground">{s.progress}%</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
+        )}
+        {notes.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Notes">
+              {notes.map((n) => (
+                <CommandItem
+                  // The id keeps two notes with the same title (or none) apart.
+                  key={n.id}
+                  value={`note ${n.title?.trim() || "Untitled note"} ${n.id}`}
+                  onSelect={() => go(notePath(n.id))}
+                >
+                  <NotebookPen className="mr-2 size-4 text-muted-foreground" />
+                  <span className="truncate">{n.title?.trim() || "Untitled note"}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -287,6 +311,9 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 export function AppShell({ children }: { children: ReactNode }) {
   const crumbs = useCrumbs();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Docked open only when the student docked it (and not on an iPad in portrait);
+  // otherwise the icon rail. Read once, on mount, like any default.
+  const [defaultOpen] = useState(() => readSidebarCookie() === true && !isTabletPortrait());
   const userId = useAppStore((s) => s.userProfile?.id);
   const bare = BARE_ROUTE.test(useLocation().pathname);
   const sheet = useSheet();
@@ -310,7 +337,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // moved, into the sidebar's search row.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      // Exactly ⌘K / Ctrl+K. Adding shift or alt makes it someone else's shortcut —
+      // a student whose talk key is ⌘⇧K would otherwise get search as well.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       }
@@ -321,7 +350,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider
-      defaultOpen={!isTabletPortrait()}
+      defaultOpen={defaultOpen}
       style={{ "--sidebar-width": SIDEBAR_WIDTH, "--sidebar-width-icon": SIDEBAR_WIDTH_ICON } as React.CSSProperties}
     >
       <TabletRail />

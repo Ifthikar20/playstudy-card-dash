@@ -11,12 +11,20 @@ import type { GuideCode as GuideCodeData } from "@/services/guide";
 export function GuideCode({ code }: { code: GuideCodeData }) {
   const { title, language, lines, highlight, trace } = code;
   const lit = new Set(highlight);
+  // Pointer anchors: a line is named by its line NUMBER (lines.1 is the first, as the
+  // gutter and `highlight` count them), a trace row by its place in the trace. A line's
+  // label keeps its gutter number, so a spoken "line 4" finds it as well as its code.
   return (
     <div className="guide-code">
       {(title || language) && <div className="guide-chart-title">{title || language}</div>}
       <pre className="guide-code-pre">
         {lines.map((line, i) => (
-          <div key={i} className={`guide-code-line${lit.has(i + 1) ? " guide-code-lit" : ""}`}>
+          <div
+            key={i}
+            className={`guide-code-line${lit.has(i + 1) ? " guide-code-lit" : ""}`}
+            data-board-part={`lines.${i + 1}`}
+            data-board-label={`line ${i + 1}${line.trim() ? `: ${line.trim()}` : ""}`}
+          >
             <span className="guide-code-num">{i + 1}</span>
             <code>{line || " "}</code>
           </div>
@@ -35,7 +43,7 @@ export function GuideCode({ code }: { code: GuideCodeData }) {
           </thead>
           <tbody>
             {trace.rows.map((row, i) => (
-              <tr key={i}>
+              <tr key={i} data-board-part={`trace.${i}`} data-board-label={row.join(" ")}>
                 {row.map((cell, j) => (
                   <td key={j}>{cell}</td>
                 ))}

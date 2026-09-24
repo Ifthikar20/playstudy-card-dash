@@ -200,10 +200,33 @@ export interface GuideMath {
   replace?: boolean;
 }
 
+/**
+ * Something on the board the voice names ("the gold band", "side c"). `part` is the
+ * anchor id inside a drawn visual ("sides.c", "items.2"); a picture has none, its
+ * parts are found by label (see fetchImageParts). Kept outside the visual's own data,
+ * so pointing at another part never counts as a new visual and never redraws it.
+ */
+export interface GuidePoint {
+  label: string;
+  part?: string;
+}
+
+/**
+ * Where a named part sits inside a picture, 0-1 of the picture as displayed:
+ * `box` is [x, y, w, h] from its top-left corner, `point` a spot on the part itself.
+ */
+export interface GuideRegion {
+  box: [number, number, number, number];
+  point: [number, number];
+  confidence: "high" | "medium";
+}
+
 export interface GuideStep {
   block: string | null;
   quote: string;
   say: string;
+  /** The parts of the visual this step talks about, in the order they're named (at most 3). */
+  point?: GuidePoint[] | null;
   /** Speaking style id ("curious", "story", "calm", …) the line was written in. */
   style?: string;
   /** That style's rate and pitch, applied when the browser's own voice is speaking. */
@@ -338,6 +361,8 @@ export interface GuideTarget {
   quote: string;
   /** "Draw me that": the answer may also put a visual on the board. */
   visual?: VisualSpec | null;
+  /** The parts of that visual the answer names ("point at the gold band"). */
+  point?: GuidePoint[] | null;
 }
 
 export interface GuideTurn {
@@ -527,6 +552,151 @@ export async function fetchLoadingFacts(
   } catch {
     return { facts: [], subject: "" };
   }
+}
+
+/* ---- Where the parts of a picture are ------------------------------------------
+   The lesson writer can't see, so a step only says which part it's about ("the gold
+   band"). The server asks a vision model where that part is in the picture and
+   caches the answer; until the model is switched on it answers `enabled: false`, and
+   from then on this session stops asking. Nothing here ever throws: without a region
+   the board outlines the whole picture and the pointer waits beside it. */
+
+/** What the server (or the dev gallery's stand-in) answers for one picture. */
+export type ImagePartsSource = (
+  url: string,
+  labels: string[],
+  ctx: ImagePartsContext,
+) => Promise<{ enabled: boolean; regions: Record<string, unknown> } | null>;
+
+/** Helps the locator tell the right thing apart: what the picture was searched for, and what's being said. */
+export interface ImagePartsContext {
+  query?: string;
+  match?: string[];
+  caption?: string;
+  context?: string;
+}
+
+/** Set once the server says the locator is off (or isn't there): no more calls this session. */
+let visionOff = false;
+/** One answer per picture + label, so a part is only looked up once. Null = not found. */
+const partCache = new Map<string, Promise<GuideRegion | null>>();
+const partKey = (url: string, label: string) => `${label.trim().toLowerCase()}\n${url}`;
+let partsSource: ImagePartsSource | null = null;
+const PARTS_TIMEOUT_MS = 25_000;
+
+/** Dev gallery only: answer part lookups from `fn` instead of the server (null puts the server back). */
+export function overrideImageParts(fn: ImagePartsSource | null): void {
+  partsSource = fn;
+  visionOff = false;
+  partCache.clear();
+}
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/** A region the board can trust: four numbers inside the picture, a point on it, and no guesses. */
+function cleanRegion(v: unknown): GuideRegion | null {
+  if (!v || typeof v !== "object") return null;
+  const r = v as { box?: unknown; point?: unknown; confidence?: unknown };
+  const nums = (a: unknown, n: number): a is number[] =>
+    Array.isArray(a) && a.length === n && a.every((x) => typeof x === "number" && Number.isFinite(x));
+  if (!nums(r.box, 4) || !nums(r.point, 2)) return null;
+  if (r.confidence !== "high" && r.confidence !== "medium") return null;
+  const x = clamp01(r.box[0]);
+  const y = clamp01(r.box[1]);
+  const w = Math.min(r.box[2], 1 - x);
+  const h = Math.min(r.box[3], 1 - y);
+  if (!(w > 0) || !(h > 0)) return null;
+  // the point belongs on the part, so it's kept inside the box
+  const px = Math.max(x, Math.min(x + w, r.point[0]));
+  const py = Math.max(y, Math.min(y + h, r.point[1]));
+  return { box: [x, y, w, h], point: [px, py], confidence: r.confidence };
+}
+
+/** Ask the server once for several labels. Null when the call failed (so it can be tried again). */
+async function requestParts(url: string, labels: string[], ctx: ImagePartsContext): Promise<Record<string, GuideRegion> | null> {
+  let data: { enabled?: unknown; regions?: unknown } | null = null;
+  if (partsSource) {
+    const source = partsSource;
+    data = await Promise.resolve()
+      .then(() => source(url, labels, ctx))
+      .catch(() => null);
+  } else {
+    const token = getAuthToken();
+    const abort = new AbortController();
+    const timer = window.setTimeout(() => abort.abort(), PARTS_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API_URL}/guide/image/parts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ url, labels, ...ctx }),
+        signal: abort.signal,
+      });
+      // A server without the endpoint can't locate anything, today or on the next step.
+      if (res.status === 404) visionOff = true;
+      if (!res.ok) return res.status === 404 ? {} : null;
+      data = await res.json();
+    } catch {
+      return null;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+  if (!data || typeof data !== "object") return null;
+  if (data.enabled === false) {
+    visionOff = true;
+    return {};
+  }
+  const out: Record<string, GuideRegion> = {};
+  const regions = data.regions && typeof data.regions === "object" ? (data.regions as Record<string, unknown>) : {};
+  const byLower = new Map(Object.entries(regions).map(([k, v]) => [k.trim().toLowerCase(), v]));
+  for (const label of labels) {
+    const region = cleanRegion(regions[label] ?? byLower.get(label.trim().toLowerCase()));
+    if (region) out[label] = region;
+  }
+  return out;
+}
+
+/**
+ * Where each named part is in the picture at `url`, keyed by label; labels it couldn't
+ * find are left out. One lookup per picture + label, however often it's asked for.
+ * Never throws, and answers {} straight away once the locator is known to be off.
+ */
+export async function fetchImageParts(url: string, labels: string[], ctx: ImagePartsContext = {}): Promise<Record<string, GuideRegion>> {
+  const wanted = [...new Set(labels.map((l) => (typeof l === "string" ? l.trim() : "")).filter(Boolean))].slice(0, 3);
+  if (!url || !wanted.length || visionOff) return {};
+  const missing = wanted.filter((l) => !partCache.has(partKey(url, l)));
+  if (missing.length) {
+    const request = requestParts(url, missing, ctx);
+    for (const label of missing) {
+      const key = partKey(url, label);
+      const one: Promise<GuideRegion | null> = request.then((found) => {
+        if (!found && partCache.get(key) === one) partCache.delete(key); // a failed call shouldn't stick
+        return found?.[label] ?? null;
+      });
+      partCache.set(key, one);
+    }
+  }
+  const found = await Promise.all(wanted.map((l) => partCache.get(partKey(url, l)) ?? Promise.resolve(null)));
+  const out: Record<string, GuideRegion> = {};
+  wanted.forEach((label, i) => {
+    const region = found[i];
+    if (region) out[label] = region;
+  });
+  return out;
+}
+
+/** What a step's picture can tell the locator about itself. */
+export function imagePartsContext(step: Pick<GuideStep, "image" | "say">): ImagePartsContext {
+  const image = step.image;
+  return { query: image?.query, match: image?.match, caption: image?.caption, context: step.say ? step.say.slice(0, 400) : undefined };
+}
+
+/** Start finding a coming step's picture parts while the current step is still being explained. */
+export function prefetchImageParts(step: Pick<GuideStep, "image" | "point" | "say"> | null | undefined): void {
+  const url = step?.image?.url;
+  const labels = (step?.point ?? []).map((p) => p?.label).filter((l): l is string => typeof l === "string" && !!l.trim());
+  if (!step || !url || !labels.length || visionOff) return;
+  void fetchImageParts(url, labels, imagePartsContext(step));
 }
 
 /** Speech → text via the backend's local whisper (fallback when the browser has no recognizer). */

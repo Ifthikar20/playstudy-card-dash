@@ -159,12 +159,25 @@
   }
 }
 
-/* Icon-collapsed sidebar: hide labels, sublines and trailing chevrons outright.
-   Chrome still paints a text-overflow ellipsis for a zero-width span, so the
-   stock `truncate` alone leaves a stray "…" beside each icon. */
-[data-collapsible="icon"] [data-sidebar="menu-button"] > span:last-child,
+/* Icon-collapsed sidebar: hide labels, sublines, key hints and trailing chevrons
+   outright. Chrome still paints a text-overflow ellipsis for a zero-width span,
+   so the stock `truncate` alone leaves a stray "…" beside each icon. Every row's
+   FIRST child is its icon (an svg, the logo, the avatar, or a span holding a dot),
+   so any span after it is words. This is the ONLY thing folding changes inside a
+   row — height, padding and the icon's place stay put (ui/sidebar.tsx). While the
+   rail peeks out on hover `data-collapsible` is lifted, so the words come back to
+   the right of icons that have not moved. */
+[data-collapsible="icon"] [data-sidebar="menu-button"] > span:not(:first-child),
 [data-collapsible="icon"] [data-sidebar="menu-button"] > div.grid,
+[data-collapsible="icon"] [data-sidebar="menu-button"] > kbd,
 [data-collapsible="icon"] [data-sidebar="menu-button"] > svg.ml-auto {
+  display: none;
+}
+/* The rail scrolls on a short screen, without a scrollbar eating into its 30px. */
+[data-collapsible="icon"] [data-sidebar="content"] {
+  scrollbar-width: none;
+}
+[data-collapsible="icon"] [data-sidebar="content"]::-webkit-scrollbar {
   display: none;
 }
 
@@ -282,14 +295,25 @@ html:has(.lp) #root {
 .guide-cursor {
   /* movement is animated frame by frame (see GuidePointer); only the fade transitions */
   transition: opacity 0.35s ease;
-  filter: drop-shadow(0 3px 8px rgba(236, 72, 153, 0.45));
+  filter: drop-shadow(0 3px 8px rgba(var(--guide-accent), 0.45));
 }
-.guide-cursor-svg { display: block; transform: translate(-3px, -2px); transform-origin: 3px 2px; transition: transform 0.16s ease; }
+/* The pointer's colour follows the tutor's avatar (GuidePointer and GuideDock set
+   these from lib/guide/avatars). Pink is the fallback, for anything outside them. */
+:root { --guide-accent: 236, 72, 153; --guide-accent-ink: #db2777; }
+/* The arrow's tip, at (3, 3) in its box, is the point it points with. */
+.guide-cursor-svg { display: block; transform: translate(-3px, -3px); transform-origin: 3px 3px; transition: transform 0.16s ease; }
 .guide-cursor.guide-clicking .guide-cursor-svg { animation: guide-click 0.42s ease-out; }
-.guide-cursor.guide-pressing .guide-cursor-svg { transform: translate(-3px, -2px) scale(0.82); }
+.guide-cursor.guide-pressing .guide-cursor-svg { transform: translate(-3px, -3px) scale(0.82); }
+/* The tutor's avatar trails the arrow, down and to the right, like a name badge. */
+.guide-cursor-avatar { position: absolute; left: 13px; top: 13px; transition: transform 0.2s ease; }
+.guide-cursor.guide-pressing .guide-cursor-avatar { transform: scale(0.94); }
+/* On one exact part of the board (a colour band, side c) the badge tucks further out
+   and gets smaller, so it never sits on the part next door. */
+.guide-cursor-precise .guide-cursor-avatar { transform-origin: 0 0; transform: translate(9px, 9px) scale(0.72); }
+.guide-cursor-precise.guide-pressing .guide-cursor-avatar { transform: translate(9px, 9px) scale(0.68); }
 .guide-press-ring {
   position: absolute; width: 34px; height: 34px; border-radius: 9999px;
-  border: 3px solid rgba(236, 72, 153, 0.75);
+  border: 3px solid rgba(var(--guide-accent), 0.75);
   transform: translate(-50%, -50%) scale(0.3); opacity: 0;
   animation: guide-ring-fill 0.48s ease-out forwards;
 }
@@ -299,12 +323,12 @@ html:has(.lp) #root {
   to { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
 }
 .guide-chip {
-  position: absolute; left: 18px; top: 26px;
+  position: absolute; left: 52px; top: 22px;
   display: flex; align-items: center; gap: 6px; white-space: nowrap;
   padding: 5px 9px; border-radius: 9999px;
-  background: linear-gradient(135deg, #ec4899, #d946ef); color: #fff;
+  background: rgb(var(--guide-accent)); color: #fff;
   font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: 0.01em;
-  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.35);
+  box-shadow: 0 4px 12px rgba(var(--guide-accent), 0.35);
 }
 .guide-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 10px; }
 .guide-eq i { width: 2.5px; height: 10px; border-radius: 2px; background: #fff; transform-origin: bottom; animation: guide-eq 0.9s ease-in-out infinite; }
@@ -312,14 +336,14 @@ html:has(.lp) #root {
 .guide-eq i:nth-child(3) { animation-delay: 0.3s; }
 .guide-ripple {
   position: absolute; width: 18px; height: 18px; border-radius: 9999px;
-  border: 2.5px solid rgba(236, 72, 153, 0.85);
+  border: 2.5px solid rgba(var(--guide-accent), 0.85);
   transform: translate(-50%, -50%) scale(0.3); opacity: 0;
   animation: guide-ripple 0.8s ease-out forwards;
 }
 .guide-underline {
   position: absolute; border-radius: 4px;
-  background: rgba(236, 72, 153, 0.16);
-  box-shadow: inset 0 -2px 0 0 rgba(236, 72, 153, 0.9);
+  background: rgba(var(--guide-accent), 0.16);
+  box-shadow: inset 0 -2px 0 0 rgba(var(--guide-accent), 0.9);
   transform-origin: left center;
   animation: guide-underline 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -331,9 +355,9 @@ html:has(.lp) #root {
 .guide-mic-live { animation: guide-mic 1.2s ease-in-out infinite; }
 
 @keyframes guide-click {
-  0% { transform: translate(-3px, -2px) scale(1); }
-  35% { transform: translate(-3px, -2px) scale(0.8); }
-  100% { transform: translate(-3px, -2px) scale(1); }
+  0% { transform: translate(-3px, -3px) scale(1); }
+  35% { transform: translate(-3px, -3px) scale(0.8); }
+  100% { transform: translate(-3px, -3px) scale(1); }
 }
 @keyframes guide-ripple {
   0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.9; }
@@ -342,37 +366,47 @@ html:has(.lp) #root {
 @keyframes guide-underline { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes guide-eq { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
 @keyframes guide-pop { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
-@keyframes guide-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.45); } 50% { box-shadow: 0 0 0 7px rgba(236, 72, 153, 0); } }
-@keyframes guide-mic { 0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.5); } 50% { box-shadow: 0 0 0 8px rgba(236, 72, 153, 0); } }
+@keyframes guide-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--guide-accent), 0.45); } 50% { box-shadow: 0 0 0 7px rgba(var(--guide-accent), 0); } }
+@keyframes guide-mic { 0%, 100% { box-shadow: 0 0 0 0 rgba(var(--guide-accent), 0.5); } 50% { box-shadow: 0 0 0 8px rgba(var(--guide-accent), 0); } }
 /* Teach mode: outline around the block currently being explained, so the voice
    and the page never disagree about what is being discussed. */
 .guide-focus {
   position: absolute; border-radius: 14px;
-  border: 2px solid rgba(236, 72, 153, 0.45);
-  background: rgba(236, 72, 153, 0.045);
-  box-shadow: 0 0 0 5px rgba(236, 72, 153, 0.07);
+  border: 2px solid rgba(var(--guide-accent), 0.45);
+  background: rgba(var(--guide-accent), 0.045);
+  box-shadow: 0 0 0 5px rgba(var(--guide-accent), 0.07);
   transition: left 0.55s cubic-bezier(0.2, 0.9, 0.25, 1), top 0.55s cubic-bezier(0.2, 0.9, 0.25, 1), width 0.55s ease, height 0.55s ease;
   animation: guide-pop 0.3s ease-out;
 }
+/* The tight ring round one part on the board: solid and snug (GuidePointer sets its
+   colour and white halo), fading in, then sliding from part to part as each is named. */
+.guide-focus-part {
+  border-width: 2.5px;
+  transition: left 0.35s cubic-bezier(0.2, 0.9, 0.25, 1), top 0.35s cubic-bezier(0.2, 0.9, 0.25, 1), width 0.35s ease, height 0.35s ease;
+  animation: guide-part-in 0.25s ease-out;
+}
+@keyframes guide-part-in { from { opacity: 0; } to { opacity: 1; } }
 /* Teach mode: speech bubble next to the pointer — what is being said, where it is said. */
 .guide-bubble {
-  position: absolute; left: 22px; top: 36px;
+  position: absolute; left: 54px; top: 24px;
   width: max-content; max-width: 340px;
   padding: 9px 13px 10px; border-radius: 16px; border-top-left-radius: 6px;
   background: rgba(255, 255, 255, 0.97); color: #1a1a18;
-  border: 1px solid rgba(236, 72, 153, 0.35);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 0 0 4px rgba(236, 72, 153, 0.06);
+  border: 1px solid rgba(var(--guide-accent), 0.35);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 0 0 4px rgba(var(--guide-accent), 0.06);
   font-size: 14px; line-height: 1.45; font-weight: 500; white-space: normal;
   animation: guide-pop 0.22s ease-out;
 }
 .guide-bubble-left { left: auto; right: 12px; border-top-left-radius: 16px; border-top-right-radius: 6px; }
+/* Moved off the board so it doesn't cover the part (placed by GuidePointer): no corner points at the tip. */
+.guide-bubble-free { border-radius: 16px; }
 .guide-bubble-head {
   display: flex; align-items: center; gap: 6px; margin-bottom: 3px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #db2777;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--guide-accent-ink);
 }
-.guide-eq-pink i { background: #ec4899; }
-.dark .guide-bubble { background: rgba(24, 24, 27, 0.97); color: #fafafa; border-color: rgba(236, 72, 153, 0.45); }
-.dark .guide-bubble-head { color: #f472b6; }
+.guide-eq-pink i { background: rgb(var(--guide-accent)); }
+.dark .guide-bubble { background: rgba(24, 24, 27, 0.97); color: #fafafa; border-color: rgba(var(--guide-accent), 0.45); }
+.dark .guide-bubble-head { color: rgb(var(--guide-accent)); }
 
 /* ---- Teach mode: the little tutor who is talking (see GuideBot.tsx) ------- */
 /* Pixel art, so everything moves in whole pixels: it bobs, blinks, and works
@@ -425,6 +459,50 @@ html:has(.lp) #root {
   .guide-bot[data-mood="talking"] .bot-mouth-shut { opacity: 0; }
 }
 
+/* ---- Teach mode: the tutor's avatar (see GuideAvatar.tsx) ----------------- */
+/* A character on a badge. It blinks; while talking it bobs and works its mouth,
+   while listening it tilts in and its badge pulses, and while thinking it looks up. */
+.guide-avatar { display: inline-block; flex-shrink: 0; line-height: 0; transition: transform 0.25s ease; }
+.guide-avatar svg { display: block; overflow: visible; }
+.guide-avatar .av-body { transform-box: fill-box; transform-origin: 50% 100%; }
+.guide-avatar .av-eyes { transform-box: fill-box; transform-origin: 50% 50%; animation: av-blink 5.2s infinite; }
+.guide-avatar .av-mouth { transform-box: fill-box; transform-origin: 50% 20%; }
+.guide-avatar .av-ring { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; }
+@keyframes av-blink { 0%, 94%, 100% { transform: scaleY(1); } 96%, 98% { transform: scaleY(0.12); } }
+.guide-avatar[data-mood="talking"] .av-body { animation: av-bob 0.9s ease-in-out infinite; }
+.guide-avatar[data-mood="talking"] .av-mouth { animation: av-talk 0.42s ease-in-out infinite; }
+@keyframes av-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+@keyframes av-talk { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.65); } }
+.guide-avatar[data-mood="listening"] { transform: rotate(-6deg); }
+.guide-avatar[data-mood="listening"] .av-ring { animation: av-listen 1.3s ease-out infinite; }
+@keyframes av-listen { 0% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.28); } }
+.guide-avatar[data-mood="thinking"] .av-eyes { animation: none; transform: translate(1.5px, -2px); }
+.guide-avatar[data-mood="thinking"] .av-body { animation: av-bob 2.4s ease-in-out infinite; }
+/* The controls take the tutor's colour too (GuideDock sets the variables). */
+.guide-accent-fill { background: rgb(var(--guide-accent)); border-color: rgb(var(--guide-accent)); color: #fff; box-shadow: 0 4px 12px -2px rgba(var(--guide-accent), 0.4); }
+.guide-accent-edge { border-color: rgba(var(--guide-accent), 0.28); }
+.guide-accent-edge-strong { border-color: rgba(var(--guide-accent), 0.6); }
+.guide-accent-focus:focus { border-color: rgb(var(--guide-accent)); }
+.guide-accent-key { border-color: rgb(var(--guide-accent)); color: var(--guide-accent-ink); }
+/* the pixel tutor's head, on a badge of its own */
+.guide-avatar-pixel-badge {
+  display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
+  border: 2px solid; border-radius: 28%; box-sizing: border-box;
+}
+/* the picker in the voice menu */
+.guide-avatar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 4px 2px 2px; }
+.guide-avatar-pick {
+  display: flex; align-items: center; justify-content: center; padding: 3px; border-radius: 14px;
+  border: 2px solid transparent; background: none; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease;
+}
+.guide-avatar-pick:hover { background: hsl(var(--muted)); transform: translateY(-1px); }
+.guide-avatar-pick.is-on { border-color: rgb(var(--guide-accent)); background: rgba(var(--guide-accent), 0.08); }
+.guide-avatar-pick:focus-visible { outline: 2px solid rgb(var(--guide-accent)); outline-offset: 2px; }
+.guide-voicemenu-label { padding: 8px 8px 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+@media (prefers-reduced-motion: reduce) {
+  .guide-avatar .av-eyes, .guide-avatar[data-mood] .av-body, .guide-avatar[data-mood] .av-mouth, .guide-avatar[data-mood] .av-ring { animation: none; }
+}
+
 /* ---- Teach mode: picking which of the two tutors speaks ------------------- */
 .guide-voicebtn {
   display: flex; align-items: center; gap: 5px; flex-shrink: 0;
@@ -437,7 +515,7 @@ html:has(.lp) #root {
 .guide-voicemenu {
   display: flex; flex-direction: column; gap: 4px;
   width: min(260px, calc(100vw - 2rem)); padding: 6px;
-  border-radius: 18px; border: 1px solid rgba(236, 72, 153, 0.25);
+  border-radius: 18px; border: 1px solid rgba(var(--guide-accent), 0.25);
   background: hsl(var(--background) / 0.97); backdrop-filter: blur(8px);
   box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.35);
   animation: guide-pop 0.2s cubic-bezier(0.23, 1, 0.32, 1);
@@ -449,7 +527,7 @@ html:has(.lp) #root {
   transition: background-color 0.18s ease, border-color 0.18s ease;
 }
 .guide-voicemenu-item:hover { background: hsl(var(--muted)); }
-.guide-voicemenu-item.is-on { border-color: rgba(236, 72, 153, 0.45); background: rgba(236, 72, 153, 0.08); }
+.guide-voicemenu-item.is-on { border-color: rgba(var(--guide-accent), 0.45); background: rgba(var(--guide-accent), 0.08); }
 .guide-voicemenu-name { font-size: 13px; font-weight: 600; line-height: 1.2; }
 .guide-voicemenu-desc { font-size: 11px; color: hsl(var(--muted-foreground)); line-height: 1.2; }
 
@@ -753,6 +831,9 @@ html:has(.lp) #root {
 /* ---- Teach mode whiteboard: real photo (from Wikipedia) ------------------- */
 .guide-image { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0; }
 .guide-image-img {
+  /* its own size, shape kept (the width/height attributes only reserve the shape) */
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 280px;
   border-radius: 12px;
@@ -760,6 +841,28 @@ html:has(.lp) #root {
   border: 1px solid hsl(var(--border));
   background: hsl(var(--muted) / 0.4);
 }
+/*
+  On the board a picture is shown big, so a teacher can point at one colour band of a
+  resistor: the board widens while a picture is up, and the picture fills it - as tall
+  as the screen leaves room for, and a small photo blown up to at most twice its own
+  size (GuideImage sets --ar and --nw from the decoded picture). The width is worked
+  out from the height limit and the shape, so it never letterboxes. Nothing zooms: the
+  picture is simply laid out larger.
+*/
+.guide-board {
+  --img-max-h: max(240px, min(100vh - 420px, 680px));
+  transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (min-width: 901px) {
+  .guide-board[data-kind="image"]:not(.guide-board-min):not(.guide-board-full) { width: min(760px, 56vw); }
+}
+.guide-board .guide-image-img {
+  width: min(100%, calc(var(--nw, 100%) * 2), calc(var(--img-max-h) * var(--ar, 1.5)));
+  max-height: var(--img-max-h);
+}
+/* Full screen: the picture takes the whole window's height. */
+.guide-board.guide-board-full { --img-max-h: calc(92vh - 150px); }
+.guide-board.guide-board-full .guide-board-line[data-kind="image"] { max-width: none; }
 .guide-image-caption {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
   font-family: "Patrick Hand", cursive;
@@ -784,10 +887,6 @@ html:has(.lp) #root {
 /* ---- Teach mode whiteboard: drag by the header, remove title chrome ------- */
 .guide-board-head { cursor: move; touch-action: none; user-select: none; }
 .guide-board.guide-board-moved { animation: none; } /* don't fight the entry transform when positioned */
-.guide-board-minlabel {
-  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
-  color: hsl(var(--muted-foreground));
-}
 
 /* ---- Teach mode whiteboard: comparison table ----------------------------- */
 .guide-table { width: 100%; display: flex; flex-direction: column; gap: 8px; }
@@ -1253,6 +1352,10 @@ html:has(.lp) #root {
     padding-right: calc(min(560px, 46vw) + 16px);
     transition: padding-right 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
+  /* the wider board a picture gets (see .guide-board[data-kind="image"]) */
+  body.guide-board-open.guide-board-wide .guide-shift {
+    padding-right: calc(min(760px, 56vw) + 16px);
+  }
   body.guide-board-open .guide-shift .guide-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1684,4 +1787,102 @@ html[data-an-sheet="ink"] { --an-sheet-bg: hsl(240 6% 5%); }
 @media (prefers-reduced-motion: reduce) {
   .xp-glow { animation: none; box-shadow: 0 0 0 3px hsl(var(--chart-1) / 0.2); }
   .xp-gain { animation: none; }
+}
+
+/* ---- Teach mode whiteboard: a Mac window ---------------------------------- */
+/* The board reads as a real desktop window: frosted chrome, a hairline edge, a
+   soft drop shadow and a title bar with the section's name centred between the
+   traffic lights. Drag it by that bar (see .guide-board-head above). */
+.guide-board {
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: hsl(var(--card) / 0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.05),
+    0 18px 50px -12px rgba(0, 0, 0, 0.42),
+    0 2px 10px rgba(0, 0, 0, 0.12);
+}
+.dark .guide-board {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: hsl(var(--card) / 0.88);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 20px 56px -12px rgba(0, 0, 0, 0.72),
+    0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.guide-board-head {
+  position: relative;
+  min-height: 38px;
+  padding: 0 14px;
+  gap: 10px;
+  /* a window title, not a section heading: sentence case, no tracking */
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: hsl(var(--foreground) / 0.75);
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+  background: linear-gradient(hsl(var(--muted) / 0.75), hsl(var(--muted) / 0.35));
+}
+.dark .guide-board-head { background: linear-gradient(rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)); }
+.guide-board-name {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 210px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none; /* the whole bar drags, including under the title */
+}
+.guide-board-live { margin-left: auto; position: relative; z-index: 1; }
+/* macOS dots: a darker rim, and the glyph only while the pointer is on the bar */
+.guide-board-traffic { gap: 8px; }
+.guide-board-dot { width: 12px; height: 12px; opacity: 1; }
+.guide-board-dot-close { background: #ff5f57; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16); }
+.guide-board-dot-min { background: #febc2e; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16); }
+.guide-board-dot-full { background: #28c840; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.16); }
+.guide-board-dot::before { font-size: 9px; color: rgba(0, 0, 0, 0.62); }
+.guide-board-head:hover .guide-board-dot-close::before { content: "\00d7"; opacity: 1; }
+.guide-board-head:hover .guide-board-dot-min::before { content: "\2013"; opacity: 1; }
+.guide-board-head:hover .guide-board-dot-full::before { content: "\2922"; opacity: 1; }
+.guide-board.guide-board-min .guide-board-head { border-bottom: none; }
+@media (prefers-reduced-transparency: reduce) {
+  .guide-board { background: hsl(var(--card)); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ---- Teach mode: the bar glows while the tutor is listening --------------- */
+/* The talk key is pressed away from the mouse, so the whole control bar has to
+   answer — a soft pink halo that breathes, plus a brighter tutor. */
+.guide-dock-live {
+  animation: guide-dock-live 1.9s ease-in-out infinite;
+}
+@keyframes guide-dock-live {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(var(--guide-accent), 0.35), 0 10px 34px -8px rgba(var(--guide-accent), 0.35); }
+  50%      { box-shadow: 0 0 0 4px rgba(var(--guide-accent), 0.16), 0 16px 48px -6px rgba(var(--guide-accent), 0.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-dock-live { animation: none; box-shadow: 0 0 0 3px rgba(var(--guide-accent), 0.22); }
+}
+
+/* ---- Blank notes: dictating a page, and the tutor asking about it --------- */
+/* The bubble is the tutor talking, so it borrows Teach mode's look — but this one
+   takes clicks, because the answer buttons live in it. */
+.an-note-ask {
+  border-radius: 18px;
+  border: 1px solid rgba(236, 72, 153, 0.45);
+  background: hsl(var(--card) / 0.97);
+  padding: 14px 16px;
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(236, 72, 153, 0.08);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* The microphone button while it is listening: the same pink breath as the dock. */
+.an-note-live { animation: guide-mic 1.6s ease-in-out infinite; }
+.an-note-read mark { color: inherit; }
+@media (prefers-reduced-motion: reduce) {
+  .an-note-ask, .an-note-live { animation: none; }
 }

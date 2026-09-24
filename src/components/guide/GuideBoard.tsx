@@ -30,6 +30,9 @@ export interface BoardHandle {
   /** The element showing `spec`, once it's really up: not while the previous visual is
    *  still being wiped off, and not a copy the student is reviewing. Null until then. */
   showing(spec: VisualSpec): HTMLElement | null;
+  /** Whatever is live on the board right now (not a copy being reviewed), for a step
+   *  that names a part of it without drawing anything new. */
+  live(): HTMLElement | null;
   visible(): boolean;
 }
 
@@ -46,8 +49,8 @@ const POS_KEY = "an-guide-board-pos";
 
 export const GuideBoard = forwardRef<
   BoardHandle,
-  { enabled?: boolean; onClose?: () => void; onPin?: (spec: VisualSpec) => Promise<void> | void }
->(function GuideBoard({ enabled = true, onClose, onPin }, ref) {
+  { enabled?: boolean; title?: string; onClose?: () => void; onPin?: (spec: VisualSpec) => Promise<void> | void }
+>(function GuideBoard({ enabled = true, title, onClose, onPin }, ref) {
   const [item, setItem] = useState<BoardItem | null>(null);
   const [shown, setShown] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -168,6 +171,37 @@ export const GuideBoard = forwardRef<
     return () => document.body.classList.remove("guide-board-open");
   }, [claimsSpace]);
 
+  // A picture gets a wider board, so its parts are big enough to point at (see
+  // .guide-board[data-kind="image"] in index.css), and the notes make room for that.
+  const onBoardKind = (reviewing != null ? history[reviewing] : null)?.kind ?? item?.spec.kind;
+  const wide = enabled && shown && !minimized && onBoardKind === "image";
+  useEffect(() => {
+    document.body.classList.toggle("guide-board-wide", wide);
+    return () => document.body.classList.remove("guide-board-wide");
+  }, [wide]);
+
+  // A board dragged near the right edge is pushed off screen when it widens for a
+  // picture (or the window narrows): pull it back in. Not saved as its place - the
+  // student's own drag is, and it may fit again once the picture is gone.
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board || !pos || full) return;
+    const pull = () => {
+      const r = board.getBoundingClientRect();
+      const x = Math.max(6, Math.min(r.left, window.innerWidth - r.width - 6));
+      const y = Math.max(6, Math.min(r.top, window.innerHeight - 44));
+      if (Math.abs(x - r.left) > 0.5 || Math.abs(y - r.top) > 0.5) setPos({ x, y });
+    };
+    pull();
+    const ro = new ResizeObserver(pull);
+    ro.observe(board);
+    window.addEventListener("resize", pull);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", pull);
+    };
+  }, [pos, full, shown, minimized]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -200,6 +234,10 @@ export const GuideBoard = forwardRef<
       showing: (spec) => {
         const el = elRef.current;
         return el && el.dataset.mode === "writing" && el.dataset.visualKey === visualKey(spec) ? el : null;
+      },
+      live: () => {
+        const el = elRef.current;
+        return el && el.dataset.mode === "writing" && el.dataset.visualKey ? el : null;
       },
       visible: () => shownRef.current && onScreen.current,
     }),
@@ -238,6 +276,7 @@ export const GuideBoard = forwardRef<
       ref={boardRef}
       className={`guide-board${minimized ? " guide-board-min" : ""}${full ? " guide-board-full" : ""}${pos && !full ? " guide-board-moved" : ""}`}
       style={pos && !full ? { left: pos.x, top: pos.y, right: "auto", transform: "none" } : undefined}
+      data-kind={displayed?.kind}
       role="img"
       aria-label="Teach mode whiteboard"
     >
@@ -262,7 +301,11 @@ export const GuideBoard = forwardRef<
             title={full ? "Exit full screen" : "Full screen"}
           />
         </span>
-        {minimized && live && <span className="guide-board-minlabel">{VISUAL_LABEL[live.kind]}</span>}
+        {/* The window's own title, centred like a Mac window: the section being taught,
+            or - once it's rolled up into the title bar - what is on the board. */}
+        <span className="guide-board-name" title={title || undefined}>
+          {minimized && live ? VISUAL_LABEL[live.kind] : title || "AnotherNotes"}
+        </span>
         {!minimized && reviewing != null && (
           <button type="button" className="guide-board-live" onClick={() => setReviewing(null)}>
             Back to live

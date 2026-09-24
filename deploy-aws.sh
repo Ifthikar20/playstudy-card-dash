@@ -21,6 +21,8 @@
 #                    TURNSTILE_ENABLED on the box, which the API deploy sets; this script
 #                    refuses a combination that would lock everyone out.
 #
+# Maintenance page: ./maintenance.sh on|off|status (the gate survives deploys).
+#
 # Sign-ups: the bundle offers no way to create an account unless it is built with
 # VITE_SIGNUPS_OPEN=true (see src/lib/signups.ts).
 set -euo pipefail
@@ -141,6 +143,14 @@ fi
 BUNDLE=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' "$REPO/dist/index.html" | head -1)
 [ -n "$BUNDLE" ] || die "cannot find the entry script in dist/index.html"
 
+# The maintenance page and the terms page are served outside the app (see nginx.conf). A build
+# always includes them from public/, but a --no-build deploy of an older dist/ would not.
+for page in maintenance.html terms.html; do
+  if [ ! -f "$REPO/dist/$page" ] && [ -f "$REPO/public/$page" ]; then
+    cp "$REPO/public/$page" "$REPO/dist/$page" && echo "added $page to dist/ from public/"
+  fi
+done
+
 # ---- upload ------------------------------------------------------------------
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 tar czf "$TMP/web.tgz" -C "$REPO/dist" .
@@ -160,6 +170,19 @@ mkdir -p web && find web -mindepth 1 -delete && tar xzf web.tgz -C web && rm -f 
 mkdir -p certs
 [ -f certs/selfsigned.crt ] || openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
   -keyout certs/selfsigned.key -out certs/selfsigned.crt -subj '/CN=anothernotes' >/dev/null 2>&1
+# Maintenance gate: a key file on the box means "on" (see maintenance.sh). Fill it into
+# the config every time, so a deploy never switches the gate on or off by accident.
+if [ -s maintenance.key ]; then
+  k=$(tr -dc 'A-Za-z0-9_-' < maintenance.key)
+  sed -i -e 's|default 0;   # MAINTENANCE-DEFAULT|default 1;   # MAINTENANCE-DEFAULT|'          -e "s|# MAINTENANCE-KEY|\"$k\" 0;   # MAINTENANCE-KEY|" nginx.conf.new
+  # A config without the markers (an older or uncommitted copy) would open the site.
+  if ! grep -q 'default 1;   # MAINTENANCE-DEFAULT' nginx.conf.new || ! grep -qF "\"$k\" 0;" nginx.conf.new; then
+    rm -f nginx.conf.new
+    echo "the maintenance gate is on but this nginx.conf has no maintenance markers; refusing to deploy it (it would open the site)" >&2
+    exit 1
+  fi
+  echo "maintenance gate: ON (unlock in the browser console with the key in $1/maintenance.key)"
+fi
 changed=0
 if [ "$(sha256sum < nginx.conf.new)" != "$(sha256sum < nginx.conf 2>/dev/null || true)" ]; then
   [ -f nginx.conf ] && cp nginx.conf nginx.conf.prev
@@ -189,7 +212,8 @@ REMOTE
 log "checking the site"
 ok=0
 for _ in $(seq 1 10); do
-  if ssh_box "curl -fsS -m 5 http://localhost/ | grep -q '$BUNDLE'"; then ok=1; break; fi
+  # With the maintenance gate on, only the preview cookie gets past the 503 page.
+  if ssh_box "k=\$(cat $REMOTE_DIR/maintenance.key 2>/dev/null); curl -fsS -m 5 -H \"Cookie: an_preview=\$k\" http://localhost/ | grep -q '$BUNDLE'"; then ok=1; break; fi
   sleep 2
 done
 [ "$ok" = 1 ] || die "nginx is not serving the new build (expected $BUNDLE in the page)"

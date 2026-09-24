@@ -19,7 +19,10 @@ export function GuideFacts({ facts }: { facts: GuideFactsData }) {
       <ul className="guide-facts-grid" data-count={facts.items.length}>
         {facts.items.map((it, i) => (
           <li key={i} className="guide-facts-item" data-hue={HUES[i % HUES.length]} style={{ animationDelay: `${i * 140}ms` }}>
-            <span className="guide-facts-value">{it.value}</span>
+            {/* the tutor's pointer anchor sits on the big value, the thing a finger goes to */}
+            <span className="guide-facts-value" data-board-part={`items.${i}`} data-board-label={`${it.value} ${it.text}`}>
+              {it.value}
+            </span>
             <span className="guide-facts-text">{it.text}</span>
           </li>
         ))}

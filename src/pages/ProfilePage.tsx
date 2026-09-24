@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Award, Bell, BookOpen, Clock, ListChecks, LogOut, Settings, Shield, Target, TrendingUp } from "lucide-react";
+import { Award, Bell, BookOpen, Clock, ListChecks, LogOut, Mic, Settings, Shield, Sparkles, Target, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -10,6 +10,12 @@ import { useAppStore } from "@/store/appStore";
 import { usePresenceStore, formatDuration } from "@/store/presenceStore";
 import { logout } from "@/services/api";
 import { MyGuardiansCard } from "@/components/family/MyGuardiansCard";
+import { VoiceKeyPicker } from "@/components/VoiceKeyPicker";
+import { TutorLookPicker } from "@/components/TutorLookPicker";
+import { setAvatar, useAvatar } from "@/lib/guide/avatars";
+import { useVoiceKey, writeVoiceKey, type VoiceKey } from "@/lib/voiceKey";
+import { isNote } from "@/lib/notes/isNote";
+import { authService } from "@/services/authService";
 import { formatStudyTime } from "@/lib/xp";
 import { cn } from "@/lib/utils";
 
@@ -58,10 +64,16 @@ function SettingRow({ id, title, desc, initial }: { id: string; title: string; d
 }
 
 export default function ProfilePage() {
+  // The talk key lives on the account, so a change here is saved for every device.
+  const voiceKey = useVoiceKey();
+  const saveVoiceKey = (key: VoiceKey) => writeVoiceKey(key, (value) => authService.setVoiceKey(value));
+
   const userProfile = useAppStore((s) => s.userProfile);
   const xp = useAppStore((s) => s.xp);
   const stats = useAppStore((s) => s.stats);
-  const studySessions = useAppStore((s) => s.studySessions);
+  const allSessions = useAppStore((s) => s.studySessions);
+  // Their own notes aren't study sessions, so they don't count or show as recent activity.
+  const studySessions = useMemo(() => allSessions.filter((s) => !isNote(s)), [allSessions]);
   const studiedSeconds = usePresenceStore((s) => s.activeSeconds);
 
   const name = userProfile?.name ?? "Student";
@@ -139,6 +151,25 @@ export default function ProfilePage() {
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
+                  <Mic size={18} className="text-muted-foreground" />
+                  <h3 className="font-medium text-foreground">Talking to your tutor</h3>
+                </div>
+                <div className="ml-7 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Press this key during a lesson and your tutor stops to listen. Press it again to send your question.
+                  </p>
+                  <VoiceKeyPicker value={voiceKey} onChange={saveVoiceKey} />
+                </div>
+              </div>
+
+              <Separator />
+
+              <TutorLooks />
+
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <Bell size={18} className="text-muted-foreground" />
                   <h3 className="font-medium text-foreground">Notifications</h3>
                 </div>
@@ -207,3 +238,24 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+/** How the Teach mode tutors look: the avatar on each voice's pointer, saved on the account. */
+function TutorLooks() {
+  const male = useAvatar("male").id;
+  const female = useAvatar("female").id;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Sparkles size={18} className="text-muted-foreground" />
+        <h3 className="font-medium text-foreground">How your tutors look</h3>
+      </div>
+      <div className="ml-7 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          The face that rides on each voice's pointer in Teach mode. The pointer takes its colour.
+        </p>
+        <TutorLookPicker value={{ male, female }} onChange={(kind, id) => setAvatar(kind, id)} />
+      </div>
+    </div>
+  );
+}
+

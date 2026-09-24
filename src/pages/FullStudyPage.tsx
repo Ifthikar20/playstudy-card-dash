@@ -30,9 +30,11 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  SearchCheck,
   Sparkles,
   StickyNote,
   Sun,
+  Trash2,
   Wand2,
   Youtube,
   X,
@@ -42,6 +44,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
+import { ExamPlanStrip } from "@/components/exam/ExamPlanStrip";
 import { primeSpeechAudio } from "@/lib/guide/speech";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
 import { TopicSummary } from "@/components/TopicSummary";
@@ -63,6 +66,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SHEETS, setSheet, useSheet } from "@/lib/studySurface";
 import type { PdfPageInfo } from "@/components/pdf/PdfDocument";
 import { trackAction } from "@/lib/analytics";
+import { isNote, isNoteRoute, notePath } from "@/lib/notes/isNote";
+import { joinPhrase, useDictation, type Dictation } from "@/lib/guide/dictation";
+import { useTalkKey } from "@/lib/useTalkKey";
+import { voiceKeyLabel } from "@/lib/voiceKey";
+import { locateQuote } from "@/lib/guide/blocks";
+import { DictateButton } from "@/components/notes/DictateButton";
+import { NoteReview } from "@/components/notes/NoteReview";
+import { answerCheck, checkSection, deleteNote, fixCheck, renameNote, type CheckAnswer, type NoteCheck } from "@/services/notes";
 
 // PDF.js is big: it only loads when someone opens the PDF view.
 const PdfDocument = lazy(() => import("@/components/pdf/PdfDocument").then((m) => ({ default: m.PdfDocument })));
@@ -331,18 +342,49 @@ function PdfOpening({ label }: { label: string }) {
   );
 }
 
+/** A note with no words in it yet. */
+const wordsIn = (md: string | null | undefined): number => {
+  const text = (md ?? "").replace(/<[^>]+>/g, " ").replace(/[#*_>`~|[\]()-]/g, " ").trim();
+  return text ? text.split(/\s+/).length : 0;
+};
+/** Below this, a note is too short to teach from or to quiz on. */
+const NOTE_MIN_WORDS = 25;
+/** The title a note has until it is given one; shown as an empty title field. */
+const UNTITLED = "Untitled note";
+
+/*
+  One screen per session. Keyed by the id in the URL, so going from one session or
+  note to another starts clean: no wrong questions, open review, dictation or title
+  edit carried over from the last one.
+*/
 export default function FullStudyPage() {
   const { sessionId } = useParams<{ sessionId?: string }>();
+  return <FullStudyScreen key={sessionId ?? "picker"} />;
+}
+
+function FullStudyScreen() {
+  const { sessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const currentSession = useAppStore((s) => s.currentSession);
   const setCurrentSession = useAppStore((s) => s.setCurrentSession);
   const studySessions = useAppStore((s) => s.studySessions);
   const processStudyContent = useAppStore((s) => s.processStudyContent);
   const updateTopic = useAppStore((s) => s.updateTopic);
+  const updateTopicByDbId = useAppStore((s) => s.updateTopicByDbId);
+  const patchSession = useAppStore((s) => s.patchSession);
+  const removeSession = useAppStore((s) => s.removeSession);
   const syncPendingProgress = useAppStore((s) => s.syncPendingProgress);
 
+  /* A note of the student's own is this very screen, with the study scaffolding
+     (progress, outline, exam plan, section numbering) taken away and a page title
+     in its place. Decided by the URL first, so it looks right before it loads. */
+  const noteRoute = isNoteRoute(location.pathname);
+  const noteMode = noteRoute || isNote(currentSession);
+
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [notesPending, setNotesPending] = useState<Set<string>>(new Set());
   const notesRunning = useRef(false);
@@ -355,6 +397,19 @@ export default function FullStudyPage() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [boardOn, setBoardOn] = useState(true);
   const pageRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  // ---- every section's notes, by db id -------------------------------------------
+  // Anything that locks the notes (Teach mode today) unmounts an open writing
+  // surface, so it first has to know that what was typed is saved. Each section
+  // registers its PaperNotes here; `flushNotes` saves them all and says which one
+  // could not be saved, and why.
+  const notesHandles = useRef(new Map<number, PaperNotesHandle>());
+  const registerNotes = useCallback((dbId: number, handle: PaperNotesHandle | null) => {
+    if (handle) notesHandles.current.set(dbId, handle);
+    else notesHandles.current.delete(dbId);
+  }, []);
+  const [flushing, setFlushing] = useState(false);
 
   // ---- notes or the PDF ---------------------------------------------------------
   // A session built from a PDF (or slides, converted to one) can show the file
@@ -452,6 +507,7 @@ export default function FullStudyPage() {
         setCurrentSession(full);
       } catch {
         /* session not found → the empty state below handles it */
+        setLoadFailed(true);
       } finally {
         setIsLoadingSession(false);
       }
@@ -475,7 +531,7 @@ export default function FullStudyPage() {
   }, [loadStickies]);
   const stickyCount = stickyNotes.filter((n) => n.study_session_id === sessionId).length;
   // Arriving from a sticky note: go to the section it was kept from, once its notes exist.
-  const focusTopic = (useLocation().state as { focusTopic?: number } | null)?.focusTopic ?? null;
+  const focusTopic = (location.state as { focusTopic?: number } | null)?.focusTopic ?? null;
   useEffect(() => {
     if (!focusTopic) return;
     let tries = 0;
@@ -509,6 +565,8 @@ export default function FullStudyPage() {
   // the backend call is idempotent, so re-opening a session costs nothing.
   useEffect(() => {
     if (!currentSession || notesRunning.current) return;
+    // A note is the student's own writing: the AI never fills it in.
+    if (noteRoute || isNote(currentSession)) return;
     const todo = flattenSections(currentSession.extractedTopics).filter((s) => s.topic.db_id && !s.topic.notes);
     if (!todo.length) return;
     const sessionId = currentSession.id;
@@ -537,11 +595,193 @@ export default function FullStudyPage() {
     document.getElementById(`section-${topicId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  // The exam plan names sections by their server id; the page knows them by their
+  // own. These two keep the strip able to name a section and scroll to it.
+  const planSections = useMemo(() => sections.map((s) => ({ dbId: s.topic.db_id, title: s.topic.title })), [sections]);
+  const openPlanSection = useCallback(
+    (dbId: number) => {
+      const found = sections.find((s) => s.topic.db_id === dbId);
+      if (found) scrollTo(found.topic.id);
+    },
+    [sections, scrollTo],
+  );
+
+  // ---- the tutor checking a section's notes ------------------------------------
+  // `checking` while it reads them, `reviewing` while the pointer goes through what
+  // it asked. Both lock the notes, like Teach mode, so nothing moves under it.
+  const [checking, setChecking] = useState<number | null>(null);
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  const frozen = guideOpen || checking != null || reviewing != null;
+
+  // ---- dictation: one microphone for the page -----------------------------------
+  // Words go into ONE section's notes: the one being written in, else the only one,
+  // else the one most on screen. The talk key (chosen at onboarding) starts it too.
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+  const dictTarget = useRef<number | null>(null);
+  const [dictFor, setDictFor] = useState<number | null>(null);
+  const touched = useRef(false);
+  const insertDictated = useCallback((phrase: string) => {
+    const dbId = dictTarget.current;
+    const handle = dbId != null ? notesHandles.current.get(dbId) : undefined;
+    if (dbId == null || !handle) throw new Error("There is no page to write into.");
+    const sheet = pageRef.current?.querySelector<HTMLTextAreaElement>(`[data-guide-notes="${dbId}"] textarea[data-an-input]`);
+    const before = sheet
+      ? sheet.value.slice(0, sheet.selectionStart ?? sheet.value.length)
+      : (sectionsRef.current.find((s) => s.topic.db_id === dbId)?.topic.notes ?? "");
+    if (!handle.insertText(joinPhrase(before, phrase))) throw new Error("These notes can't be written in right now.");
+  }, []);
+  const dictation = useDictation(insertDictated, { markdown: true });
+
+  const pickDictTarget = (): number | null => {
+    const handles = notesHandles.current;
+    for (const [dbId, h] of handles) if (h.isEditing()) return dbId;
+    if (handles.size === 1) return [...handles.keys()][0];
+    let best: number | null = null;
+    let most = 0;
+    for (const dbId of handles.keys()) {
+      const el = pageRef.current?.querySelector<HTMLElement>(`[data-guide-notes="${dbId}"]`);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const seen = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+      if (seen > most) {
+        most = seen;
+        best = dbId;
+      }
+    }
+    return best;
+  };
+
+  const toggleDictation = (dbId?: number) => {
+    if (dictation.state !== "off") {
+      dictation.stop();
+      return;
+    }
+    if (frozen) return;
+    if (dictation.mode === "none") {
+      toast({ title: "Voice input isn't available here", description: "This browser or page can't use the microphone — type instead." });
+      return;
+    }
+    const target = dbId ?? pickDictTarget();
+    if (target == null) {
+      toast({ title: "Nothing to write into yet", description: "Scroll to a section's notes first." });
+      return;
+    }
+    dictTarget.current = target;
+    setDictFor(target);
+    touched.current = true;
+    void dictation.start();
+  };
+  const voiceKey = useTalkKey(() => toggleDictation(), { enabled: !frozen });
+
+  useEffect(() => {
+    if (dictation.error) toast({ title: "Dictation", description: dictation.error, variant: "destructive" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dictation.error]);
+  // Nothing may write into notes that something else is going through.
+  useEffect(() => {
+    if (frozen && dictation.state !== "off") dictation.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frozen]);
+  useEffect(() => {
+    if (dictation.state === "off") setDictFor(null);
+  }, [dictation.state]);
+
+  // ---- the note's title, saved as it is typed -------------------------------------
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const pendingTitle = useRef<string | null>(null);
+  const saveTitle = useCallback(async () => {
+    const title = pendingTitle.current;
+    const id = sessionId;
+    if (title == null || !id) return;
+    pendingTitle.current = null;
+    try {
+      const res = await renameNote(id, title.trim());
+      patchSession(id, { title: res.title, updatedAt: res.updatedAt ?? Date.now() });
+      const leaf = sectionsRef.current[0]?.topic.db_id;
+      if (leaf) updateTopicByDbId(id, leaf, { title: res.title });
+    } catch (e) {
+      toast({ title: "Couldn't rename this note", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, patchSession, updateTopicByDbId]);
+  useEffect(() => {
+    if (titleDraft == null) return;
+    pendingTitle.current = titleDraft;
+    const timer = window.setTimeout(() => void saveTitle(), 600);
+    return () => window.clearTimeout(timer);
+  }, [titleDraft, saveTitle]);
+  // Leaving mid-word still saves it.
+  useEffect(() => () => void saveTitle(), [saveTitle]);
+
+  // ---- a note made and left without a word in it goes away ----------------------
+  // Only one made on this visit ("New note" → here), so nothing the student kept
+  // on purpose is ever removed. Typing, dictating or naming it keeps it.
+  const fresh = !!(location.state as { fresh?: boolean } | null)?.fresh;
+  useEffect(() => {
+    const page = pageRef.current;
+    if (!fresh || !page) return;
+    const mark = () => {
+      touched.current = true;
+    };
+    page.addEventListener("input", mark, true);
+    return () => page.removeEventListener("input", mark, true);
+  });
+  useEffect(() => {
+    if (!fresh || !sessionId) return;
+    return () => {
+      if (touched.current) return;
+      // Only when they have gone somewhere else: the router has already moved the URL by
+      // now. A remount on the same page (an error boundary, a hot reload) is not leaving.
+      if (window.location.pathname === notePath(sessionId)) return;
+      const state = useAppStore.getState();
+      const note = state.currentSession?.id === sessionId ? state.currentSession : state.studySessions.find((s) => s.id === sessionId);
+      const text = flattenSections(note?.extractedTopics).map((s) => s.topic.notes ?? "").join("");
+      if (!note || text.trim() || (note.title && note.title !== UNTITLED)) return;
+      state.removeSession(sessionId);
+      void deleteNote(sessionId).catch(() => undefined);
+    };
+  }, [fresh, sessionId]);
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const removeNote = async () => {
+    if (!sessionId) return;
+    setDeleting(true);
+    try {
+      if (dictation.state !== "off") dictation.stop();
+      pendingTitle.current = null;
+      touched.current = true; // it's going anyway; the leave-empty sweep must not race it
+      await deleteNote(sessionId);
+      removeSession(sessionId);
+      navigate("/dashboard");
+      toast({ title: "Note deleted" });
+    } catch (e) {
+      toast({ title: "Couldn't delete this note", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+      setDeleting(false);
+    }
+  };
+
   // ------------------------------------------------------------------ states
+  if (sessionId && currentSession && currentSession.id !== sessionId) {
+    // The store still holds the last session while this one loads.
+    if (loadFailed && !isLoadingSession) return <GoneState note={noteRoute} />;
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-4">
+        <Skeleton className="h-8 w-72" />
+        <Skeleton className="h-3 w-full" />
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-40 rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+  if (noteRoute && !currentSession && !isLoadingSession) return <GoneState note />;
+
   if (!sessionId || (!currentSession && !isLoadingSession)) {
     return (
       <SessionPicker
-        sessions={studySessions}
+        sessions={studySessions.filter((s) => !isNote(s))}
         onCreate={() => setShowCreate(true)}
         onOpen={(s) => {
           setCurrentSession(s);
@@ -591,14 +831,217 @@ export default function FullStudyPage() {
   const pdfNoun = pdfLabel === "Slides" ? "slides" : "PDF"; // mid-sentence
   const teachReady = !showPdf || pdfPages.length > 0;
 
+  /** Save every open writing surface. Null when all of it is saved, otherwise a
+   *  sentence naming the section that isn't and why — for the toast. */
+  const flushNotes = async (): Promise<string | null> => {
+    const handles = [...notesHandles.current];
+    const results = await Promise.all(handles.map(async ([dbId, h]) => ((await h.flush()) ? null : { dbId, why: h.problem() })));
+    const failed = results.find((r) => r !== null);
+    if (!failed) return null;
+    const title = sections.find((s) => s.topic.db_id === failed.dbId)?.topic.title;
+    const why = (failed.why ?? "it couldn't be saved").replace(/[.\s]+$/, "");
+    return `${title ? `“${title}”` : "A section"} has changes that aren't saved yet — ${why.charAt(0).toLowerCase()}${why.slice(1)}.`;
+  };
+
+  const openTeach = async () => {
+    // Before any await: the audio unlock has to happen inside the click itself.
+    primeSpeechAudio();
+    setFlushing(true);
+    try {
+      const problem = await flushNotes();
+      if (problem) {
+        // Locking would close the surface and lose those words, so it waits.
+        toast({ title: "Teach mode can't start yet", description: problem, variant: "destructive" });
+        return;
+      }
+      setGuideOpen(true);
+    } finally {
+      setFlushing(false);
+    }
+  };
+
+  /** Save what is typed, then lock the notes. False (after saying why) when it can't be saved. */
+  const saveThenLock = async (what: string): Promise<boolean> => {
+    if (dictation.state !== "off") dictation.stop();
+    setFlushing(true);
+    try {
+      const problem = await flushNotes();
+      if (problem) toast({ title: `${what} can't start yet`, description: problem, variant: "destructive" });
+      return !problem;
+    } finally {
+      setFlushing(false);
+    }
+  };
+
+  /** The tutor reads a section's notes back and asks about anything that looks wrong. */
+  const startCheck = async (dbId: number) => {
+    primeSpeechAudio(); // inside the click: the questions are spoken
+    if (!(await saveThenLock("The check"))) return;
+    setChecking(dbId);
+    try {
+      const res = await checkSection(session.id, dbId);
+      if (res.checkedAt) updateTopicByDbId(session.id, dbId, { noteChecks: res.checks, notesCheckedAt: res.checkedAt });
+      if (res.checks.some((c) => c.answer == null)) setReviewing(dbId);
+      else toast({ title: res.message || "Nothing looks wrong in there." });
+    } catch (e) {
+      toast({ title: "Couldn't check these notes", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    } finally {
+      setChecking(null);
+    }
+  };
+
+  /** Back to the questions left open last time. */
+  const resumeReview = async (dbId: number) => {
+    primeSpeechAudio();
+    if (await saveThenLock("The questions")) setReviewing(dbId);
+  };
+
+  const reviewTopic = reviewing != null ? sections.find((s) => s.topic.db_id === reviewing)?.topic : undefined;
+  const noteTopic = noteMode ? sections[0]?.topic : undefined;
+  const noteWords = wordsIn(noteTopic?.notes);
+  const noteTitle = titleDraft ?? (session.title === UNTITLED ? "" : session.title);
+  const bareTalkKey = !voiceKey.alt && !voiceKey.ctrl && !voiceKey.meta;
+
   return (
     <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
       {/* Grain only — the colour is the sheet, which reaches the top of the
           content card and the overscroll beyond it. */}
       <div aria-hidden className="an-sheet-grain pointer-events-none absolute inset-0" />
       <div className="guide-shift relative p-4 md:p-6">
-        <div className="fade-in mx-auto w-full max-w-[76rem]">
-      {/* Header */}
+        <div className={cn("fade-in mx-auto w-full", noteMode ? "max-w-[64rem]" : "max-w-[76rem]")}>
+      {noteMode ? (
+        /* A note: Notion's shape. A quiet top bar (where you are · what you can do),
+           then the page's own title, big and editable in place, lined up with the
+           text below it. Everything under the title is the same Full Study section. */
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="-ml-1 flex min-w-0 items-center gap-0.5">
+              <ShellTrigger />
+              <Link
+                to="/dashboard"
+                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+              >
+                <ChevronLeft className="size-3.5" />
+                Dashboard
+              </Link>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">/ Notes</span>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="mr-1 hidden text-xs tabular-nums text-muted-foreground sm:inline">
+                {noteWords} word{noteWords === 1 ? "" : "s"}
+              </span>
+              <DictateButton
+                dictation={dictation}
+                disabled={frozen || !noteTopic?.db_id}
+                onToggle={() => toggleDictation(noteTopic?.db_id ?? undefined)}
+                className="h-8"
+              />
+              <button
+                type="button"
+                disabled={frozen || flushing || !noteTopic?.db_id || noteWords === 0}
+                onClick={() => noteTopic?.db_id && void startCheck(noteTopic.db_id)}
+                title={noteWords === 0 ? "Write something first" : "Your tutor reads these notes and asks about anything that looks wrong"}
+                className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-foreground/[0.04] px-3 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {checking != null ? <Loader2 className="size-3.5 animate-spin" /> : <SearchCheck className="size-3.5" />}
+                {checking != null ? "Checking…" : "Check my notes"}
+              </button>
+              <button
+                type="button"
+                disabled={flushing || frozen || noteWords < NOTE_MIN_WORDS}
+                onClick={() => void openTeach()}
+                title={
+                  noteWords < NOTE_MIN_WORDS
+                    ? "Write a little more first — Teach mode needs something to explain"
+                    : "Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
+                }
+                className="flex h-8 items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+              >
+                <GraduationCap className="size-3.5" />
+                Teach mode
+              </button>
+              {guideOpen && (
+                <button
+                  type="button"
+                  onClick={() => setBoardOn((v) => !v)}
+                  title={boardOn ? "Hide the working-out board" : "Show the working-out board"}
+                  aria-pressed={boardOn}
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
+                    boardOn
+                      ? "border-pink-500/40 bg-pink-500/10 text-pink-700 dark:text-pink-300"
+                      : "border-border bg-foreground/[0.04] text-muted-foreground hover:bg-foreground/[0.08]",
+                  )}
+                >
+                  <Presentation className="size-3.5" />
+                  Board
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setReadMode(true)}
+                disabled={noteWords === 0}
+                title="Distraction-free reading"
+                aria-label="Read mode"
+                className="flex size-8 items-center justify-center rounded-full border border-border bg-foreground/[0.04] text-foreground transition-colors hover:bg-foreground/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <BookText className="size-3.5" />
+              </button>
+              <BackgroundPicker />
+              <Popover open={confirmDelete} onOpenChange={setConfirmDelete}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={frozen || deleting}
+                    title="Delete this note"
+                    aria-label="Delete this note"
+                    className="flex size-8 items-center justify-center rounded-full border border-border bg-foreground/[0.04] text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-3">
+                  <p className="text-sm font-semibold">Delete this note?</p>
+                  <p className="mt-1 text-xs text-muted-foreground">It goes for good, with anything the tutor asked about it.</p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setConfirmDelete(false)}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" variant="destructive" className="h-8" disabled={deleting} onClick={() => void removeNote()}>
+                      {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      Delete
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          {/* Same margins as the text under it, so the title sits over the first letter. */}
+          <div className="px-6 pt-10 sm:px-12 sm:pt-14 lg:px-16">
+            <div className="mx-auto max-w-[78ch]">
+              <input
+                value={noteTitle}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter goes on to the page, as in Notion.
+                  if (e.key === "Enter" && noteTopic?.db_id) {
+                    e.preventDefault();
+                    notesHandles.current.get(noteTopic.db_id)?.startEditing(0);
+                  }
+                }}
+                onBlur={() => void saveTitle()}
+                placeholder="Untitled"
+                aria-label="Note title"
+                // A note just made starts at its title, as in Notion; Enter goes on to the page.
+                autoFocus={fresh && !session.title.trim().replace(UNTITLED, "")}
+                maxLength={200}
+                disabled={frozen}
+                className="w-full bg-transparent text-3xl font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/40 disabled:opacity-100 md:text-[40px] md:leading-tight"
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
           {/* What the removed top strip carried, in the page itself: the
@@ -659,17 +1102,16 @@ export default function FullStudyPage() {
           )}
           <button
             type="button"
-            disabled={!teachReady}
-            onClick={() => {
-              primeSpeechAudio();
-              setGuideOpen(true);
-            }}
+            disabled={!teachReady || flushing}
+            onClick={() => void openTeach()}
             title={
               !teachReady
                 ? `Opening the ${pdfNoun}…`
-                : showPdf
-                  ? `Teach mode: AnotherNotes AI goes through your ${pdfNoun} page by page, pointing at each part as it explains it`
-                  : "Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
+                : flushing
+                  ? "Saving your notes first…"
+                  : showPdf
+                    ? `Teach mode: AnotherNotes AI goes through your ${pdfNoun} page by page, pointing at each part as it explains it`
+                    : "Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
             }
             className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 disabled:hover:scale-100"
           >
@@ -759,11 +1201,44 @@ export default function FullStudyPage() {
           </div>
         </div>
       </div>
+      )}
 
-      <div className="guide-grid mt-6 grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      {/* Studying for an exam: what today is for, and whether they're keeping up. */}
+      {!noteMode && (
+        <ExamPlanStrip
+          sessionId={session.id}
+          sessionTitle={session.title}
+          sections={planSections}
+          onOpenSection={openPlanSection}
+        />
+      )}
+
+      <div
+        className={cn(
+          "guide-grid grid gap-x-10 gap-y-6",
+          noteMode ? "mt-0" : "mt-6 lg:grid-cols-[minmax(0,1fr)_15rem]",
+        )}
+      >
         {/* Document: the uploaded PDF itself… */}
         {showPdf ? (
           <div className="order-2 min-w-0 lg:order-1">
+            {/* The view choice is remembered per session, so a student who
+                picked the PDF once comes back to a page with none of the
+                editing tools on it. This says where they went, one click away. */}
+            {!pdfError && (
+              <div
+                data-an-chrome=""
+                className="mx-auto mb-4 flex w-full max-w-[980px] flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-border bg-foreground/[0.03] px-4 py-2 text-xs text-muted-foreground"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <NotebookText className="size-3.5 shrink-0" />
+                  Editing, dictation, checks and quizzes are in Notes view
+                </span>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setView("notes")}>
+                  Switch to Notes
+                </Button>
+              </div>
+            )}
             {pdfError ? (
               <div className="rounded-2xl border border-border bg-foreground/[0.03] p-6 text-center">
                 <p className="text-sm font-semibold">{pdfError}</p>
@@ -789,7 +1264,21 @@ export default function FullStudyPage() {
               total={sections.length}
               session={session}
               notesLoading={notesPending.has(s.topic.id)}
-              guideOpen={guideOpen}
+              frozen={frozen}
+              registerNotes={registerNotes}
+              noteMode={noteMode}
+              fresh={fresh}
+              placeholder={
+                bareTalkKey
+                  ? "Start writing, or click Dictate and talk. Type / for headings, lists and more."
+                  : `Start writing, or press ${voiceKeyLabel(voiceKey)} and talk. Type / for headings, lists and more.`
+              }
+              dictation={dictation}
+              dictating={dictFor != null && dictFor === s.topic.db_id}
+              onDictate={toggleDictation}
+              onCheck={startCheck}
+              checking={checking === s.topic.db_id}
+              onResume={resumeReview}
               onWrong={addWrong}
               onRight={clearWrong}
               onNext={() => {
@@ -800,6 +1289,7 @@ export default function FullStudyPage() {
             />
           ))}
 
+          {!noteMode && (
           <div id="session-end" className="rounded-2xl border border-border bg-foreground/[0.03] p-6 text-center">
             {pct >= 100 ? (
               <>
@@ -818,11 +1308,12 @@ export default function FullStudyPage() {
               </>
             )}
           </div>
+          )}
         </div>
         )}
 
         {/* Outline */}
-        <nav className="order-1 hidden lg:order-2 lg:block">
+        <nav className={cn("order-1 hidden lg:order-2", !noteMode && "lg:block")}>
           <div className={cn("sticky top-2 space-y-1", showPdf && "max-h-[calc(100vh-1rem)] overflow-y-auto pb-2")}>
             <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {showPdf ? "Pages" : "On this page"}
@@ -890,6 +1381,48 @@ export default function FullStudyPage() {
           source={showPdf ? "pdf" : "notes"}
         />
       )}
+      {reviewing != null && reviewTopic && (
+        <NoteReview
+          key={reviewing}
+          host={pageRef.current}
+          checks={reviewTopic.noteChecks ?? []}
+          locate={(c: NoteCheck) => {
+            // Looked up fresh every time: a fix re-renders the notes.
+            const root = pageRef.current?.querySelector<HTMLElement>(`[data-guide-notes="${reviewing}"]`);
+            return root ? locateQuote(root, c.quote, c.start) : null;
+          }}
+          onAnswer={async (c: NoteCheck, answer: CheckAnswer) => {
+            const checks = await answerCheck(session.id, reviewing, c.id, answer);
+            updateTopicByDbId(session.id, reviewing, { noteChecks: checks });
+          }}
+          onFix={async (c: NoteCheck) => {
+            try {
+              const res = await fixCheck(session.id, reviewing, c.id);
+              updateTopicByDbId(session.id, reviewing, { notes: res.notes, noteChecks: res.checks });
+              patchSession(session.id, { updatedAt: Date.now() });
+            } catch (e) {
+              if ((e as { status?: number }).status === 409) {
+                throw new Error("Those words have changed since the check — fix this one yourself.");
+              }
+              throw e;
+            }
+          }}
+          onClose={() => setReviewing(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A note or session that isn't there (deleted, or never was). */
+function GoneState({ note }: { note?: boolean }) {
+  return (
+    <div className="mx-auto mt-16 w-full max-w-sm text-center">
+      <p className="text-sm font-semibold">{note ? "This note isn't here any more" : "This session isn't here any more"}</p>
+      <p className="mt-1 text-xs text-muted-foreground">It may have been deleted, or the link is wrong.</p>
+      <Button asChild size="sm" variant="outline" className="mt-4">
+        <Link to="/dashboard">Back to the dashboard</Link>
+      </Button>
     </div>
   );
 }
@@ -902,7 +1435,17 @@ function StudySection({
   total,
   session,
   notesLoading,
-  guideOpen,
+  frozen,
+  registerNotes,
+  noteMode,
+  fresh,
+  placeholder,
+  dictation,
+  dictating,
+  onDictate,
+  onCheck,
+  checking,
+  onResume,
   onWrong,
   onRight,
   onNext,
@@ -911,7 +1454,30 @@ function StudySection({
   total: number;
   session: StudySession;
   notesLoading: boolean;
-  guideOpen: boolean;
+  /** Something is going through these notes (Teach mode, a check): nothing may
+   *  change them or reflow them until it is done, so every tool that writes is
+   *  disabled and the notes are read-only. */
+  frozen: boolean;
+  /** Tells the page where this section's notes are, so it can save them before
+   *  anything locks them. Called with null when they go. */
+  registerNotes: (dbId: number, handle: PaperNotesHandle | null) => void;
+  /** The student's own note: no section heading (the page title is it), may be
+   *  empty, never written by the AI, and quizzes wait until there is enough in it. */
+  noteMode: boolean;
+  /** A note made on this visit: its title has the caret, so the page waits to be clicked into. */
+  fresh: boolean;
+  /** What an empty page says. */
+  placeholder: string;
+  /** The page's one microphone. */
+  dictation: Dictation;
+  /** Dictation is writing into THIS section. */
+  dictating: boolean;
+  onDictate: (dbId: number) => void;
+  /** The tutor checks this section's notes. */
+  onCheck: (dbId: number) => void;
+  checking: boolean;
+  /** Go through the questions left open from the last check. */
+  onResume: (dbId: number) => void;
   onWrong: (e: WrongEntry) => void;
   onRight: (key: string) => void;
   onNext: () => void;
@@ -923,6 +1489,8 @@ function StudySection({
   const completeTopic = useAppStore((s) => s.completeTopic);
   const setTopicQuestions = useAppStore((s) => s.setTopicQuestions);
   const updateTopic = useAppStore((s) => s.updateTopic);
+  const updateTopicByDbId = useAppStore((s) => s.updateTopicByDbId);
+  const patchSession = useAppStore((s) => s.patchSession);
   const reward = useAppStore((s) => (s.lastTopicReward?.topicId === topic.id ? s.lastTopicReward : null));
 
   const questions = topic.questions ?? [];
@@ -956,7 +1524,18 @@ function StudySection({
   };
 
   // Notes editing
-  const notesRef = useRef<PaperNotesHandle>(null);
+  const notesRef = useRef<PaperNotesHandle | null>(null);
+  /* A callback ref, so the page's register follows the handle through every
+     change: PaperNotes only mounts once notes exist, and rebuilds its handle
+     each time it opens or closes the writing surface. */
+  const dbId = topic.db_id;
+  const bindNotes = useCallback(
+    (handle: PaperNotesHandle | null) => {
+      notesRef.current = handle;
+      if (dbId) registerNotes(dbId, handle);
+    },
+    [dbId, registerNotes],
+  );
   const [editing, setEditing] = useState<null | "head" | "notes">(null);
   const [draftTitle, setDraftTitle] = useState(topic.title);
   const [draftDesc, setDraftDesc] = useState(topic.description ?? "");
@@ -1005,11 +1584,20 @@ function StudySection({
       const res = await updateTopicDetails(session.id, topic.db_id, { notes: next });
       const adopted = typeof res?.notes === "string" ? res.notes : next;
       updateTopic(session.id, topic.id, { notes: adopted });
+      // An edit can move or remove the words the tutor asked about; the server
+      // re-places its questions and says which are still there.
+      if (Array.isArray(res?.noteChecks)) updateTopicByDbId(session.id, topic.db_id, { noteChecks: res.noteChecks });
+      patchSession(session.id, { updatedAt: res?.updatedAt ?? Date.now() });
       setDraftNotes(adopted);
       return adopted;
     },
-    [session.id, topic.db_id, topic.id, updateTopic],
+    [session.id, topic.db_id, topic.id, updateTopic, updateTopicByDbId, patchSession],
   );
+
+  const openChecks = (topic.noteChecks ?? []).filter((c) => c.answer == null).length;
+  const words = useMemo(() => wordsIn(topic.notes), [topic.notes]);
+  // A note too short to quiz on doesn't offer it.
+  const studyTools = !noteMode || words >= NOTE_MIN_WORDS;
 
   const writeNotes = async (force = false) => {
     if (!topic.db_id) return;
@@ -1025,8 +1613,12 @@ function StudySection({
     }
   };
 
+  // The server wants at least 2 characters; below that, Apply stays disabled
+  // rather than sending something it will refuse.
+  const canRevise = instruction.trim().length >= 2;
+
   const revise = async () => {
-    if (!topic.db_id || !instruction.trim()) return;
+    if (!topic.db_id || !canRevise || revising || frozen) return;
     setRevising(true);
     try {
       const notes = await reviseTopicNotes(session.id, topic.db_id, instruction.trim());
@@ -1090,7 +1682,8 @@ function StudySection({
 
   return (
     <section id={`section-${topic.id}`} className="scroll-mt-4">
-      {/* Heading */}
+      {/* Heading — a note's is the page title above it */}
+      {!noteMode && (
       <div className="group">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Section {index} of {total}
@@ -1106,7 +1699,7 @@ function StudySection({
             />
             <Textarea value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} rows={2} placeholder="One-line summary of this section" className="text-sm" />
             <div className="flex gap-2">
-              <Button size="sm" onClick={save} disabled={saving}>
+              <Button size="sm" onClick={save} disabled={saving || frozen}>
                 {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                 Save
               </Button>
@@ -1128,13 +1721,22 @@ function StudySection({
             {topic.db_id && (
               <button
                 type="button"
+                disabled={frozen}
                 onClick={() => {
                   setDraftTitle(topic.title);
                   setDraftDesc(topic.description ?? "");
                   setEditing("head");
                 }}
-                className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                // Faint rather than invisible: a control nobody can see is one
+                // nobody finds, and on touch there is no hover to reveal it.
+                className={cn(
+                  "mt-1 rounded p-1 text-muted-foreground transition-opacity",
+                  frozen
+                    ? "cursor-not-allowed opacity-20"
+                    : "opacity-40 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100",
+                )}
                 aria-label="Edit section"
+                title={frozen ? "Paused while AnotherNotes is going through these notes" : "Edit the title and summary"}
               >
                 <Pencil className="size-3.5" />
               </button>
@@ -1142,6 +1744,7 @@ function StudySection({
           </div>
         )}
       </div>
+      )}
 
       {/* Notes — a page, not a card. No border, no radius, no shadow, no
           toolbar rail AND NO FILL OF ITS OWN: this block used to paint
@@ -1149,11 +1752,35 @@ function StudySection({
           page's grain and read as a third material. The text now sits directly
           on the chosen sheet, with a real page margin, and the 78ch measure is
           centred so the slack falls on both sides. */}
-      <div className="group/notes relative mt-5 px-6 py-5 sm:px-12 sm:py-8 lg:px-16">
-        {topic.db_id && topic.notes && (
+      <div className={cn("group/notes relative px-6 sm:px-12 lg:px-16", noteMode ? "pb-8 pt-3" : "mt-5 py-5 sm:py-8")}>
+        {/* The tutor asked about these notes and not everything is answered yet. */}
+        {openChecks > 0 && !frozen && topic.db_id && (
           <div
             data-an-chrome=""
-            className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center justify-end gap-1 transition-opacity sm:opacity-0 sm:focus-within:opacity-100 sm:group-hover/notes:opacity-100"
+            className="mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-pink-500/30 bg-pink-500/[0.06] px-3.5 py-2 text-xs"
+          >
+            <span className="flex min-w-0 items-center gap-2 text-foreground">
+              <SearchCheck className="size-3.5 shrink-0 text-pink-600 dark:text-pink-300" />
+              Your tutor has {openChecks} question{openChecks === 1 ? "" : "s"} about these notes
+            </span>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onResume(topic.db_id!)}>
+              Go through {openChecks === 1 ? "it" : "them"}
+            </Button>
+          </div>
+        )}
+        {topic.db_id && (topic.notes || noteMode) && (
+          /* Always there. It used to be invisible on anything 640px or wider until
+             the pointer was over this exact section, which read as "editing is
+             gone". Muted at rest so it doesn't compete with the notes; full while
+             in use, and always full on touch, where nothing hovers. */
+          <div
+            data-an-chrome=""
+            className={cn(
+              "mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center justify-end gap-1 transition-opacity",
+              asking
+                ? "opacity-100"
+                : "opacity-70 hover:opacity-100 focus-within:opacity-100 group-hover/notes:opacity-100 [@media(pointer:coarse)]:opacity-100",
+            )}
           >
             {keyIdeas.length > 0 && (
               <Button
@@ -1168,12 +1795,38 @@ function StudySection({
                 Keep {keyIdeas.length} key idea{keyIdeas.length === 1 ? "" : "s"}
               </Button>
             )}
+            {/* In a note these two live in the page's top bar; one of each is enough. */}
+            {!noteMode && (
+              <>
+                <DictateButton
+                  compact
+                  dictation={dictating ? dictation : { ...dictation, state: "off", interim: "" }}
+                  disabled={frozen || (dictation.state !== "off" && !dictating)}
+                  onToggle={() => onDictate(topic.db_id!)}
+                  className="text-muted-foreground"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => onCheck(topic.db_id!)}
+                  disabled={frozen || checking || !topic.notes?.trim()}
+                  title={frozen ? "Paused while AnotherNotes is going through these notes" : "Your tutor reads these notes and asks about anything that looks wrong"}
+                >
+                  {checking ? <Loader2 className="size-3.5 animate-spin" /> : <SearchCheck className="size-3.5" />}
+                  {checking ? "Checking…" : "Check these notes"}
+                </Button>
+              </>
+            )}
             <Button
               variant="ghost"
               size="sm"
               className={cn("h-7 text-xs", asking ? "text-foreground" : "text-muted-foreground")}
               onClick={() => { setAsking((a) => !a); setInstruction(""); }}
-              disabled={revising}
+              disabled={revising || frozen || !topic.notes?.trim()}
+              // It replaces the whole section, so it waits while anything is
+              // going through these notes.
+              title={frozen ? "Paused while AnotherNotes is going through these notes" : "Tell the AI what to change in this section"}
             >
               <Wand2 className="size-3.5" />
               Ask AI to change
@@ -1186,8 +1839,8 @@ function StudySection({
               variant="ghost"
               size="sm"
               className="h-7 text-xs text-muted-foreground"
-              disabled={guideOpen}
-              title={guideOpen ? "Writing pauses while AnotherNotes is teaching" : "Put the caret in these notes (or just click where you want to write)"}
+              disabled={frozen}
+              title={frozen ? "Writing pauses while AnotherNotes is going through these notes" : "Put the caret in these notes (or just click where you want to write)"}
               onClick={() => notesRef.current?.startEditing()}
             >
               <Pencil className="size-3.5" />
@@ -1202,28 +1855,33 @@ function StudySection({
               <input
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") revise(); if (e.key === "Escape") setAsking(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter") void revise(); if (e.key === "Escape") setAsking(false); }}
                 placeholder="Tell the AI what to change — e.g. “make the example about basketball”, “simplify the second part”"
                 className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-foreground"
                 autoFocus
-                disabled={revising}
+                maxLength={600}
+                disabled={revising || frozen}
               />
-              <Button size="sm" className="h-9" onClick={revise} disabled={revising || !instruction.trim()}>
+              <Button size="sm" className="h-9" onClick={revise} disabled={revising || frozen || !canRevise}>
                 {revising ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
                 Apply
               </Button>
             </div>
           </div>
         )}
-        {topic.notes ? (
+        {topic.notes || (noteMode && topic.db_id) ? (
           <PaperNotes
-            ref={notesRef}
-            md={topic.notes}
+            ref={bindNotes}
+            md={topic.notes ?? ""}
             guideKey={topic.db_id}
             prose={NOTE_PROSE}
             canEdit={!!topic.db_id}
-            locked={guideOpen}
+            locked={frozen}
             onCommit={saveNotes}
+            allowEmpty={noteMode}
+            placeholder={noteMode ? placeholder : undefined}
+            openOnMount={noteMode && !fresh && !topic.notes?.trim()}
+            interim={dictating ? dictation.interim : undefined}
           />
         ) : notesLoading || writing ? (
           <div className="mx-auto max-w-[78ch] space-y-2.5 py-1">
@@ -1240,14 +1898,14 @@ function StudySection({
           <div className="mx-auto flex max-w-[78ch] flex-col items-start gap-3 py-2">
             <p className="text-sm text-muted-foreground">Notes couldn't be written automatically.</p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => writeNotes(false)} disabled={!topic.db_id}>
+              <Button size="sm" onClick={() => writeNotes(false)} disabled={!topic.db_id || writing || frozen}>
                 <Sparkles className="size-3.5" />
                 Write notes with AI
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!topic.db_id || writing}
+                disabled={!topic.db_id || writing || frozen}
                 onClick={async () => {
                   // Seed one line so there is something to put a caret in, then
                   // put it there. There is no raw-Markdown mode to fall back to.
@@ -1263,6 +1921,8 @@ function StudySection({
         )}
       </div>
 
+      {studyTools && (
+      <>
       <SectionFlashcards session={session} topic={topic} />
 
       {/* Quiz */}
@@ -1395,6 +2055,8 @@ function StudySection({
           </div>
         )}
       </div>
+      </>
+      )}
 
     </section>
   );

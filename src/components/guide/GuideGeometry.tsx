@@ -17,6 +17,26 @@ const FILL = "rgba(236,72,153,0.10)";
 const val = (g: GuideGeometryData, k: string) => g.values[k];
 const text = (g: GuideGeometryData, k: string, fallback = "") => g.labels[k] || (val(g, k) != null ? String(val(g, k)) : fallback);
 
+/** The tutor pointer's name for a part: what it is, plus the words printed on it when
+ *  they add something ("side c, hypotenuse", "width, 4 cm"), since a bare "5" or "r"
+ *  says nothing about which part it is. */
+function partLabel(name: string, shown = "") {
+  const s = shown.trim();
+  const low = s.toLowerCase();
+  if (!s || name.toLowerCase().split(" ").includes(low)) return name;
+  return low.includes(name.toLowerCase()) ? s : `${name}, ${s}`;
+}
+
+/** An unpainted strip `half` wide either side of a segment, for the pointer to outline:
+ *  a bare line's box has no height when it's level (the stroke isn't counted), so a
+ *  level edge on its own would give the pointer nothing to ring. */
+function Strip({ p, q, half = 6 }: { p: { x: number; y: number }; q: { x: number; y: number }; half?: number }) {
+  const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+  const nx = (-(q.y - p.y) / len) * half;
+  const ny = ((q.x - p.x) / len) * half;
+  return <polygon points={`${p.x + nx},${p.y + ny} ${q.x + nx},${q.y + ny} ${q.x - nx},${q.y - ny} ${p.x - nx},${p.y - ny}`} fill="none" stroke="none" />;
+}
+
 /** Fit a set of points into the drawing area, flipping y so maths-up is screen-up. */
 function fit(pts: { x: number; y: number }[], pad = 58) {
   const xs = pts.map((p) => p.x);
@@ -63,41 +83,62 @@ function Triangle({ geo }: { geo: GuideGeometryData }) {
   };
   // the right angle sits at whichever vertex is opposite the longest side
   const rightAt = right ? (valid ? (c! >= a! && c! >= b! ? pC : a! >= b! ? pA : pB) : pA) : null;
+  const sq = rightAt && { x: rightAt.x - (rightAt === pB ? 16 : 0), y: rightAt.y - (rightAt === pC ? 0 : 16) };
   const sides: [string, { x: number; y: number }][] = [
     ["a", mid(pB, pC)],
     ["b", mid(pA, pC)],
     ["c", mid(pA, pB)],
   ];
+  const ends: Record<string, [{ x: number; y: number }, { x: number; y: number }]> = { a: [pB, pC], b: [pA, pC], c: [pA, pB] };
+  /* The tutor's pointer anchors. A side or a corner is part of the one polygon, so each
+     gets a group of its own holding an unpainted strip along its edge (or a small
+     unpainted dot on its corner) plus its label, if any: the outline then covers the real
+     edge even when it's unlabelled, and the tip goes to the edge's true midpoint (or the
+     corner itself), not to the label printed outside the triangle. */
   return (
     <>
       <polygon points={`${pA.x},${pA.y} ${pB.x},${pB.y} ${pC.x},${pC.y}`} fill={FILL} stroke={INK} strokeWidth={2.5} strokeLinejoin="round" />
-      {rightAt && (
+      {sq && (
         <rect
-          x={rightAt.x - (rightAt === pB ? 16 : 0)}
-          y={rightAt.y - (rightAt === pC ? 0 : 16)}
+          x={sq.x}
+          y={sq.y}
           width={16}
           height={16}
           fill="none"
           stroke={INK}
           strokeWidth={1.8}
+          data-board-part="right_angle"
+          data-board-label="right angle"
+          data-part-at={`${sq.x + 8} ${sq.y + 8}`}
         />
       )}
       {sides.map(([k, p]) => {
         const label = text(geo, k);
-        return label ? (
-          <text key={k} x={out(p, 16).x} y={out(p, 16).y} className="guide-geo-label" textAnchor="middle">
-            {label}
-          </text>
-        ) : null;
+        const [p1, p2] = ends[k];
+        return (
+          <g key={k} data-board-part={`sides.${k}`} data-board-label={partLabel(`side ${k}`, label)} data-part-at={`${p.x} ${p.y}`}>
+            <Strip p={p1} q={p2} />
+            {label && (
+              <text x={out(p, 16).x} y={out(p, 16).y} className="guide-geo-label" textAnchor="middle">
+                {label}
+              </text>
+            )}
+          </g>
+        );
       })}
       {(["A", "B", "C"] as const).map((k, i) => {
         const p = [pA, pB, pC][i];
         const label = geo.labels[k] || (val(geo, k) != null ? `${val(geo, k)}°` : "");
-        return label ? (
-          <text key={k} x={out(p).x} y={out(p).y} className="guide-geo-vertex" textAnchor="middle">
-            {label}
-          </text>
-        ) : null;
+        return (
+          <g key={k} data-board-part={`vertices.${k}`} data-board-label={partLabel(`angle ${k}`, label)} data-part-at={`${p.x} ${p.y}`}>
+            <circle cx={p.x} cy={p.y} r={8} fill="none" stroke="none" />
+            {label && (
+              <text x={out(p).x} y={out(p).y} className="guide-geo-vertex" textAnchor="middle">
+                {label}
+              </text>
+            )}
+          </g>
+        );
       })}
     </>
   );
@@ -109,28 +150,41 @@ function Circle({ geo }: { geo: GuideGeometryData }) {
   const r = 92;
   const show = geo.show;
   const rLabel = text(geo, "radius", "r");
+  // Where the tutor's pointer touches each line: halfway along it, except the diameter,
+  // whose true midpoint is the centre dot the radius also starts from, so it's touched
+  // halfway out to the left instead; and the tangent, touched where it meets the circle.
   return (
     <>
       <circle cx={cx} cy={cy} r={r} fill={FILL} stroke={INK} strokeWidth={2.5} />
-      <circle cx={cx} cy={cy} r={3.5} fill={INK} />
+      <circle cx={cx} cy={cy} r={3.5} fill={INK} data-board-part="centre" data-board-label="centre" data-part-at={`${cx} ${cy}`} />
       {show.includes("diameter") && (
-        <>
+        <g data-board-part="diameter" data-board-label={partLabel("diameter", geo.labels.diameter)} data-part-at={`${cx - r / 2} ${cy}`}>
           <line x1={cx - r} y1={cy} x2={cx + r} y2={cy} stroke={INK} strokeWidth={2} />
           <text x={cx} y={cy - 10} className="guide-geo-label" textAnchor="middle">
             {geo.labels.diameter || "d"}
           </text>
-        </>
+        </g>
       )}
       {(show.includes("radius") || !show.length) && (
-        <>
+        <g data-board-part="radius" data-board-label={partLabel("radius", rLabel)} data-part-at={`${cx + (r / 2) * Math.cos(-0.6)} ${cy + (r / 2) * Math.sin(-0.6)}`}>
           <line x1={cx} y1={cy} x2={cx + r * Math.cos(-0.6)} y2={cy + r * Math.sin(-0.6)} stroke={INK} strokeWidth={2} />
           <text x={cx + 46} y={cy - 24} className="guide-geo-label" textAnchor="middle">
             {rLabel}
           </text>
-        </>
+        </g>
       )}
-      {show.includes("chord") && <line x1={cx - r * 0.8} y1={cy + r * 0.6} x2={cx + r * 0.8} y2={cy + r * 0.6} stroke={INK} strokeWidth={2} strokeDasharray="6 4" />}
-      {show.includes("tangent") && <line x1={cx - r - 20} y1={cy - r} x2={cx + r + 20} y2={cy - r} stroke={INK} strokeWidth={2} strokeDasharray="6 4" />}
+      {show.includes("chord") && (
+        <g data-board-part="chord" data-board-label="chord" data-part-at={`${cx} ${cy + r * 0.6}`}>
+          <line x1={cx - r * 0.8} y1={cy + r * 0.6} x2={cx + r * 0.8} y2={cy + r * 0.6} stroke={INK} strokeWidth={2} strokeDasharray="6 4" />
+          <Strip p={{ x: cx - r * 0.8, y: cy + r * 0.6 }} q={{ x: cx + r * 0.8, y: cy + r * 0.6 }} />
+        </g>
+      )}
+      {show.includes("tangent") && (
+        <g data-board-part="tangent" data-board-label="tangent" data-part-at={`${cx} ${cy - r}`}>
+          <line x1={cx - r - 20} y1={cy - r} x2={cx + r + 20} y2={cy - r} stroke={INK} strokeWidth={2} strokeDasharray="6 4" />
+          <Strip p={{ x: cx - r - 20, y: cy - r }} q={{ x: cx + r + 20, y: cy - r }} />
+        </g>
+      )}
     </>
   );
 }
@@ -143,16 +197,38 @@ function Box({ geo }: { geo: GuideGeometryData }) {
   const bh = hv * k;
   const x = (W - bw) / 2;
   const y = (H - bh) / 2;
+  // The width and height are edges of the one rectangle, so each gets a group with an
+  // unpainted strip along its edge beside its label, for the pointer to outline and
+  // touch at the edge's true midpoint (the triangle's sides do the same).
   return (
     <>
       <rect x={x} y={y} width={bw} height={bh} fill={FILL} stroke={INK} strokeWidth={2.5} rx={2} />
-      {geo.show.includes("diagonal") && <line x1={x} y1={y + bh} x2={x + bw} y2={y} stroke={INK} strokeWidth={2} strokeDasharray="6 4" />}
-      <text x={x + bw / 2} y={y + bh + 24} className="guide-geo-label" textAnchor="middle">
-        {text(geo, "width")}
-      </text>
-      <text x={x - 12} y={y + bh / 2 + 5} className="guide-geo-label" textAnchor="end">
-        {text(geo, "height")}
-      </text>
+      {geo.show.includes("diagonal") && (
+        <line
+          x1={x}
+          y1={y + bh}
+          x2={x + bw}
+          y2={y}
+          stroke={INK}
+          strokeWidth={2}
+          strokeDasharray="6 4"
+          data-board-part="diagonal"
+          data-board-label="diagonal"
+          data-part-at={`${x + bw / 2} ${y + bh / 2}`}
+        />
+      )}
+      <g data-board-part="width" data-board-label={partLabel("width", text(geo, "width"))} data-part-at={`${x + bw / 2} ${y + bh}`}>
+        <Strip p={{ x, y: y + bh }} q={{ x: x + bw, y: y + bh }} />
+        <text x={x + bw / 2} y={y + bh + 24} className="guide-geo-label" textAnchor="middle">
+          {text(geo, "width")}
+        </text>
+      </g>
+      <g data-board-part="height" data-board-label={partLabel("height", text(geo, "height"))} data-part-at={`${x} ${y + bh / 2}`}>
+        <Strip p={{ x, y }} q={{ x, y: y + bh }} />
+        <text x={x - 12} y={y + bh / 2 + 5} className="guide-geo-label" textAnchor="end">
+          {text(geo, "height")}
+        </text>
+      </g>
     </>
   );
 }

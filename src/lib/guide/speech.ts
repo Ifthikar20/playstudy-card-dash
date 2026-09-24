@@ -216,6 +216,16 @@ export interface Tone {
   pitch: number;
 }
 
+/**
+ * The tutor always sounds relaxed: a speaking style may slow a line down or soften it,
+ * but never hurry it or lift it much (the styles file asks up to 6% faster and 8% higher
+ * for a "surprise" line). Applied to cached lessons too, since it happens when speaking.
+ */
+const RELAXED_MAX_RATE = 1.02;
+const RELAXED_MAX_PITCH = 1.03;
+const relaxed = (tone?: Tone | null): Tone | null =>
+  tone ? { rate: Math.min(tone.rate, RELAXED_MAX_RATE), pitch: Math.min(tone.pitch, RELAXED_MAX_PITCH) } : null;
+
 /** The shared audio element, created on first use. */
 export function speechAudioElement(): HTMLAudioElement {
   if (!sharedAudio) {
@@ -378,7 +388,7 @@ export class Narrator {
     const gen = ++this.gen;
     claimVoice(this);
     silenceAll(this.available);
-    this.tone = tone ?? null;
+    this.tone = relaxed(tone);
     this.active = true;
     try {
       const parts = splitSentences(text);

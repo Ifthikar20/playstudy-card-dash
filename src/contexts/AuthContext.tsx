@@ -7,6 +7,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authService, AuthResponse, TokenPayload, Session } from '../services/authService';
+import { syncVoiceKeyFromServer } from '@/lib/voiceKey';
+import { setAvatarSaver, syncAvatarsFromServer } from '@/lib/guide/avatars';
 
 interface AuthContextType {
   user: TokenPayload | null;
@@ -46,6 +48,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const next = await authService.fetchSession();
       setSession(next);
+      // The talk key belongs to the account: take the server's answer, so a
+      // student who set it at home has the same key on a school computer.
+      syncVoiceKeyFromServer(next?.user?.voice_key ?? null);
+      // The tutors' looks too, and a change made in Teach mode is saved back while signed in.
+      syncAvatarsFromServer(next?.user?.guide_avatar ?? null);
+      setAvatarSaver(next?.user ? (value) => authService.setGuideAvatar(value) : null);
       return next;
     } catch (error) {
       console.error('[AuthContext] Session load failed:', error);

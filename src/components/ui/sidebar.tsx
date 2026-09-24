@@ -3,12 +3,11 @@ import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
 
-import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -17,26 +16,108 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-const SIDEBAR_COOKIE_NAME = "sidebar:state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+/* v2 (2026-09-24): the sidebar now rests as the icon rail and slides out on hover,
+   so the notes and Teach mode's board get the width. The old "sidebar:state"
+   cookie is ignored, so everyone starts folded once; docking it open again with
+   the fold button (or Ctrl+B) is saved here. */
+const SIDEBAR_COOKIE_NAME = "sidebar:docked"
+// A year: folding the sidebar is a preference, not a session setting.
+const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
-const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+const MOBILE_QUERY = "(max-width: 767.98px)"
+
+/*
+  The hover peek: resting the mouse on the folded icon rail slides the labels out
+  OVER the page, and they fold away again a couple of seconds after the mouse
+  leaves (at once on a click anywhere else on the page). It is calm on purpose —
+  it waits for the pointer to REST (a pass-by on the way to the page never opens
+  it), never opens while a button is held (a text-selection drag toward the edge),
+  and since folding no longer moves any icon, nothing under the pointer changes
+  when it opens: the labels simply appear to the right.
+  Switch it off here and the rail relies on its tooltips instead.
+*/
+export const PEEK_ON_HOVER = true
+const PEEK_DWELL_MS = 300
+/** Long enough to reach back for a label after overshooting; a click elsewhere folds it at once. */
+const PEEK_LEAVE_MS = 2000
+/** How far the mouse may drift and still count as resting. */
+const PEEK_REST_PX = 4
+
+/** One motion for everything a fold moves: the panel, the gap and the content card.
+ *  (An arbitrary property, because `ease-[...]` is claimed by both Tailwind and
+ *  tailwindcss-animate, and Tailwind emits nothing for an ambiguous class.) */
+const MOTION = "duration-200 [transition-timing-function:cubic-bezier(0.2,0.8,0.2,1)]"
+
+/** The fold the student chose last time on this device, or null if they never chose. */
+export function readSidebarCookie(): boolean | null {
+  if (typeof document === "undefined") return null
+  const m = document.cookie.match(/(?:^|;\s*)sidebar:docked=(true|false)(?:;|$)/)
+  return m ? m[1] === "true" : null
+}
+
+/*
+  Phone or not, decided on the FIRST render. The shared useIsMobile hook starts at
+  `false` and corrects itself in an effect, which drew the desktop chevron for a
+  frame on every phone. matchMedia is synchronous, so there is nothing to wait for.
+*/
+function subscribeMobile(onChange: () => void) {
+  const mql = window.matchMedia(MOBILE_QUERY)
+  mql.addEventListener("change", onChange)
+  return () => mql.removeEventListener("change", onChange)
+}
+function useIsMobileNow() {
+  return React.useSyncExternalStore(
+    subscribeMobile,
+    () => window.matchMedia(MOBILE_QUERY).matches,
+    () => false
+  )
+}
+
+/** A keydown the page's own text fields and editors should keep. */
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return true
+  return !!target.closest("[data-an-input]")
+}
+
+/*
+  When did the student last press Tab? A tooltip that opens because its trigger got
+  FOCUS is only wanted when they tabbed there. Radix also opens it when focus is
+  handed back by a closing dialog or menu (Esc out of the search palette put
+  "Search ⌘K" beside the rail with no pointer anywhere near), and those should
+  stay quiet.
+*/
+let lastTabAt = -Infinity
+const TAB_FOCUS_WINDOW_MS = 800
+
+type PeekHandlers = {
+  ref: (el: HTMLDivElement | null) => void
+  onPointerEnter: (e: React.PointerEvent) => void
+  onPointerMove: (e: React.PointerEvent) => void
+  onPointerLeave: (e: React.PointerEvent) => void
+  onPointerDownCapture: (e: React.PointerEvent) => void
+  onKeyDownCapture: (e: React.KeyboardEvent) => void
+}
 
 type SidebarContext = {
   state: "expanded" | "collapsed"
   open: boolean
-  setOpen: (open: boolean) => void
+  /** `persist: false` for changes the student did not ask for (a tablet rotating). */
+  setOpen: (open: boolean, opts?: { persist?: boolean }) => void
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
-  /** A collapsed icon rail the mouse is resting on slides out over the page (see Sidebar). */
+  /** The folded rail is peeking out over the page (see PEEK_ON_HOVER). */
   peek: boolean
-  setPeek: (peek: boolean) => void
+  /** Fold a peek away now, and forget any pending one (a nav click, Esc). */
+  closePeek: () => void
   /** Collapse, whatever state it's in: expanded, peeking out on hover, or the phone sheet. */
   collapse: () => void
+  peekHandlers: PeekHandlers
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -70,26 +151,53 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const isMobile = useIsMobile()
+    const isMobile = useIsMobileNow()
     const [openMobile, setOpenMobile] = React.useState(false)
+
+    /*
+      The peek's state and timers live here rather than in <Sidebar>, so that EVERY
+      way of folding or unfolding (the button, the edge strip, Ctrl+B, a tablet
+      rotating) ends a peek and cancels a pending one. They used to live in the
+      Sidebar and only `collapse()` cleared them, so a rail click inside the 140ms
+      enter delay followed by Ctrl+B left a folded sidebar stuck out at full width.
+    */
+    const [peek, setPeek] = React.useState(false)
+    const peekRoot = React.useRef<HTMLDivElement | null>(null)
+    const dwellTimer = React.useRef<number>()
+    const leaveTimer = React.useRef<number>()
+    const restAt = React.useRef<{ x: number; y: number } | null>(null)
+    // A click or key press on the rail means the student is using it, not looking:
+    // no peek until the pointer has left and come back.
+    const peekBlocked = React.useRef(false)
+
+    const closePeek = React.useCallback(() => {
+      window.clearTimeout(dwellTimer.current)
+      window.clearTimeout(leaveTimer.current)
+      restAt.current = null
+      setPeek(false)
+    }, [])
+    React.useEffect(() => closePeek, [closePeek])
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
     const [_open, _setOpen] = React.useState(defaultOpen)
     const open = openProp ?? _open
     const setOpen = React.useCallback(
-      (value: boolean | ((value: boolean) => boolean)) => {
+      (value: boolean | ((value: boolean) => boolean), opts?: { persist?: boolean }) => {
         const openState = typeof value === "function" ? value(open) : value
+        closePeek()
         if (setOpenProp) {
           setOpenProp(openState)
         } else {
           _setOpen(openState)
         }
 
-        // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+        // This sets the cookie to keep the sidebar state (AppShell reads it back).
+        if (opts?.persist !== false) {
+          document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}; samesite=lax`
+        }
       },
-      [setOpenProp, open]
+      [setOpenProp, open, closePeek]
     )
 
     // Helper to toggle the sidebar.
@@ -99,23 +207,121 @@ const SidebarProvider = React.forwardRef<
         : setOpen((open) => !open)
     }, [isMobile, setOpen, setOpenMobile])
 
-    const [peek, setPeek] = React.useState(false)
-    // Opening it for good ends a peek; so does collapsing.
-    React.useEffect(() => {
-      if (open) setPeek(false)
-    }, [open])
     const collapse = React.useCallback(() => {
       if (isMobile) return setOpenMobile(false)
-      setPeek(false)
       setOpen(false)
     }, [isMobile, setOpen, setOpenMobile])
 
-    // Adds a keyboard shortcut to toggle the sidebar.
+    // While it lingers after the pointer left, a click on the page folds it at once:
+    // the panel lies over the page, and the student has moved on to the page.
+    React.useEffect(() => {
+      if (!peek) return
+      const onDown = (e: PointerEvent) => {
+        const target = e.target as Element | null
+        if (peekRoot.current?.contains(target)) return
+        // Menus opened from the sidebar are portaled outside it.
+        if (target?.closest?.("[data-radix-popper-content-wrapper], [role='menu'], [role='dialog']")) return
+        closePeek()
+      }
+      document.addEventListener("pointerdown", onDown, true)
+      return () => document.removeEventListener("pointerdown", onDown, true)
+    }, [peek, closePeek])
+
+    // Opened from outside (a controlled `open`), resized to a phone: no peek either way.
+    React.useEffect(() => {
+      if (open || isMobile) closePeek()
+    }, [open, isMobile, closePeek])
+    // Widened past phone size with the sheet open: shut it, or it pops back open
+    // (and the menu button's first tap closes it) the next time the width drops.
+    React.useEffect(() => {
+      if (!isMobile) setOpenMobile(false)
+    }, [isMobile])
+
+    const peekHandlers = React.useMemo<PeekHandlers>(() => {
+      const outOfBounds = (e: React.PointerEvent | React.KeyboardEvent) =>
+        // The fold button and the edge strip are for clicking; resting on them is
+        // aiming, and sliding the panel out would move the strip from under the pointer.
+        !!(e.target as Element | null)?.closest?.('[data-sidebar="rail"], [data-no-peek]')
+      const fold = () => {
+        // A menu opened from the sidebar (Notes, the account) is portaled outside
+        // it, so the pointer "leaves" to reach it. Stay out while one is open.
+        if (peekRoot.current?.querySelector('[aria-haspopup][aria-expanded="true"]')) {
+          leaveTimer.current = window.setTimeout(fold, 300)
+          return
+        }
+        setPeek(false)
+      }
+      return {
+        ref: (el) => {
+          peekRoot.current = el
+        },
+        onPointerEnter: () => {
+          window.clearTimeout(leaveTimer.current)
+        },
+        onPointerMove: (e) => {
+          if (!PEEK_ON_HOVER || e.pointerType !== "mouse" || open || isMobile) return
+          window.clearTimeout(leaveTimer.current)
+          if (peek) return
+          if (e.buttons !== 0 || peekBlocked.current || outOfBounds(e)) {
+            window.clearTimeout(dwellTimer.current)
+            restAt.current = null
+            return
+          }
+          const at = restAt.current
+          if (at && Math.abs(e.clientX - at.x) <= PEEK_REST_PX && Math.abs(e.clientY - at.y) <= PEEK_REST_PX) return
+          // Still moving: start the dwell again from here.
+          restAt.current = { x: e.clientX, y: e.clientY }
+          window.clearTimeout(dwellTimer.current)
+          dwellTimer.current = window.setTimeout(() => setPeek(true), PEEK_DWELL_MS)
+        },
+        onPointerLeave: () => {
+          window.clearTimeout(dwellTimer.current)
+          restAt.current = null
+          peekBlocked.current = false
+          if (peek) leaveTimer.current = window.setTimeout(fold, PEEK_LEAVE_MS)
+        },
+        onPointerDownCapture: () => {
+          window.clearTimeout(dwellTimer.current)
+          restAt.current = null
+          // Also while peeking: a nav click folds the peek, and the pointer still
+          // resting on the rail must not slide it straight back out over the new page.
+          peekBlocked.current = true
+        },
+        onKeyDownCapture: () => {
+          window.clearTimeout(dwellTimer.current)
+          restAt.current = null
+        },
+      }
+    }, [open, isMobile, peek])
+
+    // Capture phase, so a focus trap that swallows Tab still leaves the timestamp.
+    React.useEffect(() => {
+      const noteTab = (event: KeyboardEvent) => {
+        if (event.key === "Tab") lastTabAt = performance.now()
+      }
+      window.addEventListener("keydown", noteTab, true)
+      return () => window.removeEventListener("keydown", noteTab, true)
+    }, [])
+
+    // Adds a keyboard shortcut to toggle the sidebar, and Esc to fold a peek.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
+        // Whoever handled the key first keeps it (the notes editor's Ctrl+B is
+        // bold, a menu's Esc closes the menu), and so does anything being typed in.
+        if (event.defaultPrevented || isEditableTarget(event.target)) return
+        if (event.key === "Escape" && peek) {
+          closePeek()
+          return
+        }
+        // Exactly ⌘B / Ctrl+B: with shift or alt held it belongs to whoever bound
+        // that combo (the tutor's talk key, for one). Matched on the physical key as
+        // well as the letter, so Caps Lock and non-Latin layouts still fold it.
         if (
-          event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-          (event.metaKey || event.ctrlKey)
+          // `key` can be missing on the synthetic keydown Chrome sends for autofill.
+          (event.code === "KeyB" || (event.key ?? "").toLowerCase() === "b") &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.shiftKey &&
+          !event.altKey
         ) {
           event.preventDefault()
           toggleSidebar()
@@ -124,7 +330,7 @@ const SidebarProvider = React.forwardRef<
 
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [toggleSidebar])
+    }, [toggleSidebar, peek, closePeek])
 
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.
@@ -140,15 +346,19 @@ const SidebarProvider = React.forwardRef<
         setOpenMobile,
         toggleSidebar,
         peek,
-        setPeek,
+        closePeek,
         collapse,
+        peekHandlers,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, peek, collapse]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, peek, closePeek, collapse, peekHandlers]
     )
 
     return (
       <SidebarContext.Provider value={contextValue}>
-        <TooltipProvider delayDuration={0}>
+        {/* Calm tooltips: a pointer passing over the rail on its way somewhere
+            else should not light up a row of labels. Once one is showing, the
+            next one follows quickly. */}
+        <TooltipProvider delayDuration={500} skipDelayDuration={150}>
           <div
             style={
               {
@@ -192,17 +402,7 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile, peek, setPeek } = useSidebar()
-    const containerRef = React.useRef<HTMLDivElement>(null)
-    const enterTimer = React.useRef<number>()
-    const leaveTimer = React.useRef<number>()
-    React.useEffect(
-      () => () => {
-        window.clearTimeout(enterTimer.current)
-        window.clearTimeout(leaveTimer.current)
-      },
-      []
-    )
+    const { isMobile, state, openMobile, setOpenMobile, peek, peekHandlers } = useSidebar()
 
     if (collapsible === "none") {
       return (
@@ -233,6 +433,10 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            {/* A dialog needs a name for screen readers (Radix logs an error
+                without one); the sheet has no visible heading to give it. */}
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <SheetDescription className="sr-only">Pages, notes, search and your account.</SheetDescription>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContent>
         </Sheet>
@@ -240,31 +444,12 @@ const Sidebar = React.forwardRef<
     }
 
     /*
-      Peek: resting the mouse on the collapsed icon rail slides the whole sidebar out
-      OVER the page - the gap beside it keeps its rail width, so nothing underneath
-      moves - and it folds away again when the mouse leaves. Mouse only: a tap on a
-      touch screen should just follow the link under it. A menu opened from the
-      sidebar (the account menu) lives outside it, so the sidebar stays out while one
-      is open.
+      While peeking, the panel is still COLLAPSED (data-state), so everything that
+      has a different shape in the rail (the Notes menu, the fold button's spot)
+      keeps that shape; only `data-collapsible` lifts, which is what shows the
+      labels. The gap beside it keeps its rail width, so the page does not move.
     */
     const peeking = collapsible === "icon" && state === "collapsed" && peek
-    const onPointerEnter = (e: React.PointerEvent) => {
-      window.clearTimeout(leaveTimer.current)
-      if (e.pointerType !== "mouse" || collapsible !== "icon" || state !== "collapsed") return
-      window.clearTimeout(enterTimer.current)
-      enterTimer.current = window.setTimeout(() => setPeek(true), 140)
-    }
-    const onPointerLeave = () => {
-      window.clearTimeout(enterTimer.current)
-      const fold = () => {
-        if (containerRef.current?.querySelector('[aria-expanded="true"]')) {
-          leaveTimer.current = window.setTimeout(fold, 300)
-          return
-        }
-        setPeek(false)
-      }
-      leaveTimer.current = window.setTimeout(fold, 220)
-    }
 
     return (
       <div
@@ -279,7 +464,8 @@ const Sidebar = React.forwardRef<
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
-            "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
+            "relative h-svh w-[--sidebar-width] bg-transparent transition-[width]",
+            MOTION,
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
@@ -288,11 +474,15 @@ const Sidebar = React.forwardRef<
           )}
         />
         <div
-          ref={containerRef}
-          onPointerEnter={onPointerEnter}
-          onPointerLeave={onPointerLeave}
+          ref={collapsible === "icon" ? peekHandlers.ref : undefined}
+          onPointerEnter={collapsible === "icon" ? peekHandlers.onPointerEnter : undefined}
+          onPointerMove={collapsible === "icon" ? peekHandlers.onPointerMove : undefined}
+          onPointerLeave={collapsible === "icon" ? peekHandlers.onPointerLeave : undefined}
+          onPointerDownCapture={collapsible === "icon" ? peekHandlers.onPointerDownCapture : undefined}
+          onKeyDownCapture={collapsible === "icon" ? peekHandlers.onKeyDownCapture : undefined}
           className={cn(
-            "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
+            "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] md:flex",
+            MOTION,
             "group-data-[peek=true]:z-50",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
@@ -307,8 +497,10 @@ const Sidebar = React.forwardRef<
         >
           <div
             data-sidebar="sidebar"
-            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow group-data-[peek=true]:rounded-xl group-data-[peek=true]:border group-data-[peek=true]:border-sidebar-border group-data-[peek=true]:shadow-xl"
+            className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow group-data-[peek=true]:rounded-xl group-data-[peek=true]:shadow-xl group-data-[peek=true]:ring-1 group-data-[peek=true]:ring-sidebar-border"
           >
+            {/* The peek's edge is a ring, not a border: a border takes layout
+                room and nudged every icon by a pixel as the panel slid out. */}
             {children}
           </div>
         </div>
@@ -344,27 +536,37 @@ const SidebarTrigger = React.forwardRef<
 })
 SidebarTrigger.displayName = "SidebarTrigger"
 
+/*
+  The edge strip: a click anywhere along the sidebar's edge folds or unfolds it.
+  It sits in the gutter between the panel and the content card and stops at the
+  card's edge (it used to reach 2-7px into the card, so a click at the card's edge
+  folded the sidebar). Mouse only in spirit: tabIndex -1, because the fold button
+  is the keyboard's way to do the same, and not rendered in the phone sheet, where
+  it sat at the sheet's left edge and closed it on a stray tap.
+*/
 const SidebarRail = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button">
 >(({ className, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, isMobile, state } = useSidebar()
+
+  if (isMobile) return null
+
+  const label = state === "collapsed" ? "Expand sidebar" : "Collapse sidebar"
 
   return (
     <button
       ref={ref}
+      type="button"
       data-sidebar="rail"
-      aria-label="Toggle Sidebar"
+      aria-label={label}
       tabIndex={-1}
       onClick={toggleSidebar}
-      title="Toggle Sidebar"
+      title={label}
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
-        "[[data-side=left]_&]:cursor-w-resize [[data-side=right]_&]:cursor-e-resize",
-        "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
-        "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full group-data-[collapsible=offcanvas]:hover:bg-sidebar",
-        "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
-        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
+        "absolute inset-y-0 z-20 hidden w-3 cursor-ew-resize md:flex",
+        "after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:rounded-full after:transition-colors hover:after:bg-sidebar-foreground/15",
+        "group-data-[side=left]:right-0 group-data-[side=right]:left-0",
         className
       )}
       {...props}
@@ -382,7 +584,13 @@ const SidebarInset = React.forwardRef<
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background",
+        // The card's left margin moves with the panel's width, in the same motion,
+        // instead of snapping 7px at the start of every fold.
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
+        // Unprefixed: an md: transition utility would sit later in the CSS and
+        // put back Tailwind's 150ms default over MOTION's duration.
+        "transition-[margin]",
+        MOTION,
         className
       )}
       {...props}
@@ -463,7 +671,9 @@ const SidebarContent = React.forwardRef<
       ref={ref}
       data-sidebar="content"
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        // Scrolls in the rail too (its scrollbar is hidden in index.css): on a short
+        // screen the lower icons used to be cut off with no way to reach them.
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden",
         className
       )}
       {...props}
@@ -498,8 +708,13 @@ const SidebarGroupLabel = React.forwardRef<
       ref={ref}
       data-sidebar="group-label"
       className={cn(
-        "duration-200 flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opa] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
-        "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
+        "relative flex h-8 shrink-0 select-none items-center overflow-hidden whitespace-nowrap rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[color] focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+        MOTION,
+        // In the icon rail the label KEEPS its 28px slot, so no icon below it moves
+        // when the sidebar folds (it used to slide up with -mt-8, and every icon
+        // jumped). The words go and a short hairline marks the break between groups.
+        "before:pointer-events-none before:absolute before:left-1/2 before:top-1/2 before:h-px before:w-3.5 before:-translate-x-1/2 before:bg-sidebar-foreground/15 before:opacity-0",
+        "group-data-[collapsible=icon]:text-transparent group-data-[collapsible=icon]:before:opacity-100",
         className
       )}
       {...props}
@@ -519,9 +734,11 @@ const SidebarGroupAction = React.forwardRef<
       ref={ref}
       data-sidebar="group-action"
       className={cn(
-        "absolute right-3 top-3.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
-        // Increases the hit area of the button on mobile.
-        "after:absolute after:-inset-2 after:md:hidden",
+        // 28px, level with the group label's own 28px row (the stock 20px square
+        // was a hard target for a control students use every day).
+        "absolute right-2 top-2 flex size-8 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+        // A 44px hit area on touch screens, without drawing anything bigger.
+        "after:absolute after:-inset-[8px] after:content-[''] [@media(pointer:fine)]:after:hidden",
         "group-data-[collapsible=icon]:hidden",
         className
       )}
@@ -571,7 +788,7 @@ const SidebarMenuItem = React.forwardRef<
 SidebarMenuItem.displayName = "SidebarMenuItem"
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!w-8 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -582,7 +799,7 @@ const sidebarMenuButtonVariants = cva(
       size: {
         default: "h-8 text-sm",
         sm: "h-7 text-xs",
-        lg: "h-12 text-sm group-data-[collapsible=icon]:!p-0",
+        lg: "h-12 text-sm",
       },
     },
     defaultVariants: {
@@ -591,13 +808,87 @@ const sidebarMenuButtonVariants = cva(
     },
   }
 )
+/*
+  FIXED GEOMETRY. Folding changes only the panel's width: in the rail a row keeps
+  its height and padding and just narrows to 28px, so every icon stays exactly
+  where it was (it used to become a 28x28 square with the large rows losing their
+  padding, and the logo, avatar and everything under them moved). The row
+  transition is gone with it, since there is no geometry left to animate.
+*/
+
+type TooltipSpec = string | React.ComponentProps<typeof TooltipContent>
+
+/*
+  A sidebar tooltip. By default it only speaks where the words are hidden — the
+  folded rail — and never on a phone (no hover there, and the sheet shows every
+  label). `always` is for controls that have no visible label in any state (the
+  fold button) or carry detail their label does not (presence).
+
+  Two quiet rules on top of Radix:
+  - opened by FOCUS, it waits for a Tab: focus handed back by a closing palette or
+    menu does not pop a label out beside the rail;
+  - opened by HOVER in the rail while PEEK_ON_HOVER is on, it stays shut, because
+    resting there slides the real labels out and a tooltip would flash first.
+*/
+function SidebarTooltip({
+  tooltip,
+  always = false,
+  children,
+}: {
+  tooltip: TooltipSpec
+  always?: boolean
+  children: React.ReactElement
+}) {
+  const { isMobile, state, peek } = useSidebar()
+  const [open, setOpen] = React.useState(false)
+  const byFocus = React.useRef(false)
+  const labelsHidden = !isMobile && state === "collapsed" && !peek
+  const allowed = !isMobile && (always || labelsHidden)
+
+  React.useEffect(() => {
+    if (!allowed) setOpen(false)
+  }, [allowed])
+
+  const content = typeof tooltip === "string" ? { children: tooltip } : tooltip
+  const childProps = children.props as { onFocus?: (e: React.FocusEvent) => void }
+  // Runs before Radix's own focus handler (Slot calls the child's first), so the
+  // open request that handler makes can be told apart from a hover.
+  const trigger = React.cloneElement(children, {
+    onFocus: (e: React.FocusEvent) => {
+      childProps.onFocus?.(e)
+      byFocus.current = true
+      queueMicrotask(() => {
+        byFocus.current = false
+      })
+    },
+  } as Partial<unknown>)
+
+  return (
+    <Tooltip
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) return setOpen(false)
+        if (!allowed) return
+        if (byFocus.current) {
+          if (performance.now() - lastTabAt > TAB_FOCUS_WINDOW_MS) return
+        } else if (PEEK_ON_HOVER && labelsHidden && !always) {
+          return
+        }
+        setOpen(true)
+      }}
+    >
+      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+      <TooltipContent side="right" align="center" {...content} />
+    </Tooltip>
+  )
+}
 
 const SidebarMenuButton = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> & {
     asChild?: boolean
     isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
+    tooltip?: TooltipSpec
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
   (
@@ -613,7 +904,6 @@ const SidebarMenuButton = React.forwardRef<
     ref
   ) => {
     const Comp = asChild ? Slot : "button"
-    const { isMobile, state, peek } = useSidebar()
 
     const button = (
       <Comp
@@ -630,23 +920,10 @@ const SidebarMenuButton = React.forwardRef<
       return button
     }
 
-    if (typeof tooltip === "string") {
-      tooltip = {
-        children: tooltip,
-      }
-    }
-
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent
-          side="right"
-          align="center"
-          hidden={state !== "collapsed" || peek || isMobile}
-          {...tooltip}
-        />
-      </Tooltip>
-    )
+    // A trigger with its own menu (DropdownMenuTrigger asChild) still works:
+    // its props reach `button`, and Slot lets the child's win over the
+    // tooltip's, so data-state and aria-expanded stay the menu's.
+    return <SidebarTooltip tooltip={tooltip}>{button}</SidebarTooltip>
   }
 )
 SidebarMenuButton.displayName = "SidebarMenuButton"
@@ -817,6 +1094,7 @@ export {
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,
+  SidebarTooltip,
   SidebarTrigger,
   useSidebar,
 }
