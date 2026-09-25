@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "build:test": "vite build --mode test",
-    "build:off": "vite build --mode off"
+    "build:off": "vite build --mode off",
+    "check:safety": "node --experimental-strip-types scripts/notes-safety-check.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -65,6 +66,7 @@
     "recharts": "^2.12.7",
     "rehype-katex": "^7.0.1",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "smiles-drawer": "^2.4.1",

@@ -13,8 +13,11 @@ import { GuideVisual, parseVisualFence } from "@/components/guide/GuideVisual";
 import { VISUAL_FENCES } from "@/lib/notes/fences";
 import { HEADING_COLORS, newTagRe } from "@/lib/notes/units";
 
-/** Keep only <mark> raw HTML in AI notes; drop every other tag so rehype-raw is
- *  safe to run. Text and Markdown are left untouched. */
+/** Keep only <mark> raw HTML in notes; drop every other tag. Text and Markdown are
+ *  left untouched. This is ONE pass over text, so a tag nested inside another can
+ *  re-form once the inner one is removed; the real boundary is rehype-sanitize with
+ *  NOTE_SCHEMA (lib/notes/sanitizeSchema.ts), which runs on the parsed tree. This
+ *  pass stays because sanitizeWithMap's offset map is built from it. */
 export function sanitizeNotes(md: string): string {
   // The pattern is shared with `sanitizeWithMap` in units.ts, which records the
   // copy/replace runs that map a rendered offset back to the stored bytes. Two

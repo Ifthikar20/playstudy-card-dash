@@ -52,6 +52,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
+import rehypeSanitize from "rehype-sanitize";
+import { KATEX_OPTS, NOTE_SCHEMA } from "@/lib/notes/sanitizeSchema";
 import { cn } from "@/lib/utils";
 import { BASE_NOTE_COMPONENTS, HEADING_COLORS, headingVars } from "@/lib/notes/render";
 import {
@@ -289,7 +291,7 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     () => (
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS(sanitized)}
-        rehypePlugins={[rehypeRaw, rehypeKatex]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, NOTE_SCHEMA], [rehypeKatex, KATEX_OPTS]]}
         components={READ_COMPONENTS as ComponentProps<typeof ReactMarkdown>["components"]}
       >
         {sanitized}

@@ -22,6 +22,8 @@ import { GuideGeometry } from "./GuideGeometry";
 import { GuideCode } from "./GuideCode";
 import { GuideFacts } from "./GuideFacts";
 import { VISUAL_FENCE } from "@/lib/notes/fences";
+import { KATEX_OPTS } from "@/lib/notes/sanitizeSchema";
+import { isSafeExpression } from "@/lib/guide/mathExpr";
 
 /*
   One place that turns a VisualSpec into a drawing.
@@ -35,7 +37,7 @@ import { VISUAL_FENCE } from "@/lib/notes/fences";
 export function GuideMathLine({ math }: { math: GuideMath }) {
   const html = useMemo(() => {
     try {
-      return katex.renderToString(math.latex, { throwOnError: false, displayMode: true, output: "html" });
+      return katex.renderToString(math.latex, { throwOnError: false, displayMode: true, output: "html", ...KATEX_OPTS });
     } catch {
       return "";
     }
@@ -209,7 +211,15 @@ export function visualToMarkdown(spec: VisualSpec, space = 0): string {
 export function parseVisualFence(text: string): VisualSpec | null {
   try {
     const spec = JSON.parse(text) as VisualSpec;
-    return spec && typeof spec === "object" && spec.kind in VISUAL_LABEL && spec.data ? spec : null;
+    if (!spec || typeof spec !== "object" || !(spec.kind in VISUAL_LABEL) || !spec.data) return null;
+    // A graph's expressions are evaluated on this page. The notes are the student's own
+    // text, so nothing upstream has checked them: refuse anything the evaluator would.
+    if (spec.kind === "graph") {
+      const { fn, fn2 } = spec.data as { fn?: unknown; fn2?: unknown };
+      if (!isSafeExpression(fn)) return null;
+      if (fn2 != null && fn2 !== "" && !isSafeExpression(fn2)) return null;
+    }
+    return spec;
   } catch {
     return null;
   }
