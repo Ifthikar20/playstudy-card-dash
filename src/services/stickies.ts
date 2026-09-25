@@ -2,6 +2,7 @@
  * Sticky notes — the important bits a student keeps from their studying.
  * Mirrors anothernotes-backend/app/api/sticky_notes.py.
  */
+import { authFetch } from "./authFetch";
 import { authService } from "./authService";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
@@ -45,25 +46,25 @@ async function fail(res: Response, fallback: string): Promise<never> {
 /** Every sticky note, newest first; `sessionId` narrows them to one study session. */
 export async function listStickyNotes(sessionId?: string): Promise<StickyNote[]> {
   const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
-  const res = await fetch(`${API_URL}/sticky-notes${query}`, { headers: headers() });
+  const res = await authFetch(`${API_URL}/sticky-notes${query}`, { headers: headers() });
   if (!res.ok) await fail(res, "Could not load your sticky notes");
   return await res.json();
 }
 
 /** Keep something. Saving the same words twice gives back the note that is already there. */
 export async function createStickyNote(note: NewStickyNote): Promise<StickyNote> {
-  const res = await fetch(`${API_URL}/sticky-notes`, { method: "POST", headers: headers(), body: JSON.stringify(note) });
+  const res = await authFetch(`${API_URL}/sticky-notes`, { method: "POST", headers: headers(), body: JSON.stringify(note) });
   if (!res.ok) await fail(res, "Could not save that to a sticky note");
   return await res.json();
 }
 
 export async function updateStickyNote(id: number, patch: { text?: string; color?: StickyColor }): Promise<StickyNote> {
-  const res = await fetch(`${API_URL}/sticky-notes/${id}`, { method: "PUT", headers: headers(), body: JSON.stringify(patch) });
+  const res = await authFetch(`${API_URL}/sticky-notes/${id}`, { method: "PUT", headers: headers(), body: JSON.stringify(patch) });
   if (!res.ok) await fail(res, "Could not update that sticky note");
   return await res.json();
 }
 
 export async function deleteStickyNote(id: number): Promise<void> {
-  const res = await fetch(`${API_URL}/sticky-notes/${id}`, { method: "DELETE", headers: headers() });
+  const res = await authFetch(`${API_URL}/sticky-notes/${id}`, { method: "DELETE", headers: headers() });
   if (!res.ok && res.status !== 404) await fail(res, "Could not throw that sticky note away");
 }

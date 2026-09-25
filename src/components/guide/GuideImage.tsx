@@ -1,3 +1,4 @@
+import { authFetch } from "@/services/authFetch";
 import { useEffect, useState, type CSSProperties } from "react";
 import { API_URL, getAuthToken } from "@/services/api";
 import type { GuideImage as GuideImageData } from "@/services/guide";
@@ -73,7 +74,7 @@ async function lookup(query: string, match: string[]): Promise<Ready> {
   // `must`: the backend only accepts a picture whose file is about one of these
   // words, so "concave lens" can never come back as a picture of some other lens.
   const must = match.length ? `&must=${encodeURIComponent(match.join(","))}` : "";
-  const res = await fetch(`${API_URL}/guide/image?q=${encodeURIComponent(query)}${must}`, {
+  const res = await authFetch(`${API_URL}/guide/image?q=${encodeURIComponent(query)}${must}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   if (!res.ok) throw new Error(String(res.status));
