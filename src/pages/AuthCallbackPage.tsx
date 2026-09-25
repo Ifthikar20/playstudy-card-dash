@@ -20,6 +20,8 @@ const ERRORS: Record<string, string> = {
   inactive: "This account has been deactivated.",
   sso_enforced: "Your organisation requires a different sign-in method.",
   signups_closed: "There's no AnotherNotes account for that address. AnotherNotes is in beta, so new sign-ups are paused.",
+  managed_account: "That address belongs to a profile a parent or guardian manages, which signs in with a username and PIN.",
+  email_unverified: "The provider hasn't verified that email address, so it can't be used to sign in to the account that uses it.",
 };
 
 export default function AuthCallbackPage() {

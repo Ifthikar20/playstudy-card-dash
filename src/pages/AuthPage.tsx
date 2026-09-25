@@ -140,9 +140,14 @@ export default function AuthPage() {
     }
   };
 
+  // Dev only (see the button below): the demo account's password is not in the
+  // source; `manage.py seed_demo` sets it from DEMO_PASSWORD, and the same value
+  // goes in the frontend's .env.local as VITE_DEMO_PASSWORD.
+  const demoPassword = import.meta.env.DEV ? (import.meta.env.VITE_DEMO_PASSWORD as string | undefined) : undefined;
   const fillDemo = () => {
-    setEmail("student@anothernotes.com");
-    setPassword("password123");
+    if (!demoPassword) return;
+    setEmail((import.meta.env.VITE_DEMO_EMAIL as string | undefined) || "student@anothernotes.com");
+    setPassword(demoPassword);
     setMode("signin");
     setNotice("Demo credentials filled in. Press Login to continue.");
   };
@@ -409,7 +414,7 @@ export default function AuthPage() {
                 </button>
               </p>
             )}
-            {import.meta.env.DEV && (
+            {import.meta.env.DEV && demoPassword && (
               <p className="pt-2">
                 <button type="button" onClick={fillDemo} className="inline-flex items-center gap-1 text-[12px] text-[var(--muted-2)] hover:text-[var(--ink)]">
                   <Zap className="size-3" />

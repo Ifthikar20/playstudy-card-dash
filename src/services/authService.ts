@@ -1,11 +1,17 @@
 /**
  * Centralized Authentication Service
  *
- * This service isolates all authentication logic and provides a clean API for:
- * - User login/registration/logout
- * - Token management (will be moved to httpOnly cookies in Phase 2)
- * - Token validation and refresh
- * - Authentication state management
+ * How a session works now:
+ *   - The access token lasts 15 minutes and is the only credential the page can
+ *     read (localStorage, sent as a Bearer header by authFetch).
+ *   - The refresh token is an httpOnly cookie scoped to /api/auth/ that the server
+ *     sets on sign-in and rotates on every renewal; a script in the page can never
+ *     read it. Renewal is POST /auth/refresh with the cookie plus an
+ *     X-Requested-With header (the CSRF check), serialised across tabs so two tabs
+ *     cannot race the rotation.
+ *   - The token is renewed a minute before it expires while the app is open, and
+ *     on the next request after it wasn't. Only a renewal the server refuses (sign-out
+ *     everywhere, a PIN reset, a deactivated account) ends the session.
  */
 
 import { clearCachedUserData } from '@/lib/localData';
@@ -49,7 +55,17 @@ export interface TokenPayload {
   kind?: 'child';
   exp: number; // expiration timestamp
   iat: number; // issued at timestamp
+  /** The account's token epoch; the server ends every session by moving it. */
+  ep?: number;
 }
+
+/** Renew when this little of the access token's life is left (seconds). */
+const RENEW_BEFORE_EXPIRY_S = 120;
+/** The background timer fires this long before expiry (seconds). */
+const SCHEDULE_BEFORE_EXPIRY_S = 60;
+/** Requests to the auth endpoints carry the refresh cookie and this header. */
+const APP_HEADER = { 'X-Requested-With': 'fetch' } as const;
+const REFRESH_LOCK = 'anothernotes-token-refresh';
 
 export interface ChildLoginCredentials {
   username: string;
@@ -177,6 +193,41 @@ class AuthService {
     } catch (error) {
       console.error('[AuthService] Failed to decode token:', error);
     }
+    this.scheduleRefresh();
+  }
+
+  private refreshTimer: number | undefined;
+
+  /**
+   * Renew the token a minute before it expires, for as long as the app stays open.
+   * A tab in the background may have its timers throttled; ensureFreshToken() on the
+   * next request covers that case.
+   */
+  scheduleRefresh(): void {
+    if (typeof window === 'undefined') return;
+    window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
+    const payload = this.getCurrentUser();
+    if (!payload?.exp) return;
+    const inMs = Math.max(0, (payload.exp - SCHEDULE_BEFORE_EXPIRY_S) * 1000 - Date.now());
+    this.refreshTimer = window.setTimeout(() => {
+      void this.refreshToken().then((result) => {
+        if (result === 'rejected') void this.logout();
+        else if (result === 'unavailable') this.retryRefreshSoon();
+      });
+    }, inMs);
+  }
+
+  private retryRefreshSoon(): void {
+    if (typeof window === 'undefined') return;
+    window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = window.setTimeout(() => this.scheduleRefresh(), 30_000);
+  }
+
+  private cancelScheduledRefresh(): void {
+    if (typeof window === 'undefined') return;
+    window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
   }
 
   /**
@@ -205,6 +256,7 @@ class AuthService {
   private removeToken(): void {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(TOKEN_EXPIRY_KEY);
+    this.cancelScheduledRefresh();
   }
 
   /**
@@ -284,6 +336,7 @@ class AuthService {
 
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -336,6 +389,7 @@ class AuthService {
 
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -391,6 +445,7 @@ class AuthService {
     try {
       const response = await fetch(`${API_URL}/auth/child/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: credentials.username,
@@ -427,7 +482,7 @@ class AuthService {
   /**
    * Logout user and clear authentication state
    */
-  logout(): void {
+  async logout(): Promise<void> {
     console.log('[AuthService] Logging out user');
     this.removeToken();
 
@@ -436,28 +491,78 @@ class AuthService {
     // would otherwise see the last person's work for up to five minutes.
     clearCachedUserData();
 
-    // In future: call backend logout endpoint to invalidate token
+    // The server retires the refresh token and clears its cookie; keepalive lets the
+    // request finish across the navigation below. Best effort: the cookie alone cannot
+    // sign anyone in, and the access token is gone from this browser already.
+    try {
+      await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include', headers: APP_HEADER, keepalive: true });
+    } catch {
+      /* offline: nothing to retire on this side */
+    }
 
     // Redirect to auth page. The full navigation tears down the in-memory
     // react-query cache, so only localStorage needs clearing by hand.
     window.location.href = '/auth';
   }
 
+  /** End every session of this account, on every device. */
+  async logoutEverywhere(): Promise<void> {
+    try {
+      await fetch(`${API_URL}/auth/logout-all`, { method: 'POST', credentials: 'include', headers: { ...APP_HEADER, ...this.authHeaders() } });
+    } catch {
+      /* fall through to the local sign-out */
+    }
+    await this.logout();
+  }
+
+  /** Change the password; every other session of the account ends. */
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch(`${API_URL}/auth/password`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...APP_HEADER, ...this.authHeaders() },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false, error: typeof data?.detail === 'string' ? data.detail : 'Could not change the password' };
+    if (data?.access_token) this.setToken(data.access_token);
+    return { success: true };
+  }
+
   private refreshing: Promise<RefreshResult> | null = null;
 
+  /** Seconds of life left in the stored access token; 0 when there is none. */
+  private secondsLeft(): number {
+    const payload = this.getCurrentUser();
+    if (!payload?.exp) return 0;
+    return payload.exp - Math.floor(Date.now() / 1000);
+  }
+
   /**
-   * Trade the stored token for a fresh one. The backend accepts a token that has
-   * already expired (for a long grace period), so a student is only signed out when
-   * the server definitively rejects the token or they sign out themselves.
-   * 'unavailable' = couldn't reach the server; the current token is kept.
+   * Renew the access token from the refresh cookie. The cookie is rotated on every
+   * use, so the call is serialised across tabs (Web Locks); a tab that finds the
+   * token already renewed by another one keeps that. 'rejected' means the server
+   * refused (the session was ended); 'unavailable' means it could not be reached
+   * and the current token is kept.
    */
-  async refreshToken(): Promise<RefreshResult> {
+  async refreshToken(force = false): Promise<RefreshResult> {
     if (this.refreshing) return this.refreshing;
-    const token = this.getToken();
-    if (!token) return 'rejected';
-    this.refreshing = (async (): Promise<RefreshResult> => {
+    const before = this.getToken();
+    if (!before) return 'rejected';
+    const attempt = async (): Promise<RefreshResult> => {
+      // Another tab may have renewed while we waited for the lock.
+      if (this.getToken() !== before) {
+        this.scheduleRefresh();
+        return 'refreshed';
+      }
+      // `force`: the API just refused this token although it has not expired (the
+      // account's sessions were ended elsewhere), so only the server can say.
+      if (!force && this.secondsLeft() > RENEW_BEFORE_EXPIRY_S) {
+        this.scheduleRefresh();
+        return 'refreshed';
+      }
       try {
-        const res = await fetch(`${API_URL}/auth/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`${API_URL}/auth/refresh`, { method: 'POST', credentials: 'include', headers: APP_HEADER });
         if (res.ok) {
           const data = await res.json().catch(() => null);
           if (data?.access_token) {
@@ -470,20 +575,19 @@ class AuthService {
         return res.status === 401 || res.status === 403 ? 'rejected' : 'unavailable';
       } catch {
         return 'unavailable';
-      } finally {
-        this.refreshing = null;
       }
-    })();
+    };
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    this.refreshing = (locks ? locks.request(REFRESH_LOCK, attempt) : attempt()).finally(() => {
+      this.refreshing = null;
+    });
     return this.refreshing;
   }
 
-  /** Renew the token when it has expired or has under a week left. Cheap to call often. */
+  /** Renew the token when it is about to expire (or has). Cheap to call often. */
   async ensureFreshToken(): Promise<RefreshResult | 'fresh'> {
-    const token = this.getToken();
-    if (!token) return 'rejected';
-    const payload = this.decodeToken(token);
-    const now = Math.floor(Date.now() / 1000);
-    if (payload?.exp && payload.exp - now > 7 * 86400) return 'fresh';
+    if (!this.getToken()) return 'rejected';
+    if (this.secondsLeft() > RENEW_BEFORE_EXPIRY_S) return 'fresh';
     return this.refreshToken();
   }
 
@@ -495,14 +599,20 @@ class AuthService {
   /** Who am I, my organization, and where the app should send me next. */
   async fetchSession(): Promise<Session | null> {
     if (!this.getToken()) return null;
-    const res = await fetch(`${API_URL}/auth/session`, { headers: this.authHeaders() });
+    const res = await this.authFetch(`${API_URL}/auth/session`, { headers: this.authHeaders() });
     if (!res.ok) return null;
     return res.json();
   }
 
+  /** authFetch, without a circular import at module load. */
+  private async authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+    const { authFetch } = await import('./authFetch');
+    return authFetch(input, init);
+  }
+
   /** Answer the first-login question (student / teacher / organization). */
   async completeOnboarding(payload: OnboardingPayload): Promise<Session> {
-    const res = await fetch(`${API_URL}/auth/onboarding`, {
+    const res = await this.authFetch(`${API_URL}/auth/onboarding`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
       body: JSON.stringify(payload),
@@ -519,7 +629,7 @@ class AuthService {
 
   /** Change the Teach mode talk key later; null puts it back to the default. */
   async setVoiceKey(voiceKey: string | null): Promise<void> {
-    const res = await fetch(`${API_URL}/auth/voice-key`, {
+    const res = await this.authFetch(`${API_URL}/auth/voice-key`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
       body: JSON.stringify({ voice_key: voiceKey }),
@@ -529,7 +639,7 @@ class AuthService {
 
   /** Change how the Teach mode tutors look later; null puts them back to the defaults. */
   async setGuideAvatar(value: string | null): Promise<void> {
-    const res = await fetch(`${API_URL}/auth/guide-avatar`, {
+    const res = await this.authFetch(`${API_URL}/auth/guide-avatar`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
       body: JSON.stringify({ guide_avatar: value }),
@@ -597,7 +707,7 @@ class AuthService {
 
     try {
       // Call a protected endpoint to validate token
-      const response = await fetch(`${API_URL}/app-data`, {
+      const response = await this.authFetch(`${API_URL}/app-data`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

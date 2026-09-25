@@ -2,6 +2,7 @@
  * Connected note sources (Google Docs, OneNote, Notion, …).
  * Mirrors anothernotes-backend/app/api/sources.py.
  */
+import { authFetch } from "./authFetch";
 import { authService } from "./authService";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
@@ -28,7 +29,7 @@ function headers(): Record<string, string> {
 }
 
 export async function listSources(): Promise<NoteSource[]> {
-  const res = await fetch(`${API_URL}/sources`, { headers: headers() });
+  const res = await authFetch(`${API_URL}/sources`, { headers: headers() });
   if (!res.ok) throw new Error("Could not load sources");
   return (await res.json()).sources;
 }
@@ -40,7 +41,7 @@ export async function listSources(): Promise<NoteSource[]> {
  * Rejects with the server's message when the provider isn't configured.
  */
 export async function connectSource(id: string, next = "/dashboard"): Promise<{ manual?: boolean; url?: string }> {
-  const res = await fetch(`${API_URL}/sources/${id}/connect?next=${encodeURIComponent(next)}`, { method: "POST", headers: headers() });
+  const res = await authFetch(`${API_URL}/sources/${id}/connect?next=${encodeURIComponent(next)}`, { method: "POST", headers: headers() });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof data?.detail === "string" ? data.detail : "Could not start the connection");
   if (data.url) window.location.href = data.url;
@@ -48,5 +49,5 @@ export async function connectSource(id: string, next = "/dashboard"): Promise<{ 
 }
 
 export async function disconnectSource(id: string): Promise<void> {
-  await fetch(`${API_URL}/sources/${id}`, { method: "DELETE", headers: headers() });
+  await authFetch(`${API_URL}/sources/${id}`, { method: "DELETE", headers: headers() });
 }

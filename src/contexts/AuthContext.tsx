@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.warn('[AuthContext] Stored token rejected by the server, signing out');
             setUser(null);
             setSession(null);
-            authService.logout();
+            void authService.logout();
           }
         });
       } else {
@@ -114,11 +114,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [user?.sub, refreshSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Keep the sign-in alive: renew the token in the background every 15 minutes and
-   * whenever the tab comes back into view. Nobody is signed out by an expiry.
+   * Keep the sign-in alive. The service renews the token a minute before it expires
+   * (authService.scheduleRefresh); this covers a tab whose timers were throttled in
+   * the background, by renewing when it comes back into view. Nobody is signed out
+   * by an expiry, only by a renewal the server refuses.
    */
   useEffect(() => {
     if (!user) return;
+    authService.scheduleRefresh();
     const renew = () => {
       void authService.ensureFreshToken().then((result) => {
         if (result === 'rejected') {
@@ -127,15 +130,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       });
     };
-    const interval = setInterval(renew, 15 * 60 * 1000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') renew();
     };
     document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -208,7 +207,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     console.log('[AuthContext] Logging out user');
     setUser(null);
     setSession(null);
-    authService.logout();
+    void authService.logout();
   }, []);
 
   /**

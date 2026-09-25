@@ -13,6 +13,7 @@
  * and its own query keys, and every component that shows it renders from
  * props.
  */
+import { authFetch } from "./authFetch";
 import { authService } from "./authService";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
@@ -131,7 +132,7 @@ function headers(): Record<string, string> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers: headers() });
+  const res = await authFetch(`${API_URL}${path}`, { ...init, headers: headers() });
   if (res.status === 204) return undefined as T;
 
   const data = await res.json().catch(() => null);
