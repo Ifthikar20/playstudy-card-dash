@@ -71,7 +71,7 @@ export function CreateStudySessionDialog({ open, onOpenChange }: CreateStudySess
     "Making sense of all this...",
     "Organizing the chaos...",
     "Brewing some knowledge potions...",
-    "Teaching mode: activated...",
+    "Getting ready to teach you...",
     "Almost got it...",
     "Just a bit more patience...",
     "Connecting the dots...",

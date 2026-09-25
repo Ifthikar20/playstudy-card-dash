@@ -439,8 +439,13 @@ export const GuidePointer = forwardRef<
       // changes (the note review's MutationObserver) can ignore the pointer's own ripples.
       <div aria-hidden data-guide-layer="" className="pointer-events-none absolute inset-0" style={accentVars(avatar.palette)}>
         {/* Highlights and outlines belong to the page, so they stay under the
-            whiteboard (z 60) where it overlaps the notes. */}
-        <div className="absolute inset-0 z-40">
+            whiteboard (z 60) where it overlaps the notes. No z-index here on purpose:
+            a z-index makes this layer its own stacking context, and then the marks'
+            mix-blend-mode (multiply, like a real highlighter) can only blend with
+            this empty layer, so the yellow painted over the words and washed them
+            out. Without one the marks tint the page under them and the text stays dark,
+            and a positioned layer with no z-index still paints below the board's 60. */}
+        <div className="absolute inset-0">
           {!focusRect?.above && outline}
           {marks.map((m, i) => (
             <span

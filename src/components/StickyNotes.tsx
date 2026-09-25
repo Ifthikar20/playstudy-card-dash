@@ -14,9 +14,10 @@ import type { StickyColor, StickyNote } from "@/services/stickies";
 /*
   Sticky notes: the things a student decided were worth keeping.
 
-  They're saved while reading (highlight a phrase, or take the key ideas of a
-  section) and they all end up on one wall on the dashboard. A note remembers
-  where it came from, so it can take you back to that passage.
+  They're saved while reading (highlight a phrase and choose Save to sticky) and
+  they all end up on one wall on the dashboard. A note remembers where it came
+  from, so it can take you back to that passage. (Notes kept with the old "Keep
+  key ideas" button, source "key-idea", are on the wall like any other.)
 */
 
 export const STICKY_COLORS: StickyColor[] = ["amber", "pink", "green", "blue", "violet"];
@@ -27,28 +28,6 @@ export function clipForSticky(text: string): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= STICKY_MAX) return t;
   return `${t.slice(0, STICKY_MAX - 1).replace(/\s+\S*$/, "")}…`;
-}
-
-/**
- * The phrases the AI marked as the point of a section — `<mark>…</mark>` in the
- * notes' Markdown — which is exactly what a student would want on a sticky note.
- * Matches the OPENING TAG WITH ITS ATTRIBUTES: `sanitizeWithMap` exists
- * precisely so a stored `<mark class="hi">` survives an edit, and a bare-tag-only
- * pattern here would silently find nothing in notes that carry one.
- */
-export function keyIdeasOf(markdown: string | null | undefined): string[] {
-  if (!markdown) return [];
-  const out: string[] = [];
-  for (const m of markdown.matchAll(/<mark\b[^>]*>([\s\S]*?)<\/mark>/gi)) {
-    const text = clipForSticky(
-      m[1]
-        .replace(/<[^>]+>/g, "")
-        .replace(/[*_`]/g, "")
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"),
-    );
-    if (text.length > 3 && !out.includes(text)) out.push(text);
-  }
-  return out;
 }
 
 /** A small, stable tilt per note, so the wall looks stuck up by hand rather than laid out. */
@@ -399,7 +378,9 @@ export function StickySessionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      {/* Opened from the study page's header: like its Quiz, Teach mode stops talking
+          when it opens, leaves its keys alone in here and lowers the board under it. */}
+      <DialogContent data-study-dialog="" className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Sticky notes from this session</DialogTitle>
           <DialogDescription>

@@ -1,36 +1,50 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { API_URL, getAuthToken } from "@/services/api";
-import type { GuideImage as GuideImageData } from "@/services/guide";
+import { lookupPicture, type GuideImage as GuideImageData } from "@/services/guide";
+import { blockPicture, isPictureBlocked, onBlockedChange, trustedPicture, useBlockedVersion } from "@/lib/guide/blocked";
 
 /*
-  A real photo on the Teach mode whiteboard, for a concrete subject a diagram can't
-  capture (an object in space, a historical event, a person, a place, an artifact).
-  The step carries only a search query; the backend resolves it to a real, sourced
-  photo (so the model can never inject a URL), and if there's no confident match,
-  nothing wrong is shown.
+  A real photo on the Teach mode whiteboard (or pinned in the notes), for a concrete
+  subject a diagram can't capture: an object in space, a historical event, a place, an
+  artifact.
 
-  Nothing reaches the board until the picture is *decoded*: a photo that paints in
-  line by line while the tutor says "here's a real image of…" reads as a glitch, so
-  the board keeps its quiet "finding a picture" state until the whole thing is
-  ready, then shows it in one go. The lookup for the next step's image starts while
-  the current one is still being explained, so that wait is usually already over.
+  Only a picture the server stored and checked itself is ever shown: the file
+  "/img/<sha256>.jpg" with the signed picture_id the server issued for it (the rule is in
+  lib/guide/blocked.ts). Nothing here searches for a picture or loads one from anywhere
+  else - a lesson once showed a subway train for "resistor". Before it's shown, the
+  server is asked about the id once per session: a picture reported since, or pictures
+  switched off, and the answer is 404 and nothing is shown. A picture that is taken away
+  while it's up (the board's "Wrong picture", say) goes from here at once, the notes'
+  pinned copy included.
+
+  Nothing reaches the board until the picture is *decoded*: a photo that paints in line
+  by line while the tutor says "here's a real image of..." reads as a glitch, so the
+  board keeps its quiet loading state until the whole thing is ready, then shows it in
+  one go. The next step's picture is looked up while the current one is still being
+  explained, so that wait is usually already over.
 */
 
 interface Ready {
+  /** The checked /img/ address. */
   url: string;
+  /** What the <img> loads: that same checked address. */
+  src: string;
   caption?: string;
   source?: string;
+  attribution?: string;
+  licence?: string;
   /** The picture's natural size, once decoded (0 when it never said). */
   w?: number;
   h?: number;
 }
 
 interface State extends Partial<Ready> {
+  /** The picture_id this state is about: a state left over from another picture is never drawn. */
+  id: string | null;
   loading: boolean;
   failed?: boolean;
 }
 
-/** A short, human label for a source URL, e.g. "nasa.gov" or "en.wikipedia.org". */
+/** A short, human label for a source URL, e.g. "nasa.gov" or "commons.wikimedia.org". */
 function sourceName(url?: string): string {
   if (!url) return "";
   try {
@@ -40,7 +54,18 @@ function sourceName(url?: string): string {
   }
 }
 
-/** Resolve with the natural size when the bitmap is in memory and painted-ready — never reject on a slow file. */
+/** A source link only when it's a web page: never a javascript: or data: address. */
+function webPage(url?: string): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve with the natural size when the bitmap is in memory and painted-ready. Rejects when it won't load. */
 function decoded(url: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -66,75 +91,108 @@ function decoded(url: string): Promise<{ w: number; h: number }> {
   });
 }
 
+/** One lookup and decode per picture_id: the same id is the same file, checked for the same subject. */
 const cache = new Map<string, Promise<Ready>>();
+// A picture taken away leaves the cache at once, so nothing can show it from there.
+onBlockedChange(() => {
+  for (const id of [...cache.keys()]) if (isPictureBlocked({ picture_id: id })) cache.delete(id);
+});
 
-async function lookup(query: string, match: string[]): Promise<Ready> {
-  const token = getAuthToken();
-  // `must`: the backend only accepts a picture whose file is about one of these
-  // words, so "concave lens" can never come back as a picture of some other lens.
-  const must = match.length ? `&must=${encodeURIComponent(match.join(","))}` : "";
-  const res = await fetch(`${API_URL}/guide/image?q=${encodeURIComponent(query)}${must}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
-  if (!res.ok) throw new Error(String(res.status));
-  const data = await res.json();
-  if (!data?.url) throw new Error("no image");
-  const size = await decoded(data.url);
-  return { url: data.url, caption: data.caption, source: data.source, ...size };
-}
-
-function imageFor(query: string, match: string[] = [], found?: { url: string; source?: string; caption?: string }): Promise<Ready> {
-  const key = `${query}|${match.join(",")}`;
-  const hit = cache.get(key);
+/** The picture, looked up and decoded; null when it may not be shown at all. */
+function imageFor(image: GuideImageData): Promise<Ready> | null {
+  const t = trustedPicture(image);
+  if (!t || isPictureBlocked(t)) return null;
+  const hit = cache.get(t.picture_id);
   if (hit) return hit;
-  // A lesson step arrives with the picture the server already found and checked:
-  // only decoding is left to do. A question's answer still asks for it here.
-  const p = found?.url
-    ? decoded(found.url).then((size) => ({ url: found.url, caption: found.caption, source: found.source, ...size }))
-    : lookup(query, match);
-  cache.set(key, p);
-  p.catch(() => cache.delete(key)); // a failed lookup shouldn't poison the next try
+  const p = (async (): Promise<Ready> => {
+    const found = await lookupPicture(t.picture_id);
+    const pic = found.picture;
+    if (!pic) {
+      // The server won't vouch for it (blocked, or pictures are off): gone for the whole
+      // session, so the board, its history and the lesson's later steps drop it too.
+      if (found.gone) blockPicture(t);
+      throw new Error("no picture");
+    }
+    // lookupPicture only answers with this same id and file.
+    const src = t.url;
+    let size: { w: number; h: number };
+    try {
+      size = await decoded(src);
+    } catch (e) {
+      // A file that won't load (deleted by a block, or the network) is never shown in
+      // part: it's dropped everywhere, which also clears it off the board.
+      blockPicture(t);
+      throw e;
+    }
+    if (isPictureBlocked(t)) throw new Error("taken away");
+    return { url: t.url, src, caption: pic.caption, source: pic.source, attribution: pic.attribution, licence: pic.licence, ...size };
+  })();
+  cache.set(t.picture_id, p);
+  p.catch(() => {
+    if (cache.get(t.picture_id) === p) cache.delete(t.picture_id); // a failed try shouldn't stick
+  });
   return p;
 }
 
-/** Start finding and decoding a picture before the step that shows it comes round. */
+/** Start looking up and decoding a picture before the step that shows it comes round. */
 export function prefetchGuideImage(image?: GuideImageData | null): void {
-  if (image?.query?.trim()) void imageFor(image.query.trim(), image.match ?? [], image.url ? { url: image.url, source: image.source, caption: image.caption } : undefined).catch(() => undefined);
+  if (image) void imageFor(image)?.catch(() => undefined);
 }
 
-export function GuideImage({ image }: { image: GuideImageData }) {
-  const [st, setSt] = useState<State>({ loading: true });
+/**
+ * `pinned`: a picture kept in the notes. One that can't be shown - from before pictures
+ * were checked (an outside address), or taken away since - leaves its caption behind
+ * rather than nothing, so the note still says what was there. On the board a picture
+ * that can't be shown renders nothing at all.
+ */
+export function GuideImage({ image, pinned = false }: { image: GuideImageData; pinned?: boolean }) {
+  useBlockedVersion(); // re-render the moment any picture is taken away
+  const trusted = trustedPicture(image);
+  const id = trusted?.picture_id ?? null;
+  const [held, setSt] = useState<State>({ id, loading: true });
+  // Handed a different picture, the one before must not show for even a frame (it may
+  // be the one just taken away) while the effect below starts on the new one.
+  const st: State = held.id === id ? held : { id, loading: true };
 
   useEffect(() => {
     let cancelled = false;
-    setSt({ loading: true });
-    imageFor(image.query, image.match ?? [], image.url ? { url: image.url, source: image.source, caption: image.caption } : undefined).then(
-      (r) => !cancelled && setSt({ loading: false, ...r }),
-      () => !cancelled && setSt({ loading: false, failed: true }),
+    setSt({ id, loading: true });
+    const p = id ? imageFor(image) : null;
+    if (!p) {
+      setSt({ id, loading: false, failed: true });
+      return;
+    }
+    p.then(
+      (r) => !cancelled && setSt({ id, loading: false, ...r }),
+      () => !cancelled && setSt({ id, loading: false, failed: true }),
     );
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- match is part of the same request as query
-  }, [image.query, (image.match ?? []).join(",")]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the id names the file: the same id is the same picture
+  }, [id]);
 
-  if (st.loading) {
+  const label = image.caption || image.query;
+  const captionOnly = pinned ? (
+    <figure className="guide-image guide-image-gone">
+      <figcaption className="guide-image-caption">
+        <span>{label}</span>
+      </figcaption>
+    </figure>
+  ) : null;
+
+  if (!trusted || isPictureBlocked(trusted) || st.failed) return captionOnly;
+  if (st.loading || !st.src) {
     return (
       <div className="guide-image guide-image-status">
         <div className="guide-image-spinner" aria-hidden />
-        <span>Finding a picture…</span>
-      </div>
-    );
-  }
-  if (st.failed || !st.url) {
-    // Say plainly there's no picture, rather than leave a caption on its own as if it were one.
-    return (
-      <div className="guide-image guide-image-status">
-        <span>No good picture of {image.caption || image.query} was found.</span>
+        <span>Loading the picture…</span>
       </div>
     );
   }
   const caption = image.caption || st.caption;
+  const link = webPage(st.source);
+  const credit = [st.attribution, st.licence].filter(Boolean).join(", ");
   // The natural size goes on the element: width/height keep its shape before layout,
   // --ar lets the board size it to fill without letterboxing, and --nw caps how far a
   // small photo is blown up (twice its own size, before it turns soft).
@@ -145,24 +203,33 @@ export function GuideImage({ image }: { image: GuideImageData }) {
       {/* already decoded by the time this mounts, so it appears whole */}
       <img
         className="guide-image-img"
-        src={st.url}
+        src={st.src}
         alt={caption || image.query}
+        data-picture-id={trusted.picture_id}
         width={sized ? st.w : undefined}
         height={sized ? st.h : undefined}
         style={vars}
         onLoad={(e) => {
           // a picture that outlasted the decode wait arrives here with its size at last
           const el = e.currentTarget;
-          if (!sized && el.naturalWidth > 0) setSt((prev) => ({ ...prev, w: el.naturalWidth, h: el.naturalHeight }));
+          if (!sized && el.naturalWidth > 0) setSt((prev) => (prev.id === id ? { ...prev, w: el.naturalWidth, h: el.naturalHeight } : prev));
         }}
-        onError={() => setSt({ loading: false, failed: true })}
+        onError={() => {
+          blockPicture(trusted);
+          setSt({ id, loading: false, failed: true });
+        }}
       />
       <figcaption className="guide-image-caption">
         <span>{caption}</span>
-        {st.source && (
-          <a className="guide-image-source" href={st.source} target="_blank" rel="noopener noreferrer" title={st.source}>
-            Source: {sourceName(st.source)}
-          </a>
+        {(credit || link) && (
+          <span className="guide-image-credit">
+            {credit && <span>{credit}</span>}
+            {link && (
+              <a className="guide-image-source" href={link} target="_blank" rel="noopener noreferrer" title={link}>
+                Source: {sourceName(link)}
+              </a>
+            )}
+          </span>
         )}
       </figcaption>
     </figure>

@@ -70,7 +70,7 @@ const ONE_PAGE: { icon: LucideIcon; tint: string; title: string; desc: string }[
     icon: ListChecks,
     tint: "#DCFCE7",
     title: "Be asked about it",
-    desc: "A short quiz per section, with an explanation after every answer.",
+    desc: "One Quiz for the whole note, with a hint when you slip and every answer explained.",
   },
 ];
 
@@ -95,16 +95,16 @@ const FEATURE_GROUPS: { label: string; items: Feat[] }[] = [
   {
     label: "Learn",
     items: [
-      { icon: GraduationCap, title: "Full Study", desc: "One scrolling note with a quiz per section", tint: "#EDE9FE" },
+      { icon: GraduationCap, title: "Full Study", desc: "One scrolling note, one Quiz for all of it", tint: "#EDE9FE" },
       { icon: FileText, title: "Auto notes", desc: "Readable notes with headings & highlights", tint: "#DBEAFE" },
       { icon: BookOpen, title: "Read mode", desc: "Distraction-free reading, dark or paper", tint: "#DCFCE7" },
-      { icon: Wand2, title: "Ask AI to change", desc: "Rewrite any part of a note by asking", tint: "#FCE7F3" },
+      { icon: Wand2, title: "Change it by asking", desc: "Tell the tutor out loud to simplify or add an example", tint: "#FCE7F3" },
     ],
   },
   {
     label: "Practice & test",
     items: [
-      { icon: ListChecks, title: "Quiz this section", desc: "Challenging questions from your notes", tint: "#DCFCE7" },
+      { icon: ListChecks, title: "Quizzes with hints", desc: "Multiple choice, with a hint when you slip", tint: "#DCFCE7" },
       { icon: Layers, title: "Flashcards", desc: "Flip-card recall to make it stick", tint: "#DBEAFE" },
       { icon: RotateCcw, title: "Wrong questions", desc: "Retry only the ones you missed", tint: "#FEF3C7" },
     ],

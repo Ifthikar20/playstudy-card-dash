@@ -135,11 +135,11 @@ function pickLook(list: GuideListData): Look {
   };
 }
 
-/** What "Quiz me" puts in place of every label (see blankVisual). */
+/** What "Hide labels" puts in place of every label (see blankVisual). */
 const BLANK = "?";
 const looks = new Map<string, Look>();
 
-/** The look for a list. "Quiz me" swaps every label for "?", so looks are also kept by
+/** The look for a list. "Hide labels" swaps every label for "?", so looks are also kept by
  *  what that leaves alone - hiding the labels doesn't rearrange the board under the
  *  student, and each item stays where they last saw it. */
 function lookOf(list: GuideListData): Look {
@@ -164,8 +164,7 @@ function Tick() {
   );
 }
 
-/** `layout` forces one look (the dev gallery uses it); the board leaves it to the list. */
-export function GuideList({ list, layout: forced }: { list: GuideListData; layout?: ListLayout }) {
+export function GuideList({ list }: { list: GuideListData }) {
   const { title, items, focus } = list;
   // The furthest item the lesson has reached; everything up to it counts as covered.
   const [reached, setReached] = useState(focus ?? -1);
@@ -175,7 +174,7 @@ export function GuideList({ list, layout: forced }: { list: GuideListData; layou
   }, [upTo, reached]);
 
   const look = lookOf(list);
-  const layout = forced ?? look.layout;
+  const layout = look.layout;
   const hueAt = (i: number) => look.hues[i % look.hues.length];
 
   return (
@@ -190,7 +189,7 @@ export function GuideList({ list, layout: forced }: { list: GuideListData; layou
       )}
       <ol
         className="guide-list-items"
-        data-cols={forced ? columns(forced, look.density, items.length) : look.cols}
+        data-cols={look.cols}
         data-flow={layout === "steps" ? look.flow : undefined}
       >
         {items.map((item, i) => {

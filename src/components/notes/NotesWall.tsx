@@ -6,8 +6,8 @@ import { NEW_NOTE_PATH, isNote, notePath } from "@/lib/notes/isNote";
 
 /*
   The student's own notes on the dashboard: pages they wrote or talked into, which
-  open on the same screen as any study session (FullStudyPage) and which the tutor
-  can check for mistakes.
+  open on the same screen as any study session (FullStudyPage), where the tutor can
+  teach them back and quiz the student on them.
 
   They come from the store like everything else on this page — a note is a study
   session with sourceKind "note" — so creating, renaming or deleting one shows up
@@ -88,7 +88,7 @@ export function NotesWall() {
           <span className="min-w-0">
             <span className="block text-sm font-medium">Start a note of your own</span>
             <span className="block text-xs text-muted-foreground">
-              Type it or talk it out — then your tutor checks it for mistakes, quizzes you on it, or teaches it back.
+              Type it or talk it out — then press Teach me and your tutor teaches it back, or quizzes you from the Quiz button at the top.
             </span>
           </span>
         </button>

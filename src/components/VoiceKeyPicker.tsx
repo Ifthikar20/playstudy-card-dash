@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Keyboard } from "lucide-react";
+import { Check, Keyboard, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   VOICE_KEY_PRESETS,
   isMac,
+  matchesVoiceKey,
   sameVoiceKey,
   voiceKeyFromEvent,
   voiceKeyLabel,
@@ -153,6 +154,110 @@ export function VoiceKeyPicker({
         // Asked for often, and it genuinely cannot work: macOS keeps fn for itself.
         <p className={cn("text-[12px]", t.muted)}>The fn key never reaches a web page, so it can't be used here.</p>
       )}
+    </div>
+  );
+}
+
+/*
+  "Try it": press the chosen key and see it work, before ever opening a lesson.
+  It lights up the way the mic does in Teach mode, so the student learns what the
+  key does, not just which key it is. Paused while the picker above is recording a
+  new key (that keypress belongs to the recorder).
+*/
+export function VoiceKeyTester({
+  value,
+  tone = "app",
+  className,
+}: {
+  value: VoiceKey;
+  tone?: keyof typeof TONES;
+  className?: string;
+}) {
+  const t = TONES[tone];
+  const [heard, setHeard] = useState(false);
+  const timer = useRef<number>();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || !matchesVoiceKey(e, value)) return;
+      // Typing into a field (Settings has some) is typing, never a test: an "m" there
+      // must stay an "m".
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      // A recorder that is listening takes the key first (it stops propagation), so
+      // reaching here means this press was a test. Keep it from typing anywhere.
+      e.preventDefault();
+      setHeard(true);
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setHeard(false), 2600);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.clearTimeout(timer.current);
+    };
+  }, [value]);
+
+  return (
+    <div
+      className={cn("flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors", t.card, className)}
+      role="status"
+      aria-live="polite"
+    >
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-full border transition-all",
+          heard ? "border-emerald-500 bg-emerald-500 text-white shadow-[0_0_0_6px_rgba(16,185,129,0.18)]" : t.kbd,
+        )}
+        aria-hidden
+      >
+        {heard ? <Check className="size-4" /> : <Mic className="size-4" />}
+      </span>
+      <p className="text-[13px] leading-snug">
+        {heard ? (
+          <>That's it — in a lesson, your tutor stops and listens when you press it.</>
+        ) : (
+          <>
+            <span className="font-semibold">Try it:</span> press{" "}
+            <kbd className={cn("rounded-md border px-1.5 py-0.5 font-mono text-[12px] font-semibold", t.kbd)}>
+              {voiceKeyLabel(value)}
+            </kbd>{" "}
+            now.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** The other keys Teach mode already knows, for reference (they aren't changeable). */
+export function TeachKeysReference({ tone = "app", className }: { tone?: keyof typeof TONES; className?: string }) {
+  const t = TONES[tone];
+  const mod = isMac() ? "⌘" : "Ctrl";
+  const keys: [string[], string][] = [
+    [["Space"], "Play or pause the lesson"],
+    [["←", "→"], "Previous or next step"],
+    [["Esc"], "Stop the lesson"],
+    [[`${mod} K`], "Search"],
+    [[`${mod} B`], "Show or hide the sidebar"],
+  ];
+  return (
+    <div className={cn("text-[13px]", className)}>
+      <p className={cn("mb-2 text-[12px] font-semibold uppercase tracking-[0.08em]", t.muted)}>Other keys</p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {keys.map(([caps, what]) => (
+          <li key={what} className="flex items-center gap-2">
+            <span className="flex shrink-0 gap-1">
+              {caps.map((c) => (
+                <kbd key={c} className={cn("min-w-7 rounded-md border px-1.5 py-0.5 text-center font-mono text-[12px] font-semibold", t.kbd)}>
+                  {c}
+                </kbd>
+              ))}
+            </span>
+            <span className={t.muted}>{what}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

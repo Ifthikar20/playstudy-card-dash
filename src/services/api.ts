@@ -2,6 +2,8 @@
  * Unified API service for making a single call to fetch all application data
  */
 import { clearCachedUserData } from '@/lib/localData';
+import { parseQuestions } from '@/lib/quiz/parse';
+import type { QuizItem } from '@/lib/quiz/types';
 import type { ExamPlan } from '@/lib/examPlan';
 import type { NoteCheck } from '@/services/notes';
 
@@ -98,13 +100,19 @@ const BrowserStorage = {
   }
 };
 
-export interface Question {
-  id: string;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation: string;
-}
+/**
+ * A quiz question of any kind (lib/quiz/types.ts). Its `hint` is a nudge for after a
+ * wrong first try that never names or rules out an answer: null until one is written
+ * (getQuestionHint writes it for older quizzes).
+ */
+export type Question = QuizItem;
+
+/**
+ * The questions the server sent, each checked against its kind (lib/quiz/parse): one
+ * this version of the app can't show (an unknown kind, an answer that doesn't fit its
+ * options) is left out rather than shown wrong or graded wrong.
+ */
+const toQuestions = (raw: unknown): Question[] => parseQuestions(raw);
 
 export interface Topic {
   id: string;
@@ -363,7 +371,7 @@ async function fetchAndCacheAppData(token: string) {
 /**
  * Generate questions using Anthropic AI
  */
-export const generateQuestions = async (topic: string, numQuestions: number = 5, difficulty: string = 'medium'): Promise<any> => {
+export const generateQuestions = async (topic: string, numQuestions: number = 5, difficulty: string = 'medium'): Promise<unknown> => {
   try {
     const token = getAuthToken();
 
@@ -606,17 +614,34 @@ export const fetchSessionPdf = async (sessionId: string, signal?: AbortSignal): 
  * Stream question generation using Server-Sent Events (SSE)
  * Provides real-time updates as questions are generated in the background
  */
+/** A topic as the server sends it, before normalizeTopics fills in the defaults. */
+interface RawTopic {
+  id: string | number;
+  db_id?: number | null;
+  score?: number | null;
+  currentQuestionIndex?: number;
+  completed?: boolean;
+  questions?: unknown;
+  subtopics?: RawTopic[];
+  [field: string]: unknown;
+}
+
 // Normalize topics from the API into the frontend shape (recursive).
-function normalizeTopics(topicList: any[]): any[] {
+function normalizeTopics(topicList: RawTopic[]): Topic[] {
   if (!topicList) return [];
-  return topicList.map((t: any) => ({
-    ...t,
-    db_id: t.db_id ?? t.id,
-    score: t.score ?? 0,
-    currentQuestionIndex: t.currentQuestionIndex ?? 0,
-    completed: t.completed ?? false,
-    subtopics: t.subtopics ? normalizeTopics(t.subtopics) : [],
-  }));
+  return topicList.map(
+    (t) =>
+      ({
+        ...t,
+        db_id: t.db_id ?? t.id,
+        score: t.score ?? 0,
+        currentQuestionIndex: t.currentQuestionIndex ?? 0,
+        completed: t.completed ?? false,
+        // Checked per kind, so a question the quiz can't grade never reaches it.
+        ...(Array.isArray(t.questions) ? { questions: toQuestions(t.questions) } : {}),
+        subtopics: t.subtopics ? normalizeTopics(t.subtopics) : [],
+      }) as unknown as Topic,
+  );
 }
 
 /**
@@ -942,20 +967,58 @@ export const generateSectionQuiz = async (
     throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to build the quiz');
   }
   forgetCachedSession(sessionId);
-  const data = await response.json();
-  return (data.questions ?? []).map((q: any): Question => ({
-    id: String(q.id),
-    question: q.question,
-    options: q.options ?? [],
-    correctAnswer: q.correctAnswer ?? 0,
-    explanation: q.explanation ?? '',
-  }));
+  // As the server sends them (_question_out: every kind, `kind` always present).
+  const data: { questions?: unknown } = await response.json();
+  return toQuestions(data.questions);
+};
+
+/**
+ * An Error that remembers the HTTP status it came from, so a caller can tell a refusal
+ * (422: the request was understood and turned down) from a failure worth retrying.
+ */
+export type HttpError = Error & { status: number };
+
+const httpError = (message: string, status: number): HttpError => Object.assign(new Error(message), { status });
+
+/**
+ * A hint for one quiz question, for after a wrong first pick. The server writes it once
+ * (a nudge toward the idea that never names or rules out an option), keeps it with the
+ * question and hands the same one back after that, so asking twice costs nothing.
+ * Throws an HttpError: 404 when the question isn't the student's, 502 when no safe
+ * hint could be written, 429 when asked too often.
+ */
+export const getQuestionHint = async (sessionId: string, topicDbId: number, questionId: string): Promise<string> => {
+  const token = getAuthToken();
+  const response = await fetch(
+    `${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/questions/${encodeURIComponent(questionId)}/hint`,
+    {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    },
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw httpError(typeof err.detail === 'string' ? err.detail : "Couldn't find a hint", response.status);
+  }
+  const hint = (await response.json()).hint;
+  if (typeof hint !== 'string' || !hint.trim()) throw httpError("Couldn't find a hint", 502);
+  return hint.trim();
 };
 
 /**
  * Ask the AI to change part of a section's notes with a plain-language instruction.
+ * Throws an HttpError: status 422 means the server refused the change as unsafe (it
+ * would have lost a formula, a table or a pinned picture) and says why in the message;
+ * anything else (502 and so on) is a failure that may work on another try.
+ * Answers the new notes and the tutor's questions about the section as the server
+ * re-placed them over those notes (null if it didn't send them): the old ones point at
+ * words that may be gone.
  */
-export const reviseTopicNotes = async (sessionId: string, topicDbId: number, instruction: string): Promise<string> => {
+export const reviseTopicNotes = async (
+  sessionId: string,
+  topicDbId: number,
+  instruction: string,
+): Promise<{ notes: string; noteChecks: NoteCheck[] | null }> => {
   const token = getAuthToken();
   const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes/revise`, {
     method: 'POST',
@@ -964,10 +1027,11 @@ export const reviseTopicNotes = async (sessionId: string, topicDbId: number, ins
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(sectionErrorMessage(err, 'Failed to revise notes'));
+    throw httpError(sectionErrorMessage(err, 'Failed to revise notes'), response.status);
   }
   forgetCachedSession(sessionId);
-  return (await response.json()).notes as string;
+  const data: { notes: string; noteChecks?: NoteCheck[] } = await response.json();
+  return { notes: data.notes, noteChecks: Array.isArray(data.noteChecks) ? data.noteChecks : null };
 };
 
 export interface Flashcard {
@@ -996,8 +1060,8 @@ export const generateSectionFlashcards = async (
     const err = await response.json().catch(() => ({}));
     throw new Error(typeof err.detail === 'string' ? err.detail : 'Failed to make flashcards');
   }
-  const data = await response.json();
-  return (data.flashcards ?? []).map((f: any): Flashcard => ({
+  const data: { flashcards?: { id: string | number; front: string; back: string; hint?: string | null }[] } = await response.json();
+  return (data.flashcards ?? []).map((f): Flashcard => ({
     id: String(f.id),
     front: f.front,
     back: f.back,

@@ -237,7 +237,7 @@ export function speechAudioElement(): HTMLAudioElement {
 
 /**
  * Unlock audio playback. Call synchronously from a user gesture (click/tap/key) — e.g.
- * the "Teach mode" button — so later clips can play on their own. Safe to call repeatedly.
+ * the "Teach me" button — so later clips can play on their own. Safe to call repeatedly.
  */
 export function primeSpeechAudio(): void {
   if (audioPrimed) return;

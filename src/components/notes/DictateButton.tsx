@@ -1,5 +1,4 @@
 import { Loader2, Mic, MicOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Dictation } from "@/lib/guide/dictation";
@@ -7,8 +6,9 @@ import { micBlockedByInsecurePage, primeSpeechAudio } from "@/lib/guide/speech";
 import { useVoiceKey, voiceKeyLabel } from "@/lib/voiceKey";
 
 /*
-  Start / stop dictating. The same button in the page header and in each section's
-  toolbar (`compact`), driving the page's ONE dictation (there is one microphone).
+  Start / stop dictating, in a note's top bar, driving the page's ONE dictation
+  (there is one microphone). Study notes have no Dictate: sections lost their
+  toolbar, and Teach mode's mic is how those notes get changed.
 
   It never takes focus from the editor: pressing it would otherwise move focus off
   the open sheet, and with no caret the next phrase would have nowhere to land. So
@@ -19,15 +19,12 @@ import { useVoiceKey, voiceKeyLabel } from "@/lib/voiceKey";
 export function DictateButton({
   dictation,
   disabled,
-  compact,
   onToggle,
   className,
 }: {
   dictation: Dictation;
   /** Off while something else owns the page (Teach mode, the tutor's questions). */
   disabled?: boolean;
-  /** The small ghost button of a section's toolbar, instead of the header pill. */
-  compact?: boolean;
   /** Instead of `dictation.toggle()`, when the page must pick where the words go first. */
   onToggle?: () => void;
   className?: string;
@@ -64,30 +61,6 @@ export function DictateButton({
   ) : (
     <Mic className="size-3.5" />
   );
-
-  if (compact) {
-    return (
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={press}
-        disabled={disabled}
-        aria-pressed={listening}
-        title={title}
-        className={cn(
-          "h-7 text-xs",
-          listening ? "an-note-live text-pink-700 dark:text-pink-300" : "text-muted-foreground",
-          unsupported && "opacity-60",
-          className,
-        )}
-      >
-        {icon}
-        {writing ? "Writing…" : listening ? "Stop" : "Dictate"}
-      </Button>
-    );
-  }
 
   return (
     <button

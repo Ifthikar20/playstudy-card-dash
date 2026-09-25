@@ -11,8 +11,15 @@ interface TopicSummaryProps {
   score: number;
   totalQuestions: number;
   onContinue: () => void;
-  onRetry: () => void;
-  isLastTopic: boolean;
+  /** Ask the same questions again (offered when below the pass mark, or beside "New questions"). */
+  onRetry?: () => void;
+  /** Write a new set of questions: offered as well as Retry when given (a PDF's part). */
+  onNewQuestions?: () => void;
+  isLastTopic?: boolean;
+  /** What was finished, in lower case: "topic" (the default), or "part" for a stretch of a PDF. */
+  unitLabel?: string;
+  /** The continue button's words, where "Next topic" isn't what it does ("Continue" on the board, "Close"). */
+  continueLabel?: string;
   /** XP earned by this completion (from the store); falls back to a computed estimate */
   xp?: XpBreakdown | null;
   sessionCompleted?: boolean;
@@ -22,19 +29,34 @@ interface TopicSummaryProps {
   Topic complete — quiet card: score, the XP you earned line by line, the
   running total, and a fold-out that explains exactly how XP is calculated.
 */
-export function TopicSummary({ topicTitle, score, totalQuestions, onContinue, onRetry, isLastTopic, xp, sessionCompleted }: TopicSummaryProps) {
+export function TopicSummary({
+  topicTitle,
+  score,
+  totalQuestions,
+  onContinue,
+  onRetry,
+  onNewQuestions,
+  isLastTopic = false,
+  unitLabel = "topic",
+  continueLabel,
+  xp,
+  sessionCompleted,
+}: TopicSummaryProps) {
   const totalXp = useAppStore((s) => s.xp);
   const [showRules, setShowRules] = useState(false);
 
   const correct = Math.round(((score || 0) * totalQuestions) / 100);
   const passing = totalQuestions === 0 || correct >= totalQuestions * 0.7;
   const perfect = totalQuestions > 0 && correct === totalQuestions;
+  const Unit = unitLabel.charAt(0).toUpperCase() + unitLabel.slice(1);
+  // Below the pass mark, Retry sits beside Continue; otherwise it's with "New questions" underneath.
+  const retryUp = !passing && !!onRetry;
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-card">
       <div className="px-6 pb-5 pt-6 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-          {sessionCompleted ? "Session complete" : "Topic complete"}
+          {sessionCompleted ? "Session complete" : `${Unit} complete`}
         </p>
         <h3 className="mt-1.5 text-lg font-semibold tracking-tight">{topicTitle}</h3>
         <p className="mt-4 text-4xl font-semibold tabular-nums tracking-tight">
@@ -103,17 +125,31 @@ export function TopicSummary({ topicTitle, score, totalQuestions, onContinue, on
       )}
 
       <div className="flex gap-2 border-t border-border p-4">
-        {!passing && (
+        {retryUp && (
           <Button variant="outline" className="flex-1" onClick={onRetry}>
             <RotateCcw className="size-4" />
-            Retry topic
+            Retry {unitLabel}
           </Button>
         )}
         <Button className="flex-1" onClick={onContinue}>
-          {isLastTopic ? "Back to topics" : "Next topic"}
+          {continueLabel ?? (isLastTopic ? "Back to topics" : `Next ${unitLabel}`)}
           <ArrowRight className="size-4" />
         </Button>
       </div>
+      {onNewQuestions && (
+        <div className="-mt-2 flex flex-wrap justify-center gap-1 px-4 pb-3">
+          {onRetry && !retryUp && (
+            <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={onRetry}>
+              <RotateCcw className="size-3.5" />
+              Retry
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={onNewQuestions}>
+            <Sparkles className="size-3.5" />
+            New questions
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

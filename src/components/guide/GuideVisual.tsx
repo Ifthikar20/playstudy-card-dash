@@ -31,6 +31,44 @@ import { VISUAL_FENCE } from "@/lib/notes/fences";
   were shown — and every new kind only has to be added once.
 */
 
+/** Whether a symbol is written in LaTeX (\ce{CO2}, v_0, x^2) rather than as plain letters. */
+const looksTex = (s: string) => /\\[a-zA-Z]+|[\^_{]/.test(s);
+
+/**
+ * A symbol's LaTeX as plain letters: \ce{C6H12O6} -> C6H12O6, \Delta H -> Delta H,
+ * v_0 -> v0. For what the pointer matches spoken names against, and for a chip whose
+ * LaTeX doesn't render (the server cuts a long symbol short, which can leave a brace
+ * open).
+ */
+function plainTex(tex: string): string {
+  return tex
+    .replace(/\\(?:ce|text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}?/g, "$1")
+    .replace(/\\([a-zA-Z]+)/g, "$1")
+    .replace(/\\./g, " ")
+    .replace(/[{}$^_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * One symbol in a formula's key. The lesson writes symbols the way it writes the
+ * formula, so chemistry comes as \ce{CO2}: set it as maths (CO₂), not as the code
+ * that writes it. Plain words ("light") stay words.
+ */
+function SymbolText({ text }: { text: string }) {
+  const html = useMemo(() => {
+    if (!looksTex(text)) return null;
+    try {
+      const out = katex.renderToString(text, { throwOnError: false, displayMode: false, output: "html" });
+      return out.includes("katex-error") ? null : out;
+    } catch {
+      return null;
+    }
+  }, [text]);
+  if (html) return <span className="guide-math-part" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <span className="guide-math-part">{looksTex(text) ? plainTex(text) : text}</span>;
+}
+
 /** A line of maths, with each symbol named underneath when the step said what they mean. */
 export function GuideMathLine({ math }: { math: GuideMath }) {
   const html = useMemo(() => {
@@ -54,8 +92,8 @@ export function GuideMathLine({ math }: { math: GuideMath }) {
       {labels && (
         <div className="guide-math-keys">
           {labels.map((l, i) => (
-            <span key={i} className="guide-math-key" data-board-part={`labels.${i}`} data-board-label={`${l.part} ${l.meaning}`}>
-              <span className="guide-math-part">{l.part}</span>
+            <span key={i} className="guide-math-key" data-board-part={`labels.${i}`} data-board-label={`${plainTex(l.part)} ${l.meaning}`}>
+              <SymbolText text={l.part} />
               <span className="guide-math-meaning">{l.meaning}</span>
             </span>
           ))}
@@ -184,7 +222,10 @@ export function blankVisual(spec: VisualSpec): VisualSpec {
  *  back through `parseVisualFence` identically. */
 export function visualToMarkdown(spec: VisualSpec, space = 0): string {
   if (spec.kind === "math") {
-    const keys = spec.data.labels?.length ? "\n" + spec.data.labels.map((l) => `- **${l.part}** — ${l.meaning}`).join("\n") : "";
+    // A LaTeX symbol goes in as maths ($$…$$ inline, as the notes render it), so the
+    // pinned key reads CO₂ there too, not \ce{CO2}.
+    const sym = (p: string) => (looksTex(p) ? `$$${p}$$` : `**${p}**`);
+    const keys = spec.data.labels?.length ? "\n" + spec.data.labels.map((l) => `- ${sym(l.part)} — ${l.meaning}`).join("\n") : "";
     return `\n$$${spec.data.latex}$$\n${keys}\n`;
   }
   if (spec.kind === "table") {
@@ -220,7 +261,7 @@ export function visualSummary(spec: VisualSpec): string {
   const clip = (s: string, n = 30) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
   switch (spec.kind) {
     case "math":
-      return clip(spec.data.latex.replace(/\[a-zA-Z]+|[{}]/g, " ").replace(/\s+/g, " ").trim());
+      return clip(plainTex(spec.data.latex));
     case "graph":
       return clip("y = " + spec.data.fn);
     case "atom":

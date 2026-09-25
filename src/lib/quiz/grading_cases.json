@@ -1,0 +1,238 @@
+{
+  "about": [
+    "Quiz grading cases shared by the frontend (src/lib/quiz/grade.ts, checked by scripts/tests/quiz.test.ts) and the backend (app/core/quiz_kinds.py, its parity test reads a copy at tests/fixtures/quiz_grading_cases.json). Both files must stay byte-for-byte the same.",
+    "items: wire questions by name, camelCase as the server sends them ({id, kind, question, options, correctAnswer, answer, explanation}).",
+    "normalize: normalizeFill(input) == expected. Steps, in order: NFKC; lower case; trim; curly quotes to straight ones and U+2212 (minus) to '-'; strip . , ; : ! ? \" ' ( ) and whitespace from both ends; hyphens and dashes (U+002D, U+2010-U+2014) become spaces, except a '-' at the very start followed by a digit (a minus sign); collapse whitespace to one space and trim; drop one leading 'a ', 'an ' or 'the '.",
+    "grade: grade(items[item], response) == expected {correct, right, total}. A response of the wrong kind is {correct: false, right: 0, total: parts}. single: choice == correctAnswer (1/1). true_false: value == answer.correct; a {kind: single} response is read as 0 = True, 1 = False (1/1). multi: the set of valid picked indices (integers in range, duplicates ignored) equals answer.correct; right = options judged right (picked and correct, or not picked and not correct), total = len(options). order / categorize / match: right = positions i < total where response[i] == answer.correct[i]; total = len(answer.correct) (order) or len(options); correct = right == total and len(response) == total. fill: normalise both; if both match ^-?(\\d+|\\d{1,3}(,\\d{3})+)(\\.\\d+)?$ compare as numbers (commas removed) with math.isclose(rel_tol=1e-6); else equal strings, or a restricted Damerau-Levenshtein distance <= 1 (counted in code points) when the accepted form is 5 or more code points long; 1/1.",
+    "describe: answerText(item) / describe_answer and responseText(item, response) / describe_response (null = nothing to say)."
+  ],
+  "items": {
+    "single": {
+      "id": "1",
+      "kind": "single",
+      "question": "Which organelle makes most of a cell's ATP?",
+      "options": ["Nucleus", "Mitochondrion", "Ribosome", "Golgi body"],
+      "correctAnswer": 1,
+      "answer": null,
+      "explanation": "Mitochondria carry out aerobic respiration."
+    },
+    "tf_true": {
+      "id": "2",
+      "kind": "true_false",
+      "question": "Plant cells have a cell wall.",
+      "options": ["True", "False"],
+      "correctAnswer": 0,
+      "answer": { "kind": "true_false", "correct": true },
+      "explanation": "The wall is made of cellulose."
+    },
+    "tf_false": {
+      "id": "3",
+      "kind": "true_false",
+      "question": "Mature red blood cells have a nucleus.",
+      "options": ["True", "False"],
+      "correctAnswer": 1,
+      "answer": { "kind": "true_false", "correct": false },
+      "explanation": "They lose it to make room for haemoglobin."
+    },
+    "multi": {
+      "id": "4",
+      "kind": "multi",
+      "question": "Which of these are found in plant cells but not in animal cells?",
+      "options": ["Cell wall", "Chloroplast", "Mitochondrion", "Ribosome", "Large central vacuole"],
+      "correctAnswer": 0,
+      "answer": { "kind": "multi", "correct": [0, 1, 4] },
+      "explanation": "Both kinds of cell have mitochondria and ribosomes."
+    },
+    "order": {
+      "id": "5",
+      "kind": "order",
+      "question": "Put the stages of mitosis in order.",
+      "options": ["Metaphase", "Prophase", "Telophase", "Anaphase"],
+      "correctAnswer": 0,
+      "answer": { "kind": "order", "correct": [1, 0, 3, 2] },
+      "explanation": "Prophase, metaphase, anaphase, telophase."
+    },
+    "categorize": {
+      "id": "6",
+      "kind": "categorize",
+      "question": "Sort these living things into plants and animals.",
+      "options": ["Fern", "Frog", "Moss", "Eagle", "Oak"],
+      "correctAnswer": 0,
+      "answer": { "kind": "categorize", "categories": ["Plants", "Animals"], "correct": [0, 1, 0, 1, 0] },
+      "explanation": "Plants make their own food."
+    },
+    "match": {
+      "id": "7",
+      "kind": "match",
+      "question": "Match each organ to its main job.",
+      "options": ["Heart", "Lungs", "Kidneys"],
+      "correctAnswer": 0,
+      "answer": { "kind": "match", "rights": ["Filter blood", "Pump blood", "Take in oxygen"], "correct": [1, 2, 0] },
+      "explanation": "Each organ has one main job in the body."
+    },
+    "fill_word": {
+      "id": "8",
+      "kind": "fill",
+      "question": "The green pigment in leaves is called ____.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["chlorophyll"] },
+      "explanation": "Chlorophyll absorbs red and blue light."
+    },
+    "fill_short": {
+      "id": "9",
+      "kind": "fill",
+      "question": "The ____ Revolution began in 1789.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["French"] },
+      "explanation": "It began with the storming of the Bastille."
+    },
+    "fill_number": {
+      "id": "10",
+      "kind": "fill",
+      "question": "At sea level, water boils at ____ degrees Celsius.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["100"] },
+      "explanation": "Lower air pressure lowers the boiling point."
+    },
+    "fill_negative": {
+      "id": "11",
+      "kind": "fill",
+      "question": "To the nearest degree, absolute zero is ____ degrees Celsius.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["-273"] },
+      "explanation": "Absolute zero is -273.15 degrees Celsius."
+    },
+    "fill_thousands": {
+      "id": "12",
+      "kind": "fill",
+      "question": "One thousand thousands make ____.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["1,000,000", "one million", "a million"] },
+      "explanation": "1,000 x 1,000 = 1,000,000."
+    },
+    "fill_two_words": {
+      "id": "13",
+      "kind": "fill",
+      "question": "An animal that eats both plants and meat is an ____.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["omnivore"] },
+      "explanation": "Omni means all."
+    },
+    "fill_apostrophe": {
+      "id": "14",
+      "kind": "fill",
+      "question": "The idea that force equals mass times acceleration is ____ second law.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["Newton's"] },
+      "explanation": "F = ma."
+    },
+    "fill_small_number": {
+      "id": "15",
+      "kind": "fill",
+      "question": "Three fives make ____.",
+      "options": [],
+      "correctAnswer": 0,
+      "answer": { "kind": "fill", "accept": ["15"] },
+      "explanation": "3 x 5 = 15."
+    }
+  },
+  "normalize": [
+    { "name": "case, article and end punctuation", "input": "  The Mitochondria. ", "expected": "mitochondria" },
+    { "name": "an, and an exclamation", "input": "An apple!", "expected": "apple" },
+    { "name": "hyphen becomes a space", "input": "cell-wall", "expected": "cell wall" },
+    { "name": "runs of spaces and a hyphen", "input": "well-known   fact", "expected": "well known fact" },
+    { "name": "curly quotes round it", "input": "“Photosynthesis”", "expected": "photosynthesis" },
+    { "name": "curly apostrophe inside", "input": "Newton’s", "expected": "newton's" },
+    { "name": "full-width letters (NFKC)", "input": "ＡＢＣ", "expected": "abc" },
+    { "name": "typeset minus stays a minus", "input": "−273.15", "expected": "-273.15" },
+    { "name": "leading minus on a number stays", "input": "-5", "expected": "-5" },
+    { "name": "en dash between words", "input": "north–south", "expected": "north south" },
+    { "name": "brackets and a colon at the ends", "input": "(ATP):", "expected": "atp" },
+    { "name": "inner dots stay", "input": "U.S.A.", "expected": "u.s.a" },
+    { "name": "only one article is dropped", "input": "the the end", "expected": "the end" },
+    { "name": "an article alone stays", "input": "The", "expected": "the" },
+    { "name": "empty", "input": "   ", "expected": "" }
+  ],
+  "grade": [
+    { "name": "single right", "item": "single", "response": { "kind": "single", "choice": 1 }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "single wrong", "item": "single", "response": { "kind": "single", "choice": 0 }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "single out of range", "item": "single", "response": { "kind": "single", "choice": 7 }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "single, answer of another kind", "item": "single", "response": { "kind": "multi", "choices": [1] }, "expected": { "correct": false, "right": 0, "total": 1 } },
+
+    { "name": "true/false right (true)", "item": "tf_true", "response": { "kind": "true_false", "value": true }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "true/false wrong (true)", "item": "tf_true", "response": { "kind": "true_false", "value": false }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "true/false right (false)", "item": "tf_false", "response": { "kind": "true_false", "value": false }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "true/false from a single pick: 0 is True", "item": "tf_true", "response": { "kind": "single", "choice": 0 }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "true/false from a single pick: 1 is False", "item": "tf_true", "response": { "kind": "single", "choice": 1 }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "true/false, answer of another kind", "item": "tf_false", "response": { "kind": "order", "order": [0, 1] }, "expected": { "correct": false, "right": 0, "total": 1 } },
+
+    { "name": "multi exactly right", "item": "multi", "response": { "kind": "multi", "choices": [0, 1, 4] }, "expected": { "correct": true, "right": 5, "total": 5 } },
+    { "name": "multi right in any order", "item": "multi", "response": { "kind": "multi", "choices": [4, 0, 1] }, "expected": { "correct": true, "right": 5, "total": 5 } },
+    { "name": "multi with a repeat", "item": "multi", "response": { "kind": "multi", "choices": [0, 0, 1, 4] }, "expected": { "correct": true, "right": 5, "total": 5 } },
+    { "name": "multi ignores an index out of range", "item": "multi", "response": { "kind": "multi", "choices": [0, 1, 4, 9] }, "expected": { "correct": true, "right": 5, "total": 5 } },
+    { "name": "multi one missing", "item": "multi", "response": { "kind": "multi", "choices": [0, 1] }, "expected": { "correct": false, "right": 4, "total": 5 } },
+    { "name": "multi one too many", "item": "multi", "response": { "kind": "multi", "choices": [0, 1, 2, 4] }, "expected": { "correct": false, "right": 4, "total": 5 } },
+    { "name": "multi nothing picked", "item": "multi", "response": { "kind": "multi", "choices": [] }, "expected": { "correct": false, "right": 2, "total": 5 } },
+    { "name": "multi all the wrong ones", "item": "multi", "response": { "kind": "multi", "choices": [2, 3] }, "expected": { "correct": false, "right": 0, "total": 5 } },
+    { "name": "multi, answer of another kind", "item": "multi", "response": { "kind": "single", "choice": 0 }, "expected": { "correct": false, "right": 0, "total": 5 } },
+
+    { "name": "order right", "item": "order", "response": { "kind": "order", "order": [1, 0, 3, 2] }, "expected": { "correct": true, "right": 4, "total": 4 } },
+    { "name": "order left as shown", "item": "order", "response": { "kind": "order", "order": [0, 1, 2, 3] }, "expected": { "correct": false, "right": 0, "total": 4 } },
+    { "name": "order half in place", "item": "order", "response": { "kind": "order", "order": [1, 0, 2, 3] }, "expected": { "correct": false, "right": 2, "total": 4 } },
+    { "name": "order cut short", "item": "order", "response": { "kind": "order", "order": [1, 0, 3] }, "expected": { "correct": false, "right": 3, "total": 4 } },
+
+    { "name": "categorize right", "item": "categorize", "response": { "kind": "categorize", "placed": [0, 1, 0, 1, 0] }, "expected": { "correct": true, "right": 5, "total": 5 } },
+    { "name": "categorize one in the wrong group", "item": "categorize", "response": { "kind": "categorize", "placed": [0, 0, 0, 1, 0] }, "expected": { "correct": false, "right": 4, "total": 5 } },
+    { "name": "categorize one not placed", "item": "categorize", "response": { "kind": "categorize", "placed": [-1, 1, 0, 1, 0] }, "expected": { "correct": false, "right": 4, "total": 5 } },
+    { "name": "categorize nothing placed", "item": "categorize", "response": { "kind": "categorize", "placed": [-1, -1, -1, -1, -1] }, "expected": { "correct": false, "right": 0, "total": 5 } },
+
+    { "name": "match right", "item": "match", "response": { "kind": "match", "pairs": [1, 2, 0] }, "expected": { "correct": true, "right": 3, "total": 3 } },
+    { "name": "match one pair right", "item": "match", "response": { "kind": "match", "pairs": [2, 1, 0] }, "expected": { "correct": false, "right": 1, "total": 3 } },
+    { "name": "match one not joined", "item": "match", "response": { "kind": "match", "pairs": [1, -1, 0] }, "expected": { "correct": false, "right": 2, "total": 3 } },
+    { "name": "match, answer of another kind", "item": "match", "response": { "kind": "single", "choice": 1 }, "expected": { "correct": false, "right": 0, "total": 3 } },
+
+    { "name": "fill exact", "item": "fill_word", "response": { "kind": "fill", "text": "chlorophyll" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill case, article, spaces and a full stop", "item": "fill_word", "response": { "kind": "fill", "text": "  The Chlorophyll. " }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill one letter dropped on a long word", "item": "fill_word", "response": { "kind": "fill", "text": "chlorophyl" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill two neighbours swapped", "item": "fill_word", "response": { "kind": "fill", "text": "chlorophlyl" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill two letters out", "item": "fill_word", "response": { "kind": "fill", "text": "chlorophyte" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill empty", "item": "fill_word", "response": { "kind": "fill", "text": "   " }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill short answer: case", "item": "fill_short", "response": { "kind": "fill", "text": "french" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill short answer: one letter dropped still counts (6 letters)", "item": "fill_short", "response": { "kind": "fill", "text": "Frnch" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill short answer: another word", "item": "fill_short", "response": { "kind": "fill", "text": "Fresh" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill number", "item": "fill_number", "response": { "kind": "fill", "text": "100" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill number with a decimal", "item": "fill_number", "response": { "kind": "fill", "text": "100.0" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill number off by one is wrong (numbers never get a typo allowance)", "item": "fill_number", "response": { "kind": "fill", "text": "101" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill number in words is not the number", "item": "fill_number", "response": { "kind": "fill", "text": "one hundred" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill negative number", "item": "fill_negative", "response": { "kind": "fill", "text": "-273" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill negative number with a typeset minus", "item": "fill_negative", "response": { "kind": "fill", "text": "−273" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill negative number without its minus", "item": "fill_negative", "response": { "kind": "fill", "text": "273" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill thousands without commas", "item": "fill_thousands", "response": { "kind": "fill", "text": "1000000" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill thousands with commas", "item": "fill_thousands", "response": { "kind": "fill", "text": "1,000,000" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill another accepted answer", "item": "fill_thousands", "response": { "kind": "fill", "text": "One million" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill dots for commas is not a number", "item": "fill_thousands", "response": { "kind": "fill", "text": "1.000.000" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill a comma that isn't thousands is not a number", "item": "fill_small_number", "response": { "kind": "fill", "text": "1,5" }, "expected": { "correct": false, "right": 0, "total": 1 } },
+    { "name": "fill a hyphen inside the word", "item": "fill_two_words", "response": { "kind": "fill", "text": "omni-vore" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill a curly apostrophe", "item": "fill_apostrophe", "response": { "kind": "fill", "text": "Newton’s" }, "expected": { "correct": true, "right": 1, "total": 1 } },
+    { "name": "fill, answer of another kind", "item": "fill_word", "response": { "kind": "single", "choice": 0 }, "expected": { "correct": false, "right": 0, "total": 1 } }
+  ],
+  "describe": [
+    { "name": "single", "item": "single", "response": { "kind": "single", "choice": 0 }, "answerText": "Mitochondrion", "responseText": "Nucleus" },
+    { "name": "true/false", "item": "tf_false", "response": { "kind": "true_false", "value": true }, "answerText": "False", "responseText": "True" },
+    { "name": "multi", "item": "multi", "response": { "kind": "multi", "choices": [4, 0] }, "answerText": "Cell wall, Chloroplast, Large central vacuole", "responseText": "Cell wall, Large central vacuole" },
+    { "name": "multi nothing picked", "item": "multi", "response": { "kind": "multi", "choices": [] }, "answerText": "Cell wall, Chloroplast, Large central vacuole", "responseText": null },
+    { "name": "order", "item": "order", "response": { "kind": "order", "order": [0, 1, 2, 3] }, "answerText": "Prophase → Metaphase → Anaphase → Telophase", "responseText": "Metaphase → Prophase → Telophase → Anaphase" },
+    { "name": "categorize", "item": "categorize", "response": { "kind": "categorize", "placed": [0, 0, -1, 1, -1] }, "answerText": "Plants: Fern, Moss, Oak; Animals: Frog, Eagle", "responseText": "Plants: Fern, Frog; Animals: Eagle" },
+    { "name": "categorize nothing placed", "item": "categorize", "response": { "kind": "categorize", "placed": [-1, -1, -1, -1, -1] }, "answerText": "Plants: Fern, Moss, Oak; Animals: Frog, Eagle", "responseText": null },
+    { "name": "match", "item": "match", "response": { "kind": "match", "pairs": [0, -1, 1] }, "answerText": "Heart → Pump blood; Lungs → Take in oxygen; Kidneys → Filter blood", "responseText": "Heart → Filter blood; Kidneys → Pump blood" },
+    { "name": "fill", "item": "fill_word", "response": { "kind": "fill", "text": "  Chloro   phyll " }, "answerText": "chlorophyll", "responseText": "Chloro phyll" },
+    { "name": "fill nothing typed", "item": "fill_word", "response": { "kind": "fill", "text": "" }, "answerText": "chlorophyll", "responseText": null }
+  ]
+}

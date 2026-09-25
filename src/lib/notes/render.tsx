@@ -10,6 +10,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { GuideVisual, parseVisualFence } from "@/components/guide/GuideVisual";
+import { GuideImage } from "@/components/guide/GuideImage";
 import { VISUAL_FENCES } from "@/lib/notes/fences";
 import { HEADING_COLORS, newTagRe } from "@/lib/notes/units";
 
@@ -51,7 +52,10 @@ export function PinnedOrPre({ node, ...props }: MdComponentProps) {
     if (spec) {
       return (
         <div className="guide-pinned not-prose" data-an-unit={unit} data-an-kind="atom">
-          <GuideVisual spec={spec} />
+          {/* A pinned picture is shown only while the server still vouches for it (its
+              picture_id and /img/ file); one from before pictures were checked, or
+              reported since, leaves just its caption - no picture, no fetch. */}
+          {spec.kind === "image" ? <GuideImage image={spec.data} pinned /> : <GuideVisual spec={spec} />}
         </div>
       );
     }

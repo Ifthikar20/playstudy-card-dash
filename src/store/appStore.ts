@@ -1,18 +1,21 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { AppData, deleteStudySession as apiDeleteStudySession, archiveStudySession as apiArchiveStudySession, updateTopicProgress, updateUserXP } from '@/services/api';
-import { topicCompletionXp, type XpBreakdown } from '@/lib/xp';
-import { recordAnswers, type AnswerEventIn } from '@/services/activity';
+import { XP_RULES, topicCompletionXp, type XpBreakdown } from '@/lib/xp';
+import { loggedResponse, recordAnswers, type AnswerEventIn } from '@/services/activity';
+import { grade } from '@/lib/quiz/grade';
+import type { Grade, QuizItem, QuizResponse } from '@/lib/quiz/types';
 import type { ExamPlan } from '@/lib/examPlan';
 import type { NoteCheck } from '@/services/notes';
 
-export interface Question {
-  id: string;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation: string;
-}
+/**
+ * A quiz question of any kind: single choice (a question with no `kind` is one), select
+ * all, true/false, put in order, sort into groups, fill in the blank, match pairs.
+ * lib/quiz/types.ts says what each kind keeps where. `hint` is a nudge for after a wrong
+ * first try that never names or rules out an answer: null (or missing) until the server
+ * has written one. `source` and `key` are only on a PDF's questions.
+ */
+export type Question = QuizItem;
 
 export interface Topic {
   id: string;
@@ -83,7 +86,15 @@ interface AppState {
   createSession: (title: string, content: string) => StudySession;
   createFullStudy: (sessionId: string) => void;
   processStudyContent: (sessionId: string, content: string) => void;
-  answerQuestion: (sessionId: string, topicId: string, answerIndex: number, questionIndex?: number) => { correct: boolean; explanation: string };
+  /** Score the FIRST try at one of a section's questions: its score share, XP and the answer
+   *  log. `response` is what was answered; a bare number is an option picked in a
+   *  single-choice question (how every caller answered before there were other kinds). */
+  answerQuestion: (
+    sessionId: string,
+    topicId: string,
+    response: QuizResponse | number,
+    questionIndex?: number,
+  ) => { correct: boolean; explanation: string; grade: Grade };
   moveToNextQuestion: (sessionId: string, topicId: string) => void;
   completeTopic: (sessionId: string, topicId: string) => void;
   /** Patch a section's editable fields in the store (title / description / notes). */
@@ -100,8 +111,11 @@ interface AppState {
   patchSession: (sessionId: string, patch: Partial<Pick<StudySession, 'title' | 'updatedAt'>>) => void;
   /** Drop a session from the store (a note deleted from its own page). */
   removeSession: (sessionId: string) => void;
-  /** Replace a section's quiz with a freshly generated set and reset its progress. */
+  /** Replace a section's quiz with a freshly generated set and start its score again.
+   *  A section already finished stays finished (see completeTopic). */
   setTopicQuestions: (sessionId: string, topicId: string, questions: Question[]) => void;
+  /** Keep a question's hint once the server has written it, so the quiz never asks twice. */
+  setQuestionHint: (sessionId: string, topicId: string, questionId: string, hint: string) => void;
   resetTopic: (sessionId: string, topicId: string) => void;
   deleteStudySession: (sessionId: string) => Promise<void>;
   archiveStudySession: (sessionId: string) => Promise<void>;
@@ -161,6 +175,14 @@ function scheduleFlush(flush: () => void, delayMs = 4000) {
     flush();
   }, delayMs);
 }
+/**
+ * Send what's pending (XP, answers, progress) a few seconds from now. For XP earned
+ * outside a section's quiz (a PDF part's completion bonus): addXp only queues it, and
+ * without a flush scheduled it would wait for the next answer to go out with it.
+ */
+export function syncProgressSoon() {
+  scheduleFlush(() => useAppStore.getState().syncPendingProgress());
+}
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && flushTimer) {
@@ -169,6 +191,51 @@ if (typeof document !== 'undefined') {
       useAppStore.getState().syncPendingProgress();
     }
   });
+}
+
+/** A topic anywhere in a session's tree, by its client-side id. */
+function findTopicIn(topics: Topic[] | undefined, id: string): Topic | undefined {
+  for (const t of topics ?? []) {
+    if (t.id === id) return t;
+    const inner = findTopicIn(t.subtopics, id);
+    if (inner) return inner;
+  }
+  return undefined;
+}
+
+/*
+  The store can hold two copies of one session: the page's full one (currentSession,
+  from GET /study-sessions/{id}) and the dashboard's (studySessions, from /app-data).
+  The server numbers their topics differently ("category-1-1" in one, "subtopic-1-1"
+  in the other), so a section named by the page's id has to be looked up in both and
+  matched in the other by its database id. The quiz actions used to look in
+  studySessions alone and found nothing for the page's ids: no score, no XP, no answer
+  log, and finishing a section swapped the page's copy for the dashboard's.
+*/
+
+/** The session copy a section lives in (the page's first), and the section itself. */
+function locateTopic(state: AppState, sessionId: string, topicId: string): { session: StudySession; topic: Topic } | null {
+  const copies = [state.currentSession?.id === sessionId ? state.currentSession : null, state.studySessions.find((s) => s.id === sessionId)];
+  for (const session of copies) {
+    const topic = session ? findTopicIn(session.extractedTopics, topicId) : undefined;
+    if (session && topic) return { session, topic };
+  }
+  return null;
+}
+
+/** Change one section in both copies of its session: by database id where both have one, else by id. */
+function patchSection(
+  state: AppState,
+  sessionId: string,
+  topic: Topic,
+  patch: (t: Topic) => Topic,
+): Pick<AppState, 'studySessions' | 'currentSession'> {
+  const same = (t: Topic) => (topic.db_id != null && t.db_id != null ? t.db_id === topic.db_id : t.id === topic.id);
+  const apply = (topics: Topic[]): Topic[] =>
+    topics.map((t) => (same(t) ? patch(t) : t.subtopics ? { ...t, subtopics: apply(t.subtopics) } : t));
+  const touched = <S extends StudySession | null>(s: S): S =>
+    s && s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s;
+  return { studySessions: state.studySessions.map(touched), currentSession: touched(state.currentSession) };
 }
 
 // Simulated AI topic extraction and question generation
@@ -404,104 +471,47 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  answerQuestion: (sessionId, topicId, answerIndex, questionIndex) => {
-    const state = get();
-    const session = state.studySessions.find(s => s.id === sessionId);
-    if (!session?.extractedTopics) return { correct: false, explanation: '' };
-
-    // Helper function to find topic in hierarchical structure
-    const findTopic = (topics: Topic[], id: string): Topic | null => {
-      for (const topic of topics) {
-        if (topic.id === id) return topic;
-        if (topic.subtopics) {
-          const found = findTopic(topic.subtopics, id);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    const topic = findTopic(session.extractedTopics, topicId);
-    if (!topic) return { correct: false, explanation: '' };
+  answerQuestion: (sessionId, topicId, given, questionIndex) => {
+    const missed: Grade = { correct: false, right: 0, total: 1 };
+    // In whichever copy of the session has it: the page's, then the dashboard's.
+    const topic = locateTopic(get(), sessionId, topicId)?.topic;
+    if (!topic) return { correct: false, explanation: '', grade: missed };
 
     // Use provided questionIndex or fall back to topic's currentQuestionIndex
     const indexToUse = questionIndex !== undefined ? questionIndex : topic.currentQuestionIndex;
     const question = topic.questions[indexToUse];
     if (!question) {
       console.error('❌ Question not found at index:', indexToUse, 'Total questions:', topic.questions.length);
-      return { correct: false, explanation: '' };
+      return { correct: false, explanation: '', grade: missed };
     }
 
-    console.log('📚 Checking answer for question', indexToUse + 1, 'of', topic.questions.length);
+    // A bare number is an option index, the only answer there was before question kinds.
+    // A true/false question keeps "True" and "False" as its options, so one answered
+    // that way (an older caller) still means what was picked.
+    const response: QuizResponse =
+      typeof given !== 'number'
+        ? given
+        : question.kind === 'true_false'
+          ? { kind: 'true_false', value: given === 0 }
+          : { kind: 'single', choice: given };
+    // All or nothing: a partly right answer ("3 of 5 in the right place") is feedback
+    // on screen, but it scores, pays and is logged as wrong.
+    const result = grade(question, response);
+    const correct = result.correct;
 
-    // Enhanced debug logging
-    console.log('🔍 Answer validation details:', {
-      answerIndex,
-      correctAnswer: question.correctAnswer,
-      answerIndexType: typeof answerIndex,
-      correctAnswerType: typeof question.correctAnswer,
-      answerIndexValue: answerIndex,
-      correctAnswerValue: question.correctAnswer,
-      currentScore: topic.score,
-      questionData: {
-        question: question.question,
-        options: question.options,
-        selectedOption: question.options[answerIndex],
-        correctOption: question.options[question.correctAnswer]
-      }
-    });
-
-    // Ensure both are numbers for comparison (handle null/undefined)
-    const answerNum = Number(answerIndex);
-    const correctNum = Number(question.correctAnswer);
-    const correct = !isNaN(answerNum) && !isNaN(correctNum) && answerNum === correctNum;
-
-    console.log('✅ Comparison result:', {
-      answerNum,
-      correctNum,
+    console.log('📚 Answer for question', indexToUse + 1, 'of', topic.questions.length, {
+      kind: question.kind ?? 'single',
       correct,
-      willAddPoints: correct ? (100 / topic.questions.length) : 0,
-      newScore: (topic.score || 0) + (correct ? 100 / topic.questions.length : 0)
+      parts: `${result.right}/${result.total}`,
     });
-
-    // Helper function to update score recursively (WITHOUT incrementing index)
-    const updateScoreRecursively = (topics: Topic[]): Topic[] => {
-      return topics.map(t => {
-        if (t.id === topicId) {
-          return {
-            ...t,
-            score: (t.score || 0) + (correct ? 100 / t.questions.length : 0),
-          };
-        }
-        if (t.subtopics) {
-          return {
-            ...t,
-            subtopics: updateScoreRecursively(t.subtopics)
-          };
-        }
-        return t;
-      });
-    };
 
     // Calculate new score
     const newScore = (topic.score || 0) + (correct ? 100 / topic.questions.length : 0);
 
-    // Update score (but don't move to next question yet)
-    set((state) => {
-      const updatedSessions = state.studySessions.map((s) => {
-        if (s.id !== sessionId || !s.extractedTopics) return s;
-        return {
-          ...s,
-          extractedTopics: updateScoreRecursively(s.extractedTopics)
-        };
-      });
-
-      const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-      return {
-        studySessions: updatedSessions,
-        currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession
-      };
-    });
+    // Update score (but don't move to next question yet), in both copies of the session.
+    // Each copy keeps its own tree: swapping the dashboard's in for the page's would drop
+    // what only the page's has (the questions just written, the file, the notes).
+    set((state) => patchSection(state, sessionId, topic, (t) => ({ ...t, score: newScore })));
 
     // Queue progress update for batching (don't sync immediately for performance)
     if (topic.db_id) {
@@ -513,7 +523,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           topicId: topic.db_id!,
           score: newScore,
           currentQuestionIndex: topic.currentQuestionIndex,
-          completed: false,
+          // A section once finished stays finished: a Retry (or fresh questions) answered
+          // after it must not un-complete it on the server, or a reload would show it
+          // undone and finishing it again would pay the completion bonus twice. A finish
+          // queued moments ago (completeTopic) and not sent yet counts too.
+          completed: topic.completed === true || state.pendingProgressUpdates.get(key)?.completed === true,
         });
         return { pendingProgressUpdates: newMap };
       });
@@ -521,7 +535,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     if (correct) {
-      get().addXp(10); // This now also updates pendingXPUpdates
+      get().addXp(XP_RULES.correctAnswer); // This now also updates pendingXPUpdates
     }
     get().logAnswer({
       session_id: sessionId,
@@ -530,9 +544,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       correct,
       mode: 'full_study',
       at: new Date().toISOString(),
+      kind: question.kind ?? 'single',
+      response: loggedResponse(response),
     });
 
-    return { correct, explanation: question.explanation };
+    return { correct, explanation: question.explanation, grade: result };
   },
 
   moveToNextQuestion: (sessionId, topicId) => {
@@ -651,64 +667,49 @@ export const useAppStore = create<AppState>((set, get) => ({
   completeTopic: (sessionId, topicId) => {
     console.log('✅ completeTopic called', { sessionId, topicId });
 
-    // Award completion bonuses once, on the incomplete -> complete transition.
-    const before = get().studySessions.find((s) => s.id === sessionId);
-    const findTopic = (topics: Topic[] | undefined): Topic | undefined => {
-      for (const t of topics ?? []) {
-        if (t.id === topicId) return t;
-        const inner = findTopic(t.subtopics);
-        if (inner) return inner;
-      }
-      return undefined;
-    };
+    // Award completion bonuses once per section, on its first incomplete -> complete
+    // transition. A section stays complete through a Retry or fresh questions
+    // (setTopicQuestions, answerQuestion), so finishing it again finds it complete here
+    // and pays nothing more.
+    const found = locateTopic(get(), sessionId, topicId);
     const leafTopics = (topics: Topic[] | undefined): Topic[] =>
       (topics ?? []).flatMap((t) => (t.subtopics && t.subtopics.length ? leafTopics(t.subtopics) : t.isCategory ? [] : [t]));
-    const topicBefore = findTopic(before?.extractedTopics);
+    const topicBefore = found?.topic;
+    const leaves = leafTopics(found?.session.extractedTopics);
     const total = topicBefore?.questions?.length ?? 0;
     const correct = Math.round(((topicBefore?.score ?? 0) * total) / 100);
     const alreadyCompleted = topicBefore?.completed === true;
-    const othersDone = leafTopics(before?.extractedTopics).filter((t) => t.id !== topicId).every((t) => t.completed);
-    const sessionCompleted = othersDone && leafTopics(before?.extractedTopics).length > 0;
-    const reward = topicCompletionXp(correct, total, { sessionCompleted: sessionCompleted && !alreadyCompleted });
-    if (!alreadyCompleted && reward.bonus > 0) {
+    const othersDone = leaves.filter((t) => t !== topicBefore).every((t) => t.completed);
+    const sessionCompleted = othersDone && leaves.length > 0;
+    // A section the store can't find pays nothing: there is nothing to say it was finished.
+    const reward = topicCompletionXp(correct, total, { sessionCompleted, firstFinish: !!topicBefore && !alreadyCompleted });
+    if (reward.bonus > 0) {
       get().addXp(reward.bonus);
     }
 
-    set((state) => {
-    // Helper function to update topic recursively
-    const markCompleteRecursively = (topics: Topic[]): Topic[] => {
-      return topics.map(t => {
-        if (t.id === topicId) {
-          console.log('✅ Marking topic as completed:', t.title);
-          return { ...t, completed: true };
-        }
-        if (t.subtopics) {
-          return {
-            ...t,
-            subtopics: markCompleteRecursively(t.subtopics)
-          };
-        }
-        return t;
-      });
-    };
-
-    const updatedSessions = state.studySessions.map((s) => {
-      if (s.id !== sessionId || !s.extractedTopics) return s;
-      return {
-        ...s,
-        extractedTopics: markCompleteRecursively(s.extractedTopics)
-      };
-    });
-    const updatedCurrent = updatedSessions.find(s => s.id === sessionId);
-
-    console.log('✅ Updated currentSession extractedTopics:', updatedCurrent?.extractedTopics);
-
-    return {
-      studySessions: updatedSessions,
-      currentSession: state.currentSession?.id === sessionId ? updatedCurrent || state.currentSession : state.currentSession,
+    set((state) => ({
+      ...(topicBefore ? patchSection(state, sessionId, topicBefore, (t) => ({ ...t, completed: true })) : {}),
       lastTopicReward: { sessionId, topicId, breakdown: { lines: reward.lines, total: reward.total }, sessionCompleted },
-    };
-    });
+    }));
+
+    // Finishing is what marks a section done, so it has to reach the server too.
+    // Nothing queued it before: every answer queued `completed: false`, and the
+    // section came back unticked on the next load. Sent with the next flush.
+    if (topicBefore?.db_id) {
+      const key = `${sessionId}-${topicBefore.db_id}`;
+      set((state) => {
+        const newMap = new Map(state.pendingProgressUpdates);
+        newMap.set(key, {
+          sessionId,
+          topicId: topicBefore.db_id!,
+          score: topicBefore.score ?? 0,
+          currentQuestionIndex: topicBefore.currentQuestionIndex,
+          completed: true,
+        });
+        return { pendingProgressUpdates: newMap };
+      });
+      scheduleFlush(() => get().syncPendingProgress());
+    }
   },
 
   updateTopic: (sessionId, topicId, patch) => set((state) => {
@@ -748,24 +749,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   })),
 
   setTopicQuestions: (sessionId, topicId, questions) => set((state) => {
-    const apply = (topics: Topic[]): Topic[] =>
-      topics.map((t) =>
-        t.id === topicId
-          ? { ...t, questions, completed: false, score: 0, currentQuestionIndex: 0 }
-          : t.subtopics
-            ? { ...t, subtopics: apply(t.subtopics) }
-            : t,
-      );
-    const studySessions = state.studySessions.map((s) =>
-      s.id === sessionId && s.extractedTopics ? { ...s, extractedTopics: apply(s.extractedTopics) } : s,
-    );
-    // Patch the open session's own tree too: the list copy can be a summary (or an older
-    // fetch), and swapping it in would drop or revert what the page is showing.
-    const current =
-      state.currentSession?.id === sessionId && state.currentSession.extractedTopics
-        ? { ...state.currentSession, extractedTopics: apply(state.currentSession.extractedTopics) }
-        : state.currentSession;
-    return { studySessions, currentSession: current };
+    const found = locateTopic(state, sessionId, topicId);
+    if (!found) return state;
+    // A new set starts the score again, but `completed` is left alone. Resetting it
+    // (as this used to) let a Retry un-finish the section, and finishing it again then
+    // paid the completion bonus a second time. Both copies are patched, each in its own
+    // tree: swapping the list copy in would drop or revert what the page is showing.
+    return patchSection(state, sessionId, found.topic, (t) => ({ ...t, questions, score: 0, currentQuestionIndex: 0 }));
+  }),
+
+  setQuestionHint: (sessionId, topicId, questionId, hint) => set((state) => {
+    const found = locateTopic(state, sessionId, topicId);
+    if (!found) return state;
+    return patchSection(state, sessionId, found.topic, (t) => ({
+      ...t,
+      questions: t.questions.map((q) => (q.id === questionId ? { ...q, hint } : q)),
+    }));
   }),
 
   resetTopic: (sessionId, topicId) => set((state) => {

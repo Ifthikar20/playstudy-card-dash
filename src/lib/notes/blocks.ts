@@ -42,7 +42,6 @@ import {
   Heading2,
   Heading3,
   Highlighter,
-  Image,
   LineChart,
   Link2,
   List,
@@ -217,10 +216,9 @@ export const BLOCKS: BlockItem[] = [
     kind: "forces",
     data: { title: "Free body", mode: "forces", body: "box", unit: "N", vectors: [{ label: "weight", angle: 270, magnitude: 10 }, { label: "normal", angle: 90, magnitude: 10 }] },
   }),
-  visual("image", "Picture", "A real photo, found from what you name", "photo picture wikipedia image", Image, {
-    kind: "image",
-    data: { query: "mitochondrion", caption: "A mitochondrion" },
-  }),
+  /* No "Picture" here. A picture only renders once the server has found and
+     approved one (it carries a picture_id), and a block typed from this menu
+     never has one, so it would sit in the notes as an empty frame for good. */
 ];
 
 /* The query can only ever be letters, digits and spaces (see `slashStart`), so

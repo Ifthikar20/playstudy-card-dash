@@ -80,7 +80,7 @@ export function accentVars(palette: AvatarPalette): CSSProperties {
 
 /* ---------- the saved choice ---------- */
 
-const KEY = "ps-guide-avatar";
+const KEY = "an-guide-avatar";
 export type AvatarChoice = Partial<Record<BotKind, AvatarId>>;
 type Choice = AvatarChoice;
 const KINDS: BotKind[] = ["male", "female", "neutral"];
@@ -147,7 +147,7 @@ function store(next: Choice) {
 }
 
 /* Saving to the account is handed in by AuthContext while someone is signed in, so
-   this module needs no API client and a signed-out page (the dev gallery) saves nothing. */
+   this module needs no API client and a signed-out page saves nothing. */
 let saver: ((value: string) => Promise<unknown>) | null = null;
 export function setAvatarSaver(fn: ((value: string) => Promise<unknown>) | null) {
   saver = fn;

@@ -83,7 +83,7 @@ const PROVIDERS: [name: string, where: string, what: string][] = [
   ],
   ["DeepSeek", "China", "Writes notes, quizzes and flashcards, and answers questions, from the text we send it."],
   ["Anthropic", "United States", "Does the same kind of writing for some features."],
-  ["Perplexity", "United States", "Finds pictures for Teach mode lessons, using the lesson's topic."],
+  ["Perplexity", "United States", "Finds pictures for Teach me lessons, using the lesson's topic."],
   ["Speechify", "United States", "Turns the passage being read aloud into speech."],
   ["Microsoft", "Worldwide", "A backup voice, used when Speechify isn't available."],
   ["Webshare", "Worldwide", "A proxy network our server uses to reach YouTube. It carries our request for a video, not your details."],
@@ -199,7 +199,7 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <B>What you create.</B> Your notes and edits, sticky notes, folders, flashcards and quizzes, and the questions
-            you ask in Teach mode. When an answer is written into your notes, it's saved with them.
+            you ask your tutor in a lesson. When an answer is written into your notes, it's saved with them.
           </li>
           <li>
             <B>Your voice, if you use it.</B> If you ask a question out loud, your browser may turn your speech into text
@@ -231,8 +231,8 @@ const SECTIONS: Section[] = [
             problems.
           </li>
           <li>
-            <B>Usage and error records.</B> Which pages of AnotherNotes are opened, a few actions (such as starting Teach
-            mode or creating a study session) and any errors, with a random ID for your browser and one for each visit,
+            <B>Usage and error records.</B> Which pages of AnotherNotes are opened, a few actions (such as starting a
+            lesson or creating a study session) and any errors, with a random ID for your browser and one for each visit,
             plus the campaign tags or click IDs in the link you followed to reach us (such as utm_source). This stays on
             our own servers. We use it to find and fix problems and to see which links bring people to AnotherNotes. It
             never includes your notes, questions or answers.
@@ -276,7 +276,7 @@ const SECTIONS: Section[] = [
         <p>We use information to:</p>
         <List>
           <li>
-            <B>Run AnotherNotes for you:</B> turn your material into notes, quizzes, flashcards and Teach mode lessons,
+            <B>Run AnotherNotes for you:</B> turn your material into notes, quizzes, flashcards and Teach me lessons,
             read sections aloud, answer your questions, find pictures for lessons, and save your work so it's there next
             time.
           </li>

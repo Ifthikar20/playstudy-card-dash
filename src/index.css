@@ -504,14 +504,16 @@ html:has(.lp) #root {
 }
 
 /* ---- Teach mode: picking which of the two tutors speaks ------------------- */
+/* The button is also .an-glossy (see "Glossy pill" further down this file), which
+   draws its outline, fill, sheen and hover/pressed/open states. Here: its size, as
+   tall as the dock's other small controls, and the tint, the speaking tutor's own
+   colour (GuideDock sets --guide-accent), so Alec and Emily each keep theirs. */
 .guide-voicebtn {
   display: flex; align-items: center; gap: 5px; flex-shrink: 0;
-  height: 32px; padding: 0 8px 0 5px; border-radius: 9999px;
-  border: 1px solid hsl(var(--border)); background: hsl(var(--background));
-  font-size: 12px; font-weight: 600; color: hsl(var(--muted-foreground));
-  transition: background-color 0.2s ease, color 0.2s ease;
+  height: 32px; padding: 0 9px 0 5px; border-radius: 9999px;
+  font-size: 12px; font-weight: 500; /* the glossy buttons' lighter label, as on Teach me */
+  --glossy-tint: var(--guide-accent);
 }
-.guide-voicebtn:hover, .guide-voicebtn[aria-expanded="true"] { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
 .guide-voicemenu {
   display: flex; flex-direction: column; gap: 4px;
   width: min(260px, calc(100vw - 2rem)); padding: 6px;
@@ -570,6 +572,58 @@ html:has(.lp) #root {
 .fc-back { transform: rotateY(180deg) translateZ(1px); }
 .dark .fc-face { background-color: hsl(var(--card)); }
 
+/* The deck's stage (FlashcardStage): one fixed size for every state of a deck - a card,
+   cards on their way, a deck that didn't come, the last card's Finish - so the dialog or
+   the board holding it never changes size from one card to the next. In rem, like the
+   Tailwind classes the stage is built with (h-4 mb-3 ... h-8): the line over the card
+   and its gap, the card's box, and the gap and row of buttons under it. The flashcards
+   dialogs and the board's flashcards panel are sized from these. */
+:root {
+  --fc-stage-h: 17.75rem; /* 1 + 0.75 + a 13rem card (h-52) + 1 + 2 */
+  --fc-stage-h-compact: 15.25rem; /* 1 + 0.5 + an 11rem card (h-44) + 0.75 + 2: the board's */
+  --fc-chips-h: calc(2rem + 10px); /* the session deck's chips (h-8) and room for a scrollbar under them */
+}
+.fc-stage { display: flex; flex-direction: column; min-width: 0; height: var(--fc-stage-h); }
+.fc-stage.fc-stage-compact { height: var(--fc-stage-h-compact); }
+/* A face's words, between its label and its "tap" line. FlashcardCard shrinks them to
+   fit; past the smallest size they scroll inside the face, and a long unbroken word or
+   link wraps instead of running out of the card. Hidden from behind like the face (a
+   scroller gets a layer of its own, which would otherwise show through mirrored). */
+.fc-face-body {
+  display: flex; flex-direction: column;
+  flex: 1 1 0; min-height: 0; width: 100%;
+  overflow-x: hidden; overflow-y: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+/* The session deck's section chips: one row, never wrapping, scrolled sideways. Its
+   height is fixed, so a scrollbar coming (a chip's spinner widening it) moves nothing. */
+.fc-chips {
+  display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 6px;
+  height: var(--fc-chips-h);
+  overflow-x: auto; overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+/* Thin scrollbars where the app's quiet 6px ones (::-webkit-scrollbar in the base layer)
+   don't apply: setting these anywhere else would replace those with the browser's own. */
+@supports not selector(::-webkit-scrollbar) {
+  .fc-face-body,
+  .fc-chips { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent; }
+}
+/* The flashcards dialogs (StudyDialogShell): one fixed height, not just a cap. The stage
+   (and the chips, on the session's deck) plus the rest of the dialog: its padding (p-6,
+   2 x 1.5rem), the title and the description on one line each (1.125 + 0.375 + 1.25rem),
+   the gap under them (1rem) and its border (2px). Never taller than the screen less a
+   margin; a screen that short scrolls the dialog instead. */
+.fc-dialog {
+  --fc-dialog-body: var(--fc-stage-h);
+  height: min(calc(var(--fc-dialog-body) + 6.75rem + 2px), calc(100vh - 2rem));
+  height: min(calc(var(--fc-dialog-body) + 6.75rem + 2px), calc(100dvh - 2rem));
+  align-content: start;
+}
+.fc-dialog.fc-dialog-chips { --fc-dialog-body: calc(var(--fc-stage-h) + var(--fc-chips-h) + 0.75rem); }
+
 /* ---- Teach mode whiteboard: a tutor writing math by hand ------------------ */
 .guide-board {
   position: fixed;
@@ -620,6 +674,9 @@ html:has(.lp) #root {
   overflow-y: auto;
   display: flex;
   align-items: center;
+  /* centred while it fits; taller than the board, it starts at the top and scrolls
+     (plain centring would push its top out of reach) */
+  align-items: safe center;
   justify-content: center;
   padding: 20px 22px;
   color: hsl(var(--foreground));
@@ -886,6 +943,11 @@ html:has(.lp) #root {
 
 /* ---- Teach mode whiteboard: drag by the header, remove title chrome ------- */
 .guide-board-head { cursor: move; touch-action: none; user-select: none; }
+/* The sheet along the bottom of a narrow screen has a set place and isn't dragged
+   (GuideBoard ignores a dragged spot there), so its bar is just a bar. */
+@media (max-width: 900px) {
+  .guide-board-head { cursor: default; touch-action: auto; }
+}
 .guide-board.guide-board-moved { animation: none; } /* don't fight the entry transform when positioned */
 
 /* ---- Teach mode whiteboard: comparison table ----------------------------- */
@@ -983,7 +1045,7 @@ html:has(.lp) #root {
   font-size: 18px; line-height: 1.25; overflow-wrap: anywhere;
 }
 .guide-list-detail { font-size: 14.5px; line-height: 1.3; color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; }
-/* "Quiz me": the label is a blank to fill in */
+/* "Hide labels" (the board's footer): the label is a blank to fill in */
 .guide-list-blank { min-width: 3em; text-align: center; border-bottom: 2px dashed currentColor; opacity: 0.7; }
 .guide-list-item[data-state="focus"] .guide-list-label::before {
   content: ""; position: absolute; inset: 1px -4px 0; z-index: -1;
@@ -1269,6 +1331,10 @@ html:has(.lp) #root {
   color: hsl(var(--muted-foreground));
 }
 .guide-math-part { font-size: 16px; font-weight: 700; color: #ec4899; }
+/* A symbol set as maths (\ce{CO2} -> CO₂): the chip's size and pink, not the board's
+   1.5em formula size and ink. */
+.guide-board .guide-math-part .katex,
+.guide-math-part .katex { font-size: 1.05em; font-weight: 700; color: inherit; }
 .guide-math-meaning { color: hsl(var(--foreground)); }
 
 /* ---- Teach mode whiteboard: history strip, pin, quiz-me, full screen ----- */
@@ -1885,4 +1951,665 @@ html[data-an-sheet="ink"] { --an-sheet-bg: hsl(240 6% 5%); }
 .an-note-read mark { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .an-note-ask, .an-note-live { animation: none; }
+}
+
+/* ---- Teach mode whiteboard: a card over the picture ------------------------- */
+/* While a real picture is up, a list, a card of facts, a table or a formula about
+   its subject sits on a frosted card over the bottom of it (GuideBoard's `over`), so
+   the picture stays in view behind what's being read. Bottom-centre, never wider than
+   480px or taller than 60% of the board, and it scrolls when it's longer. Centred with
+   margins rather than a transform, so its entry animation can move it. The body is
+   the card's containing block (.guide-board-body is position: relative above). */
+.guide-board-body > .guide-board-line.guide-board-overlay[data-card] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  z-index: 2;
+  width: min(92%, 480px);
+  max-width: none;
+  max-height: 60%;
+  margin: 0 auto;
+  padding: 14px 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: normal;
+  font-size: 20px;
+  line-height: 1.3;
+  text-align: left;
+  border-radius: 14px;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.8);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
+  box-shadow: 0 16px 40px -14px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+.dark .guide-board-body > .guide-board-line.guide-board-overlay[data-card] {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: hsl(var(--card) / 0.82);
+}
+/* a card fades up in one piece: none of the board's handwriting sweep or eraser */
+.guide-board-body > .guide-board-line.guide-board-overlay[data-card][data-mode="writing"] {
+  animation: guide-card-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.guide-board-body > .guide-board-line.guide-board-overlay[data-card][data-mode="erasing"] {
+  animation: guide-card-out 0.4s ease both;
+  pointer-events: none;
+}
+.guide-board-line.guide-board-overlay[data-card]::after { display: none; }
+.guide-board-overlay[data-card] .guide-facts-value { font-size: 24px; }
+@keyframes guide-card-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes guide-card-out { from { opacity: 1; } to { opacity: 0; transform: translateY(6px); } }
+/* Narrow screens: the board is a sheet along the bottom, so on a phone the card takes
+   nearly its whole width (still at most 480px on a tablet), with less padding and
+   smaller type so more of it fits before it scrolls. */
+@media (max-width: 900px) {
+  .guide-board-body > .guide-board-line.guide-board-overlay[data-card] {
+    bottom: 8px;
+    width: min(calc(100% - 16px), 480px);
+    padding: 10px 12px;
+    font-size: 17px;
+  }
+  .guide-board-overlay[data-card] .guide-facts-value { font-size: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-board-body > .guide-board-line.guide-board-overlay[data-card][data-mode="writing"],
+  .guide-board-body > .guide-board-line.guide-board-overlay[data-card][data-mode="erasing"] { animation-duration: 0.01ms; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .guide-board-body > .guide-board-line.guide-board-overlay[data-card] {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---- Teach mode whiteboard: "Wrong picture" --------------------------------- */
+/* The report button sits with Pin while a picture is up. Tapped, a still copy of the
+   picture fades out in its place with a thank you, and the lesson carries on. */
+.guide-board-report:hover:not(:disabled) { color: #dc2626; border-color: #dc2626; background: rgba(220, 38, 38, 0.07); }
+.guide-board-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  pointer-events: none;
+  animation: guide-ghost-out 1.2s ease-in both;
+}
+.guide-board-ghost img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  object-fit: contain;
+}
+.guide-board-gone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  z-index: 3;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card) / 0.94);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.4);
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  text-align: center;
+  pointer-events: none;
+  animation: guide-gone-note 2.4s ease both;
+}
+@keyframes guide-ghost-out {
+  from { opacity: 1; filter: blur(0); transform: scale(1); }
+  to   { opacity: 0; filter: blur(3px); transform: scale(0.97); }
+}
+@keyframes guide-gone-note {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* A narrow footer keeps the flag and drops the words (the button keeps its label for screen readers). */
+@media (max-width: 520px) {
+  .guide-board-report .guide-board-report-label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-board-ghost { animation-duration: 0.01ms; }
+  .guide-board-gone { animation: none; }
+}
+
+/* ---- Teach mode whiteboard: a study tool on the board ------------------------- */
+/* A section's quiz or flashcards open on the board in place of the visual (GuideBoard's
+   panel). It is the app's own UI, not board writing: ordinary type and size, none of
+   the handwriting sweep or eraser, and it scrolls inside the board (whose height is
+   capped) when it's taller. Auto margins centre it and, unlike centring, never push its
+   top out of reach. The footer goes while it's up; the head names it and closes it. */
+.guide-board[data-panel] .guide-board-body {
+  padding: 16px 18px;
+  overscroll-behavior: contain;
+}
+/* Flashcards: the body is exactly the deck's stage (the compact one, see .fc-stage) and
+   its padding, on the floating board and the sheet alike, so the board keeps one size
+   and one place from card to card, cards on their way and the end of the deck included.
+   Full screen the board is the window's size anyway: the body fills it and the stage
+   stays put in the middle. A window too short for it scrolls the body, as ever. */
+.guide-board[data-panel="flashcards"] .guide-board-body {
+  flex: 0 1 auto;
+  height: calc(var(--fc-stage-h-compact) + 32px);
+  min-height: 0;
+}
+.guide-board.guide-board-full[data-panel="flashcards"] .guide-board-body { flex: 1 1 auto; height: auto; }
+.guide-board-panel {
+  width: 100%;
+  max-width: 560px;
+  margin: auto;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: normal;
+  text-align: left;
+  color: hsl(var(--foreground));
+  outline: none;
+  animation: guide-panel-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes guide-panel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.guide-board-panel-close {
+  position: relative;
+  z-index: 1; /* above the centred title, which spans the bar */
+  margin-left: auto;
+  margin-right: -6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.guide-board-panel-close:hover { color: #ec4899; background: rgba(236, 72, 153, 0.08); }
+.guide-board-panel-close:focus-visible { outline: 2px solid #ec4899; outline-offset: 1px; }
+/* The window's title leaves room for the close button on the right too. */
+.guide-board[data-panel] .guide-board-name { max-width: calc(100% - 220px); }
+/* Full screen: a comfortable column in the middle, not a quiz a metre wide. */
+.guide-board.guide-board-full .guide-board-panel { max-width: 640px; }
+/* Narrow screens: the board is a sheet along the bottom. The panel takes its whole
+   width, and the title gets the room the traffic lights and the close button leave. */
+@media (max-width: 900px) {
+  .guide-board[data-panel] .guide-board-body { padding: 12px 14px; }
+  .guide-board[data-panel="flashcards"] .guide-board-body { height: calc(var(--fc-stage-h-compact) + 24px); }
+  .guide-board-panel { max-width: none; }
+  .guide-board.guide-board-full .guide-board-panel { max-width: 640px; }
+}
+@media (max-width: 520px) {
+  .guide-board[data-panel] .guide-board-name { max-width: calc(100% - 150px); }
+  /* the footer keeps its icons and drops the words (each button keeps its label for screen readers) */
+  .guide-board-btn .guide-board-btn-label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-board-panel { animation-duration: 0.01ms; }
+}
+/* The page's study dialogs can open mid-lesson: its Quiz and Flashcards at the top of the
+   page (SessionQuizDialog, SessionFlashcardsDialog) and an exam plan's chips
+   (SectionStudyDialog) all work in Teach mode, and with the board off the lesson points
+   at that Quiz button. Like any modal a dialog goes over the lesson, so the board (z 60,
+   above the dialog's 50) drops under its overlay and the pointer steps out until it
+   closes, instead of covering the quiz. */
+body:has([data-study-dialog]) .guide-board { z-index: 40; }
+body:has([data-study-dialog]) [data-guide-layer] { visibility: hidden; }
+
+/* ---- A checked picture's credit, and a pinned picture that's gone ------------ */
+.guide-image-credit {
+  display: inline-flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 6px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+/* only the caption is left: the picture was reported, or is from before pictures were checked */
+.guide-image-gone .guide-image-caption { color: hsl(var(--muted-foreground)); font-style: italic; }
+
+/* ---- Glossy pill: "Teach me" and the tutor's voice button -------------------- */
+/* The old "download for Mac" button: a light gradient in one tint, a crisp outline a
+   shade darker, a white sheen over the top half and a soft shadow in the tint. It marks
+   the controls that start or steer a lesson (TeachMeButton; the voice button in the
+   lesson's dock). --glossy-tint is an "r, g, b" triple like --guide-accent, so the dock
+   can hand it the tutor's colour; the default is the reference's blue, set through
+   :where() so any class on the same button can override it. It is a light object on
+   either theme, so its label stays near-black in dark mode too. Only the look lives
+   here: size, padding and type come from where it's used. */
+:where(.an-glossy) { --glossy-tint: 53, 142, 242; }
+.an-glossy {
+  position: relative;
+  isolation: isolate; /* the sheen goes over the fill but under the label and icon */
+  overflow: hidden;
+  border: 1px solid rgb(var(--glossy-tint));
+  border-color: color-mix(in srgb, rgb(var(--glossy-tint)) 72%, #1e1b4b);
+  /* The fill is the tint laid over white (light at the top, stronger at the bottom), with
+     a faint glow along the bottom edge where a real gloss catches the light again. */
+  background:
+    radial-gradient(70% 45% at 50% 100%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(var(--glossy-tint), 0.3), rgba(var(--glossy-tint), 0.56)),
+    #fff;
+  color: #0f172a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 1px 1px rgba(var(--glossy-tint), 0.22),
+    0 3px 10px -2px rgba(var(--glossy-tint), 0.42);
+  transition: filter 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+/* the sheen: white fading down over the top half, ending in a clean line like the real thing */
+.an-glossy::before {
+  content: "";
+  position: absolute;
+  inset: 1px 1px auto;
+  height: 52%;
+  z-index: -1;
+  border-radius: 9999px 9999px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.3));
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+@media (hover: hover) {
+  /* Not while held open: the pointer is still on the voice button right after the click
+     that opened its menu, and this rule would otherwise outrank the pushed-in look below.
+     One :not() with a list keeps this as specific as :active, which comes later and wins. */
+  .an-glossy:hover:not(:disabled, [aria-expanded="true"]) {
+    filter: brightness(1.04) saturate(1.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 1px 1px rgba(var(--glossy-tint), 0.25),
+      0 4px 14px -2px rgba(var(--glossy-tint), 0.5);
+  }
+}
+/* Pressed, and held open (the voice button while its menu is up): pushed in, sheen dimmed. */
+.an-glossy:active:not(:disabled),
+.an-glossy[aria-expanded="true"] {
+  box-shadow:
+    inset 0 1px 2px rgba(15, 23, 42, 0.18),
+    0 1px 2px rgba(var(--glossy-tint), 0.3);
+}
+.an-glossy:active:not(:disabled) { transform: translateY(1px); }
+.an-glossy:active:not(:disabled)::before,
+.an-glossy[aria-expanded="true"]::before { opacity: 0.6; }
+/* The ring takes the outline's darker shade: a light tint (the frog's green) is only about
+   2:1 on a white page, and a focus ring needs 3:1. */
+.an-glossy:focus-visible {
+  outline: 2px solid rgb(var(--glossy-tint));
+  outline-color: color-mix(in srgb, rgb(var(--glossy-tint)) 72%, #1e1b4b);
+  outline-offset: 2px;
+}
+.an-glossy:disabled {
+  opacity: 0.55;
+  filter: saturate(0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transform: none;
+}
+/* On a dark page a tinted shadow reads as a glow: shade it with black instead, keeping
+   only a trace of the tint. */
+.dark .an-glossy:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 4px 12px -4px rgba(var(--glossy-tint), 0.3);
+}
+.dark .an-glossy:active:not(:disabled),
+.dark .an-glossy[aria-expanded="true"] {
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.25), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .an-glossy, .an-glossy::before { transition: none; }
+  .an-glossy:active:not(:disabled) { transform: none; }
+}
+
+/* ---- Quiz kinds (2026-09-25) ------------------------------------------------ */
+/* Every quiz (a section's, the session's, a PDF part's, the board's quick check) draws
+   its questions through components/quiz: QuestionView for one question of any kind,
+   QuizRunner around it. What Tailwind can't say lives here: the Check/Next row that
+   sticks to the bottom of whatever scrolls, the board keeping one height from kind to
+   kind, the layouts that change with the room the question has (container queries:
+   the board's panel, a dialog and the phone's sheet are all different widths), and
+   dragging. Colours are the theme's tokens, so dark mode comes with them.
+   --quiz-surface is what's behind the question (an "h s l" triple), for the row that
+   sticks and the rows that move. */
+.quiz-q {
+  --quiz-surface: var(--background);
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+}
+.guide-board .quiz-q { --quiz-surface: var(--card); }
+.quiz-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.quiz-legend { display: block; width: 100%; padding: 0; outline: none; }
+.quiz-kind-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--chart-1));
+}
+/* the blank in a fill-in-the-blank question: a gap to write in, the answer once it's done */
+.quiz-blank {
+  display: inline-block;
+  min-width: 4.5em;
+  margin: 0 2px;
+  padding: 0 6px;
+  border-bottom: 2px solid hsl(var(--foreground) / 0.45);
+  line-height: 1.25;
+  text-align: center;
+}
+.quiz-blank-right { border-color: hsl(var(--success)); color: hsl(var(--success)); font-weight: 600; }
+.quiz-blank-shown { border-color: rgb(245 158 11); font-weight: 600; }
+.quiz-q button:focus-visible,
+.quiz-runner button:focus-visible { outline: 2px solid hsl(var(--chart-1)); outline-offset: 2px; }
+
+/* The Check / Next row: sticks to the bottom of the board's body (or the dialog) while the
+   question scrolls under it, fading into the surface so nothing is cut off hard. Pushed
+   to the bottom of the question's box (margin-top: auto), so on the board, whose quiz
+   keeps one height, the buttons stay in one place from question to question. */
+.quiz-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: auto;
+  padding: 14px 0 2px;
+  background: linear-gradient(hsl(var(--quiz-surface) / 0), hsl(var(--quiz-surface)) 12px);
+}
+/* On the board: the body keeps one height whatever the kind of question, so switching
+   from a true/false to a sort doesn't make the window jump; the quiz fills it. A taller
+   question scrolls inside, as ever. (The flashcards have their own fixed stage above.) */
+.guide-board[data-panel="quiz"] .guide-board-body { min-height: min(380px, calc(100vh - 300px)); }
+.guide-board[data-panel="quiz"] .quiz-runner {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(min(380px, 100vh - 300px) - 32px);
+}
+.quiz-runner > .quiz-q { flex: 1 0 auto; }
+@media (max-width: 900px) {
+  .guide-board[data-panel="quiz"] .quiz-runner { min-height: calc(min(380px, 100vh - 300px) - 24px); }
+}
+.quiz-runner { container-type: inline-size; }
+
+/* the speaker and "Ask about this" beside the progress dots */
+.quiz-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.quiz-tool:hover { color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.08); }
+.quiz-tool-ask { border-color: hsl(var(--border)); }
+@container (max-width: 380px) {
+  .quiz-tool-label { display: none; }
+}
+
+/* the result under a question, and the hint */
+.quiz-note { border: 1px solid; border-radius: 12px; font-size: 14px; line-height: 1.55; }
+.quiz-note-hint { border-color: hsl(var(--chart-1) / 0.3); background: hsl(var(--chart-1) / 0.05); }
+.quiz-note-right { border-color: hsl(var(--success) / 0.4); background: hsl(var(--success) / 0.1); }
+.quiz-note-wrong { border-color: rgb(245 158 11 / 0.4); background: rgb(245 158 11 / 0.1); }
+
+/* ---- picking: single choice, true/false, select all that apply ---- */
+.quiz-option {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.quiz-option-live { cursor: pointer; }
+.quiz-option-live:hover { border-color: hsl(var(--chart-1) / 0.5); background: hsl(var(--muted)); }
+.quiz-option-on { border-color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.08); }
+.quiz-option-crossed {
+  cursor: not-allowed;
+  border-color: hsl(var(--destructive) / 0.3);
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+}
+.quiz-option-right { border-color: hsl(var(--success)); background: hsl(var(--success) / 0.1); }
+.quiz-option-wrong { border-color: hsl(var(--destructive)); background: hsl(var(--destructive) / 0.1); }
+/* a right one left out (select all that apply): dashed, and says so in words */
+.quiz-option-missed { border-color: hsl(var(--success)); border-style: dashed; }
+.quiz-option-tf { justify-content: center; min-height: 56px; font-size: 15px; font-weight: 600; }
+.quiz-key {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.quiz-key-box { border-radius: 6px; }
+.quiz-key-on { border-color: hsl(var(--chart-1)); background: hsl(var(--chart-1)); color: hsl(var(--background)); }
+.quiz-key-right,
+.quiz-option-right > .quiz-key { border-color: hsl(var(--success)); background: hsl(var(--success)); color: hsl(var(--background)); }
+.quiz-key-wrong,
+.quiz-option-wrong > .quiz-key { border-color: hsl(var(--destructive)); background: hsl(var(--destructive)); color: hsl(var(--destructive-foreground)); }
+.quiz-tag {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---- put these in order: full-width rows that wrap, a grip to drag, up/down to tap ---- */
+.quiz-order { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.quiz-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--quiz-surface));
+  font-size: 14px;
+  line-height: 1.4;
+}
+.quiz-order-row > .quiz-key:first-child { margin-left: 8px; }
+.quiz-order-held { border-color: hsl(var(--chart-1)); box-shadow: 0 0 0 2px hsl(var(--chart-1) / 0.35); }
+/* while dragging, the rows passed slide aside; the one held follows the pointer exactly */
+.quiz-order-dragging { user-select: none; -webkit-user-select: none; }
+.quiz-order-dragging .quiz-order-row { transition: transform 0.15s ease; }
+.quiz-order-dragging .quiz-order-lifted {
+  transition: none;
+  border-color: hsl(var(--chart-1));
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.35);
+}
+.quiz-grip,
+.quiz-move {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.quiz-grip { cursor: grab; touch-action: none; }
+.quiz-grip:active { cursor: grabbing; }
+.quiz-grip[aria-pressed="true"] { color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.1); }
+.quiz-move:hover:not(:disabled),
+.quiz-grip:hover { color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.08); }
+.quiz-move:disabled { opacity: 0.3; cursor: default; }
+
+/* ---- sort into groups: a pool of chips, and the groups side by side where there's room ---- */
+.quiz-sort-pool {
+  padding: 10px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 14px;
+}
+.quiz-sort-title { margin-bottom: 6px; font-size: 12px; font-weight: 600; color: hsl(var(--muted-foreground)); }
+.quiz-sort-pool > .quiz-sort-title:last-child { margin-bottom: 0; }
+.quiz-sort-groups { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+@container (min-width: 480px) {
+  .quiz-sort-groups { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+.quiz-sort-group {
+  min-width: 0;
+  min-height: 84px;
+  padding: 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--muted) / 0.35);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.quiz-sort-group-ready { cursor: pointer; }
+.quiz-sort-group-ready:hover { border-color: hsl(var(--chart-1) / 0.5); }
+.quiz-drop-over { border-color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.08); }
+.quiz-sort-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  margin-bottom: 6px;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.quiz-sort-head:disabled { cursor: default; }
+.quiz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.quiz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  background: hsl(var(--quiz-surface));
+  font-size: 13.5px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.quiz-chip:hover:not(:disabled) { border-color: hsl(var(--chart-1) / 0.5); }
+.quiz-chip:disabled { cursor: default; }
+.quiz-chip-on { border-color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.1); box-shadow: 0 0 0 1px hsl(var(--chart-1)); }
+.quiz-chip-dragging { cursor: grabbing; transition: none; box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.35); }
+
+/* ---- match the pairs: two columns where there's room; on the phone the numbered
+   matches come first and each item gets a row of numbers to tap ---- */
+.quiz-match { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.quiz-match-lefts,
+.quiz-match-rights { display: grid; align-content: start; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.quiz-match-rights { order: -1; }
+.quiz-match-left,
+.quiz-match-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--quiz-surface));
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.quiz-match-left:disabled,
+.quiz-match-right:disabled { cursor: default; }
+.quiz-match-left:hover:not(:disabled),
+.quiz-match-right:hover:not(:disabled) { border-color: hsl(var(--chart-1) / 0.5); }
+.quiz-match-badge {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 9999px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.quiz-match-badge-on { border-style: solid; border-color: hsl(var(--chart-1)); background: hsl(var(--chart-1) / 0.08); color: hsl(var(--chart-1)); }
+.quiz-match-fix { margin: 4px 0 0 34px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.quiz-match-nums { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0 34px; }
+.quiz-match-num {
+  width: 36px;
+  height: 36px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  background: hsl(var(--quiz-surface));
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@container (min-width: 480px) {
+  .quiz-match { grid-template-columns: 1fr 1fr; align-items: start; }
+  .quiz-match-rights { order: 0; }
+  .quiz-match-nums { display: none; }
+}
+
+/* ---- fill in the blank ---- */
+.quiz-fill {
+  padding: 0 12px;
+  border: 1px solid hsl(var(--input));
+  border-radius: 10px;
+  background: hsl(var(--quiz-surface));
+  color: hsl(var(--foreground));
+  outline: none;
+}
+.quiz-fill:focus { border-color: hsl(var(--chart-1)); box-shadow: 0 0 0 3px hsl(var(--chart-1) / 0.2); }
+.quiz-fill:disabled { opacity: 1; }
+
+/* A finger needs a bigger target than a mouse. */
+@media (pointer: coarse) {
+  .quiz-grip, .quiz-move, .quiz-match-num { width: 44px; height: 44px; }
+  .quiz-chip { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .quiz-option, .quiz-chip, .quiz-sort-group, .quiz-match-left, .quiz-match-right, .quiz-tool,
+  .quiz-order-dragging .quiz-order-row { transition: none; }
 }

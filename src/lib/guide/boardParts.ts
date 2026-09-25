@@ -13,8 +13,8 @@
  *
  * Everything is measured from what's on screen at the moment of asking, so the
  * answer stays right while the board animates in, widens, scrolls or is dragged.
- * The two small choreography helpers at the end are shared by Teach mode and the
- * dev gallery (/dev-board?only=pointing), so the gallery checks the real thing.
+ * The two small choreography helpers at the end (pointAtPart, restBeside) are what
+ * Teach mode moves the pointer with.
  */
 import { splitSentences } from "@/lib/guide/speech";
 import type { GuidePoint, GuideRegion } from "@/services/guide";
@@ -128,9 +128,49 @@ export function findAnchor(root: ParentNode, part: string): Element | null {
 }
 
 /**
+ * Where the words inside an HTML part start, and how wide they run: the first line of
+ * its visible text (from the first character that isn't a space), and the box of all
+ * of it, both kept inside `r`. Decorations marked aria-hidden (a list's number bubble)
+ * aren't text. Null when there's no text to measure.
+ */
+function textStart(el: Element, r: Box): { first: Box; all: Box } | null {
+  if (typeof document === "undefined" || typeof document.createRange !== "function") return null;
+  const decoration = (n: Node) => {
+    const hidden = n.parentElement?.closest('[aria-hidden="true"]');
+    return !!hidden && el.contains(hidden);
+  };
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.nodeValue?.trim() && !decoration(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+  });
+  const nodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
+  if (!nodes.length) return null;
+  const head = nodes[0];
+  const tail = nodes[nodes.length - 1];
+  const range = document.createRange();
+  range.setStart(head, (head.nodeValue ?? "").search(/\S/));
+  range.setEnd(tail, (tail.nodeValue ?? "").trimEnd().length);
+  const inside = (b: DOMRect | Box): Box | null => {
+    const left = Math.max(r.left, b.left);
+    const top = Math.max(r.top, b.top);
+    const right = Math.min(r.left + r.width, b.left + b.width);
+    const bottom = Math.min(r.top + r.height, b.top + b.height);
+    return right - left >= 1 && bottom - top >= 1 ? { left, top, width: right - left, height: bottom - top } : null;
+  };
+  const all = inside(range.getBoundingClientRect());
+  const first = Array.from(range.getClientRects())
+    .map(inside)
+    .find((b): b is Box => !!b);
+  return all && first ? { first, all } : null;
+}
+
+/**
  * An anchor's box and the spot to touch: its data-part-at (SVG user units, carried
  * to the screen through the element's own getScreenCTM, so its transforms and the
- * viewBox scaling all count), else the middle of its box.
+ * viewBox scaling all count), else the middle of its box. An HTML part whose words are
+ * much narrower than it (a code line or a table row runs the board's full width, its
+ * text doesn't) is touched at the start of its words, as a line in the notes is - the
+ * middle of its box would be empty space to the right of them. Its ring stays its box.
  */
 export function spotOf(el: Element): PartSpot | null {
   if (!el.isConnected) return null;
@@ -146,13 +186,13 @@ export function spotOf(el: Element): PartSpot | null {
       return { box, at: { x: p.x, y: p.y }, exact: true };
     }
   }
+  const svg = typeof SVGElement !== "undefined" && el instanceof SVGElement;
+  const text = svg ? null : textStart(el, box);
+  if (text && text.all.width < box.width * 0.8) {
+    const { first } = text;
+    return { box, at: { x: first.left + Math.min(24, first.width * 0.12), y: first.top + first.height / 2 }, exact: false };
+  }
   return { box, at: { x: r.left + r.width / 2, y: r.top + r.height / 2 }, exact: false };
-}
-
-/** Part `part` of the drawn visual under `root`, on screen. */
-export function anchorTarget(root: ParentNode, part: string): PartSpot | null {
-  const el = findAnchor(root, part);
-  return el ? spotOf(el) : null;
 }
 
 const STOP = new Set([
@@ -164,18 +204,36 @@ const ORDINAL: Record<string, number> = {
   "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5, "6th": 6, "7th": 7, "8th": 8, "9th": 9, "10th": 10,
 };
 
+/**
+ * Kinds whose ids count from 1, as the visual itself numbers them: a code line is
+ * lines.N for its gutter number N, so "the third line" is lines.3. Every other kind
+ * counts from 0 (items.2 is the third item).
+ */
+const ONE_BASED = new Set(["lines"]);
+/**
+ * Words an id carries that name a kind of part, not which one: every table cell is
+ * "cells.…", every graph point "points.…". Said aloud ("this cell", "the point where
+ * they cross") they'd match every part of that kind alike, so they never count, and
+ * neither does a single letter ("sides.c" is side c by its label, which says so).
+ */
+const GENERIC_ID = new Set(["cell", "row", "column", "point", "set", "region"]);
+
 /** "Sides" and "side" are the same word here; "glass" keeps its s. */
 const stem = (t: string) => (t.length > 3 && t.endsWith("s") && !t.endsWith("ss") ? t.slice(0, -1) : t);
 
-/** Lower-case content words. A leading article "a" goes, but "side a" keeps its a. */
-function words(s: string): string[] {
+/**
+ * Lower-case content words. In something `spoken` ("a resistor") a leading article "a"
+ * goes, but "side a" keeps its a. A part's own label never loses it: "A 3 N" is vector
+ * A, and the a is the only word that says so.
+ */
+function words(s: string, spoken = false): string[] {
   const raw = s
     .toLowerCase()
     .replace(/(?<!\d)\.|\.(?!\d)/g, " ")
     .replace(/[^\p{L}\p{N}.\s]/gu, " ")
     .split(/\s+/)
     .filter(Boolean);
-  return raw.filter((t, i) => !STOP.has(t) && !(t === "a" && i === 0 && raw.length > 1)).map(stem);
+  return raw.filter((t, i) => !STOP.has(t) && !(spoken && t === "a" && i === 0 && raw.length > 1)).map(stem);
 }
 
 /**
@@ -185,7 +243,7 @@ function words(s: string): string[] {
  * so an ambiguous name leaves the pointer on the whole visual rather than guessing.
  */
 export function matchAnchor(root: ParentNode, label: string): HTMLElement | null {
-  const said = words(label);
+  const said = words(label, true);
   const ordinal = said.map((t) => ORDINAL[t]).find((n) => n != null);
   const content = said.filter((t) => ORDINAL[t] == null);
   const need = content.length + (ordinal ? 1 : 0);
@@ -195,14 +253,16 @@ export function matchAnchor(root: ParentNode, label: string): HTMLElement | null
   for (const el of Array.from(root.querySelectorAll<HTMLElement>(`[${PART_ATTR}]`))) {
     const id = el.getAttribute(PART_ATTR) ?? "";
     const text = el.getAttribute(PART_LABEL_ATTR) ?? el.textContent ?? "";
-    // an id's indexes are positions, not names: "events.3" says nothing about "3 volts"
-    const idWords = words(id.replace(/[._-]+/g, " ")).filter((t) => !/^\d+$/.test(t));
+    // an id's indexes are positions, not names: "events.3" says nothing about "3 volts";
+    // nor do its generic words and single letters (see GENERIC_ID)
+    const idWords = words(id.replace(/[._-]+/g, " ")).filter((t) => !/^\d+$/.test(t) && t.length > 1 && !GENERIC_ID.has(t));
     const have = new Set([...words(text), ...idWords]);
     let hits = 0;
     for (const t of wanted) if (have.has(t)) hits++;
     if (ordinal) {
       const index = Number(id.split(".").pop());
-      if (Number.isInteger(index) && index === ordinal - 1) hits++;
+      const base = ONE_BASED.has(id.split(".")[0]) ? 1 : 0;
+      if (Number.isInteger(index) && index === ordinal - 1 + base) hits++;
     }
     if (!hits) continue;
     // the share of what was said that matches, then (slightly) how little of the part is left over
@@ -228,10 +288,39 @@ export function locatePart(root: HTMLElement, point: GuidePoint, regions: Record
     const region = regions[point.label];
     return region ? regionTarget(img, region) : null;
   }
-  const byId = point.part ? anchorTarget(root, point.part) : null;
-  if (byId) return byId;
-  const named = matchAnchor(root, point.label);
-  return named ? spotOf(named) : null;
+  const spotIn = (el: Element | null) => {
+    if (!el) return null;
+    revealInBoard(el, root);
+    return spotOf(el);
+  };
+  return spotIn(point.part ? findAnchor(root, point.part) : null) ?? spotIn(matchAnchor(root, point.label));
+}
+
+/**
+ * A part scrolled out of sight inside the board is scrolled into view within the box
+ * that holds it - never the page - before the pointer goes to it. On a phone the card
+ * over a picture is short and scrolls (as does a tall visual in the board's body), and
+ * a line below its fold sits under the board's footer: the tip would land exactly on
+ * it and the student would see the footer. Instant, so the spot measured next is the
+ * one on screen.
+ */
+function revealInBoard(el: Element, root: HTMLElement): void {
+  const stop = root.closest(".guide-board") ?? root;
+  const pad = 6;
+  for (let box = el.parentElement; box; box = box.parentElement) {
+    if (box.scrollHeight > box.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(box).overflowY)) {
+      const b = box.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const top = b.top + box.clientTop + pad;
+      const bottom = b.top + box.clientTop + box.clientHeight - pad;
+      // Below the fold: bring its bottom up, but never push its top out of the other side.
+      let by = 0;
+      if (r.top < top) by = r.top - top;
+      else if (r.bottom > bottom) by = Math.min(r.bottom - bottom, r.top - top);
+      if (by) box.scrollTo({ top: box.scrollTop + by, behavior: "instant" });
+    }
+    if (box === stop) break;
+  }
 }
 
 // ---- where the tip goes ----------------------------------------------------------
@@ -293,7 +382,7 @@ function findMention(
     .trim()
     .replace(/^(the|a|an|this|that)\s+/i, "")
     .replace(/\s+/g, " ");
-  const key = words(label)
+  const key = words(label, true)
     .filter((t) => ORDINAL[t] == null && !shared.has(t))
     .sort((a, b) => b.length - a.length)[0];
   const needles = [phrase, key].filter((n): n is string => !!n && n.length > 0);
@@ -324,7 +413,7 @@ export function labelSchedule(say: string, points: GuidePoint[]): ScheduledPart[
   const sentences = splitSentences(say);
   const out: ScheduledPart[] = [];
   let from = { sentence: 0, offset: 0 };
-  const vocab = points.map((p) => new Set(words(p.label)));
+  const vocab = points.map((p) => new Set(words(p.label, true)));
   points.forEach((p, i) => {
     const shared = new Set(vocab.flatMap((v, j) => (j === i ? [] : [...v])));
     const hit = findMention(sentences, p.label, from, shared);
@@ -354,7 +443,7 @@ export function labelSchedule(say: string, points: GuidePoint[]): ScheduledPart[
   return out;
 }
 
-// ---- choreography (shared by Teach mode and the dev gallery) ----------------------
+// ---- choreography ----------------------------------------------------------------
 
 /** A viewport box in the pointer's host coordinates. */
 export function hostBox(host: HTMLElement, b: Box): HostRect {

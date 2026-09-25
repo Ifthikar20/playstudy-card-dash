@@ -114,7 +114,7 @@ const MODIFIER_CODES = /^(Shift|Control|Alt|Meta|OS)(Left|Right)?$/;
 /** A keypress turned into a shortcut, or why it can't be one (for the recorder). */
 export function voiceKeyFromEvent(e: KeyboardEvent): { key: VoiceKey } | { error: string } {
   if (MODIFIER_CODES.test(e.code)) return { error: "" }; // still holding a modifier: keep waiting
-  if (e.code === "Escape") return { error: "Escape closes Teach mode, so it can't be the talk key." };
+  if (e.code === "Escape") return { error: "Escape stops the lesson, so it can't be the talk key." };
   if (e.code === "Tab") return { error: "Tab moves between buttons for keyboard users — pick another key." };
   if (e.code === "Enter" || e.code === "NumpadEnter") return { error: "Enter sends a typed question. Pick another key." };
   if (e.code === "Space" && !e.altKey && !e.ctrlKey && !e.metaKey) {

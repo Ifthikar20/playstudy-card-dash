@@ -10,7 +10,7 @@ import { useAppStore } from "@/store/appStore";
 import { usePresenceStore, formatDuration } from "@/store/presenceStore";
 import { logout } from "@/services/api";
 import { MyGuardiansCard } from "@/components/family/MyGuardiansCard";
-import { VoiceKeyPicker } from "@/components/VoiceKeyPicker";
+import { VoiceKeyPicker, VoiceKeyTester } from "@/components/VoiceKeyPicker";
 import { TutorLookPicker } from "@/components/TutorLookPicker";
 import { setAvatar, useAvatar } from "@/lib/guide/avatars";
 import { useVoiceKey, writeVoiceKey, type VoiceKey } from "@/lib/voiceKey";
@@ -159,6 +159,7 @@ export default function ProfilePage() {
                     Press this key during a lesson and your tutor stops to listen. Press it again to send your question.
                   </p>
                   <VoiceKeyPicker value={voiceKey} onChange={saveVoiceKey} />
+                  <VoiceKeyTester value={voiceKey} />
                 </div>
               </div>
 
@@ -251,7 +252,7 @@ function TutorLooks() {
       </div>
       <div className="ml-7 space-y-3">
         <p className="text-xs text-muted-foreground">
-          The face that rides on each voice's pointer in Teach mode. The pointer takes its colour.
+          The face that rides on each voice's pointer during a lesson. The pointer takes its colour.
         </p>
         <TutorLookPicker value={{ male, female }} onChange={(kind, id) => setAvatar(kind, id)} />
       </div>

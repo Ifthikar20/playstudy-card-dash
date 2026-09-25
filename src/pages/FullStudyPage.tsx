@@ -1,7 +1,7 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import remarkMath from "remark-math";
@@ -19,10 +19,9 @@ import {
   ChevronRight,
   Circle,
   FileText,
-  GraduationCap,
-  Presentation,
   Layers,
   ListChecks,
+  Presentation,
   Loader2,
   Moon,
   NotebookText,
@@ -35,7 +34,6 @@ import {
   StickyNote,
   Sun,
   Trash2,
-  Wand2,
   Youtube,
   X,
 } from "lucide-react";
@@ -45,20 +43,37 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CreateStudySessionDialog } from "@/components/CreateStudySessionDialog";
 import { ExamPlanStrip } from "@/components/exam/ExamPlanStrip";
+import { SITTING_TOOL, type SittingMode } from "@/lib/examPlan";
 import { primeSpeechAudio } from "@/lib/guide/speech";
 import { StudyContentUpload } from "@/components/StudyContentUpload";
-import { TopicSummary } from "@/components/TopicSummary";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { useAppStore, type Question, type StudySession, type Topic } from "@/store/appStore";
+import { useAppStore, type StudySession, type Topic } from "@/store/appStore";
 import { usePresenceStore } from "@/store/presenceStore";
-import { fetchSessionPdf, generateSectionFlashcards, generateSectionQuiz, generateTopicNotes, getStudySession, reviseTopicNotes, updateTopicDetails, type Flashcard } from "@/services/api";
+import {
+  fetchSessionPdf,
+  generateTopicNotes,
+  getStudySession,
+  reviseTopicNotes,
+  updateTopicDetails,
+  type HttpError,
+} from "@/services/api";
+import { QuizQuestion } from "@/components/study/QuizQuestion";
+import { SectionQuiz } from "@/components/study/SectionQuiz";
+import { SectionFlashcards } from "@/components/study/SectionFlashcards";
+import { SectionStudyDialog, type StudyTarget, type StudyTool } from "@/components/study/SectionStudyDialog";
+import { SessionQuizDialog } from "@/components/study/SessionQuizDialog";
+import { SessionFlashcardsDialog } from "@/components/study/SessionFlashcardsDialog";
+import { flattenSections, type Section, type StudyPanel, type WrongEntry } from "@/components/study/sections";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { TeachMode, type TeachSection } from "@/components/guide/TeachMode";
-import { StickySelection, StickySessionDialog, keyIdeasOf } from "@/components/StickyNotes";
+import { TeachMode, type ReviseNotesResult, type TeachSection } from "@/components/guide/TeachMode";
+import { TeachMeButton } from "@/components/TeachMeButton";
+import { StickySelection, StickySessionDialog } from "@/components/StickyNotes";
 import { useStickyStore } from "@/store/stickyStore";
 import { LoadingFacts } from "@/components/LoadingFacts";
-import { BASE_NOTE_COMPONENTS, HEADING_COLORS, headingFactory, sanitizeNotes } from "@/lib/notes/render";
+import { BASE_NOTE_COMPONENTS, headingFactory, sanitizeNotes } from "@/lib/notes/render";
+import { NoteParagraph } from "@/lib/notes/formula";
+import { NOTE_PROSE, READ_PROSE } from "@/lib/notes/prose";
 import { MATH_OPTS } from "@/lib/notes/units";
 import { PaperNotes, type PaperNotesHandle } from "@/components/notes/PaperNotes";
 import { ShellTrigger } from "@/components/AppShell";
@@ -67,13 +82,13 @@ import { SHEETS, setSheet, useSheet } from "@/lib/studySurface";
 import type { PdfPageInfo } from "@/components/pdf/PdfDocument";
 import { trackAction } from "@/lib/analytics";
 import { isNote, isNoteRoute, notePath } from "@/lib/notes/isNote";
-import { joinPhrase, useDictation, type Dictation } from "@/lib/guide/dictation";
+import { joinPhrase, useDictation } from "@/lib/guide/dictation";
 import { useTalkKey } from "@/lib/useTalkKey";
 import { voiceKeyLabel } from "@/lib/voiceKey";
 import { locateQuote } from "@/lib/guide/blocks";
 import { DictateButton } from "@/components/notes/DictateButton";
 import { NoteReview } from "@/components/notes/NoteReview";
-import { answerCheck, checkSection, deleteNote, fixCheck, renameNote, type CheckAnswer, type NoteCheck } from "@/services/notes";
+import { answerCheck, deleteNote, fixCheck, renameNote, type CheckAnswer, type NoteCheck } from "@/services/notes";
 
 // PDF.js is big: it only loads when someone opens the PDF view.
 const PdfDocument = lazy(() => import("@/components/pdf/PdfDocument").then((m) => ({ default: m.PdfDocument })));
@@ -86,37 +101,16 @@ const NO_PAGES: PdfPageInfo[] = [];
 /*
   Full Study — the one way to study. A session is a single scrolling note:
   every section has readable, auto-written notes (headings + highlights, editable
-  in place) and, under it, a "Quiz this section" button that writes a small set
-  of challenging questions. Answer them one at a time; anything you get wrong is
-  collected in "Wrong questions" at the top so you can retry just those.
+  by clicking into them) that run on into the next section with nothing in
+  between, not even a toolbar. One Quiz button at the top of the page takes the
+  student through every section's questions in turn, in a dialog, and a
+  Flashcards button beside it deals every section's cards as one deck. In Teach
+  mode the board offers each section's quiz at the end of that section and runs
+  it there, and the student can ask the tutor out loud to change the notes
+  ("make this simpler", "add an example"). Answer one at a time: a wrong first
+  pick gets a hint and a second go, and anything got wrong is collected in
+  "Wrong questions" at the top so it can be retried on its own.
 */
-
-interface Section {
-  topic: Topic;
-  index: number; // 1-based
-  category: string;
-}
-
-/** A question the learner got wrong, remembered across the whole session. */
-interface WrongEntry {
-  key: string;
-  topicId: string;
-  sectionTitle: string;
-  sectionIndex: number;
-  question: Question;
-}
-
-function flattenSections(topics: Topic[] | undefined): Section[] {
-  const out: Section[] = [];
-  const walk = (list: Topic[], category: string) => {
-    for (const t of list) {
-      if (t.subtopics && t.subtopics.length) walk(t.subtopics, t.title);
-      else if (!t.isCategory) out.push({ topic: t, index: out.length + 1, category });
-    }
-  };
-  walk(topics ?? [], "");
-  return out;
-}
 
 /* Shared Markdown renderer: pastel-highlighted headings (cycled in document
    order), <mark> highlights, and safe raw HTML (mark only). Used by both the
@@ -125,30 +119,15 @@ function Markdown({ md }: { md: string }) {
   const counter = useRef(0);
   counter.current = 0;
   const heading = headingFactory(counter);
-  const components = { ...BASE_NOTE_COMPONENTS, h2: heading("h2"), h3: heading("h3") };
+  const components = { ...BASE_NOTE_COMPONENTS, p: NoteParagraph, h2: heading("h2"), h3: heading("h3") };
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, [remarkMath, MATH_OPTS]]}
       rehypePlugins={[rehypeRaw, rehypeKatex]}
-      components={components as any}
+      components={components as Components}
     >
       {sanitizeNotes(md)}
     </ReactMarkdown>
-  );
-}
-
-const NOTE_PROSE =
-  "prose prose-base mx-auto max-w-[78ch] text-[16px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-[18px] prose-h2:leading-[1.4] prose-h3:mt-5 prose-h3:text-[16px] prose-h3:leading-[1.5] prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-4 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.07] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-foreground";
-
-// Book-like reading measure for Read mode; `prose`/`prose-invert` is added per theme.
-const READ_PROSE =
-  "prose prose-lg max-w-none text-[17px] leading-[1.85] prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mt-8 prose-h2:text-xl prose-h3:mt-6 prose-h3:text-lg prose-p:my-4 prose-p:leading-[1.85] prose-li:my-1.5 prose-code:rounded prose-code:bg-black/10 prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-5 prose-blockquote:rounded-r-lg prose-blockquote:border-l-[3px] prose-blockquote:border-chart-1 prose-blockquote:bg-chart-1/[0.08] prose-blockquote:px-4 prose-blockquote:py-2 prose-blockquote:font-normal prose-blockquote:not-italic";
-
-function RichNotes({ md, guideKey }: { md: string; guideKey?: number }) {
-  return (
-    <div className={NOTE_PROSE} data-guide-notes={guideKey}>
-      <Markdown md={md} />
-    </div>
   );
 }
 
@@ -352,6 +331,71 @@ const NOTE_MIN_WORDS = 25;
 /** The title a note has until it is given one; shown as an empty title field. */
 const UNTITLED = "Untitled note";
 
+/** A section with a quiz and flashcards: one the server has (a db id), and, in the
+ *  student's own note, enough words to ask about. A PDF page never has them. One rule
+ *  for the top Quiz and Flashcards, Teach mode's board and the sections it offers. */
+const hasStudyTools = (topic: Topic, noteMode: boolean): boolean =>
+  !!topic.db_id && (!noteMode || wordsIn(topic.notes) >= NOTE_MIN_WORDS);
+
+/**
+ * The whole session's Quiz and Flashcards, at the top of the page (in a note, in its top
+ * bar). Only the sections with study tools are counted. Quiz says how far through them
+ * the student is: "Quiz · 3/8" once one is done, "✓ Quiz" when every one is. Teach mode
+ * points at the Quiz button (data-guide-quiz-top) at the end of a section when its
+ * board is off, so it keeps that attribute.
+ */
+function SessionStudyButtons({
+  sections,
+  onQuiz,
+  onFlashcards,
+  tall = false,
+}: {
+  sections: Section[];
+  onQuiz: () => void;
+  onFlashcards: () => void;
+  /** The note's top bar, whose buttons are a fixed height. */
+  tall?: boolean;
+}) {
+  const n = sections.length;
+  const done = sections.filter((s) => s.topic.completed).length;
+  const all = n > 0 && done === n;
+  const pill = cn("flex items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors", tall ? "h-8" : "py-1.5");
+  const plain = "border-border bg-foreground/[0.04] text-foreground hover:bg-foreground/[0.08]";
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        data-guide-quiz-top=""
+        onClick={onQuiz}
+        title={
+          all
+            ? "Every section's quiz is done: review them, retry one or get fresh questions"
+            : "Quiz yourself on every section, one after another"
+        }
+        aria-label={all ? "Quiz, every section done" : done > 0 ? `Quiz, ${done} of ${n} sections done` : "Quiz"}
+        className={cn(pill, all ? "border-success/40 bg-success/10 text-success hover:bg-success/15" : plain)}
+      >
+        {all ? <Check className="size-3.5" /> : <ListChecks className="size-3.5" />}
+        Quiz
+        {!all && done > 0 && (
+          <span className="font-medium tabular-nums text-muted-foreground">
+            · {done}/{n}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={onFlashcards}
+        title={n > 1 ? "Every section's flashcards, in one deck" : "Flashcards from these notes"}
+        className={cn(pill, plain)}
+      >
+        <Layers className="size-3.5" />
+        Flashcards
+      </button>
+    </div>
+  );
+}
+
 /*
   One screen per session. Keyed by the id in the URL, so going from one session or
   note to another starts clean: no wrong questions, open review, dictation or title
@@ -523,6 +567,14 @@ function FullStudyScreen() {
   const done = sections.filter((s) => s.topic.completed).length;
   const pct = sections.length ? Math.round((done / sections.length) * 100) : 0;
 
+  // ---- the whole session's quiz and flashcards, from the buttons at the top ------
+  // Only the sections with study tools, in reading order; the dialogs take the list as
+  // it is and never work the rule out again. Both dialogs stay mounted, so a deck of
+  // flashcards already dealt is still there when they're opened again.
+  const studySections = useMemo(() => sections.filter((s) => hasStudyTools(s.topic, noteMode)), [sections, noteMode]);
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
+
   // Sticky notes kept from this session (the wall itself lives on the dashboard).
   const stickyNotes = useStickyStore((s) => s.notes);
   const loadStickies = useStickyStore((s) => s.load);
@@ -595,27 +647,79 @@ function FullStudyScreen() {
     document.getElementById(`section-${topicId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  // The exam plan names sections by their server id; the page knows them by their
-  // own. These two keep the strip able to name a section and scroll to it.
-  const planSections = useMemo(() => sections.map((s) => ({ dbId: s.topic.db_id, title: s.topic.title })), [sections]);
-  const openPlanSection = useCallback(
-    (dbId: number) => {
-      const found = sections.find((s) => s.topic.db_id === dbId);
-      if (found) scrollTo(found.topic.id);
+  /** On past a section: to the next one, or to the end of the session after the last. */
+  const scrollPast = useCallback(
+    (topicId: string) => {
+      const at = sections.findIndex((s) => s.topic.id === topicId);
+      const next = at >= 0 ? sections[at + 1] : undefined;
+      if (next) scrollTo(next.topic.id);
+      else document.getElementById("session-end")?.scrollIntoView({ behavior: "smooth" });
     },
     [sections, scrollTo],
   );
 
-  // ---- the tutor checking a section's notes ------------------------------------
-  // `checking` while it reads them, `reviewing` while the pointer goes through what
-  // it asked. Both lock the notes, like Teach mode, so nothing moves under it.
-  const [checking, setChecking] = useState<number | null>(null);
-  const [reviewing, setReviewing] = useState<number | null>(null);
-  const frozen = guideOpen || checking != null || reviewing != null;
+  // ---- one section's quiz or flashcards, in a dialog over the notes ---------------
+  // Opened by the exam plan, whose sittings are each for one section.
+  const [study, setStudy] = useState<StudyTarget | null>(null);
+  const openStudy = useCallback((kind: StudyTool, topicId: string) => setStudy({ kind, topicId }), []);
 
-  // ---- dictation: one microphone for the page -----------------------------------
-  // Words go into ONE section's notes: the one being written in, else the only one,
-  // else the one most on screen. The talk key (chosen at onboarding) starts it too.
+  // The exam plan names sections by their server id; the page knows them by their
+  // own. These two keep the strip able to name a section, go to it, and open the
+  // quiz or the flashcards a sitting is for.
+  const planSections = useMemo(() => sections.map((s) => ({ dbId: s.topic.db_id, title: s.topic.title })), [sections]);
+  const openPlanSection = useCallback(
+    (dbId: number, mode: SittingMode) => {
+      const found = sections.find((s) => s.topic.db_id === dbId);
+      if (!found) return;
+      scrollTo(found.topic.id);
+      const tool = SITTING_TOOL[mode];
+      if (tool) openStudy(tool, found.topic.id);
+    },
+    [sections, scrollTo, openStudy],
+  );
+
+  // ---- the same tools on Teach mode's board -------------------------------------
+  // The board draws whatever this returns in its panel; the page does the drawing
+  // because the quiz belongs to the study store and the wrong-questions list here.
+  // Null for anything without study tools: a PDF page, or a note too short to quiz.
+  const renderStudyPanel = useCallback(
+    (panel: StudyPanel): ReactNode => {
+      const topic = sections.find((s) => s.topic.id === panel.topicId)?.topic;
+      if (!currentSession || !topic || !hasStudyTools(topic, noteMode)) return null;
+      if (panel.kind === "flashcards") {
+        return <SectionFlashcards key={`cards:${topic.id}`} session={currentSession} topic={topic} compact onClose={panel.onDone} />;
+      }
+      // Keyed by the section alone: an invitation the board relabels "quiz" once it is
+      // taken up carries on as the same quiz, not a second one starting over. A hint
+      // the quiz shows goes to the board too, which says it in the tutor's bubble.
+      return (
+        <SectionQuiz
+          key={`quiz:${topic.id}`}
+          session={currentSession}
+          topic={topic}
+          onWrong={addWrong}
+          onRight={clearWrong}
+          onDone={panel.onDone}
+          onStart={panel.onStart}
+          onHint={panel.onHint}
+          invite={panel.kind === "invite"}
+          compact
+        />
+      );
+    },
+    [sections, currentSession, noteMode, addWrong, clearWrong],
+  );
+
+  // ---- the tutor's questions about a section's notes ------------------------------
+  // Asked by an earlier check and not all answered yet: the section says so, and
+  // `reviewing` is while the pointer goes through them. That locks the notes, like
+  // Teach mode, so nothing moves under it.
+  const [reviewing, setReviewing] = useState<number | null>(null);
+  const frozen = guideOpen || reviewing != null;
+
+  // ---- dictation: one microphone, for the student's own note --------------------
+  // Words go into the note's one section. Study notes have no Dictate: the tutor's
+  // mic in Teach mode changes those. The talk key (chosen at onboarding) starts it too.
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
   const dictTarget = useRef<number | null>(null);
@@ -633,38 +737,19 @@ function FullStudyScreen() {
   }, []);
   const dictation = useDictation(insertDictated, { markdown: true });
 
-  const pickDictTarget = (): number | null => {
-    const handles = notesHandles.current;
-    for (const [dbId, h] of handles) if (h.isEditing()) return dbId;
-    if (handles.size === 1) return [...handles.keys()][0];
-    let best: number | null = null;
-    let most = 0;
-    for (const dbId of handles.keys()) {
-      const el = pageRef.current?.querySelector<HTMLElement>(`[data-guide-notes="${dbId}"]`);
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      const seen = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
-      if (seen > most) {
-        most = seen;
-        best = dbId;
-      }
-    }
-    return best;
-  };
-
-  const toggleDictation = (dbId?: number) => {
+  const toggleDictation = () => {
     if (dictation.state !== "off") {
       dictation.stop();
       return;
     }
-    if (frozen) return;
+    if (frozen || !noteMode) return;
     if (dictation.mode === "none") {
       toast({ title: "Voice input isn't available here", description: "This browser or page can't use the microphone — type instead." });
       return;
     }
-    const target = dbId ?? pickDictTarget();
-    if (target == null) {
-      toast({ title: "Nothing to write into yet", description: "Scroll to a section's notes first." });
+    const target = sectionsRef.current[0]?.topic.db_id;
+    if (target == null || !notesHandles.current.has(target)) {
+      toast({ title: "Nothing to write into yet", description: "The note is still opening. Try again in a moment." });
       return;
     }
     dictTarget.current = target;
@@ -672,7 +757,7 @@ function FullStudyScreen() {
     touched.current = true;
     void dictation.start();
   };
-  const voiceKey = useTalkKey(() => toggleDictation(), { enabled: !frozen });
+  const voiceKey = useTalkKey(() => toggleDictation(), { enabled: !frozen && noteMode });
 
   useEffect(() => {
     if (dictation.error) toast({ title: "Dictation", description: dictation.error, variant: "destructive" });
@@ -810,7 +895,7 @@ function FullStudyScreen() {
       <div className="mx-auto w-full max-w-2xl">
         <h1 className="text-2xl font-semibold tracking-tight">{currentSession.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This session has no content yet. Paste your material and AnotherNotes will build the sections and quizzes.
+          This session has no content yet. Paste your material and AnotherNotes will write the notes, and a quiz to go with them.
         </p>
         <div className="mt-6">
           <StudyContentUpload onContentSubmit={(c) => processStudyContent(currentSession.id, c)} isProcessing={false} />
@@ -822,11 +907,19 @@ function FullStudyScreen() {
   const session = currentSession!;
   // In the PDF view every page is a "section": dbId -N is page N (its text layer
   // carries data-guide-notes="-N", and the backend reads -N as that page).
+  // `studyTools`: the section has a quiz and flashcards for the board to offer (the
+  // same rule as the Quiz and Flashcards at the top). A PDF page has neither.
   const teachSections: TeachSection[] = showPdf
-    ? pdfPages.map((p) => ({ topicId: `pdf-${p.page}`, dbId: -p.page, title: `Page ${p.page}`, index: p.page }))
+    ? pdfPages.map((p) => ({ topicId: `pdf-${p.page}`, dbId: -p.page, title: `Page ${p.page}`, index: p.page, studyTools: false }))
     : sections
         .filter((s) => s.topic.db_id)
-        .map((s) => ({ topicId: s.topic.id, dbId: s.topic.db_id!, title: s.topic.title, index: s.index }));
+        .map((s) => ({
+          topicId: s.topic.id,
+          dbId: s.topic.db_id!,
+          title: s.topic.title,
+          index: s.index,
+          studyTools: hasStudyTools(s.topic, noteMode),
+        }));
   const pdfLabel = session.fileType === "pptx" ? "Slides" : "PDF";
   const pdfNoun = pdfLabel === "Slides" ? "slides" : "PDF"; // mid-sentence
   const teachReady = !showPdf || pdfPages.length > 0;
@@ -851,7 +944,7 @@ function FullStudyScreen() {
       const problem = await flushNotes();
       if (problem) {
         // Locking would close the surface and lose those words, so it waits.
-        toast({ title: "Teach mode can't start yet", description: problem, variant: "destructive" });
+        toast({ title: "The lesson can't start yet", description: problem, variant: "destructive" });
         return;
       }
       setGuideOpen(true);
@@ -873,20 +966,31 @@ function FullStudyScreen() {
     }
   };
 
-  /** The tutor reads a section's notes back and asks about anything that looks wrong. */
-  const startCheck = async (dbId: number) => {
-    primeSpeechAudio(); // inside the click: the questions are spoken
-    if (!(await saveThenLock("The check"))) return;
-    setChecking(dbId);
+  /**
+   * Teach mode's mic changing a section's notes ("make this simpler"): the same revise
+   * and structure guard the notes have always gone through, then the new notes go into
+   * the store, which redraws them under the lesson. `topicId` is the section's store id.
+   * Never while something else has those notes open (a hand edit still being written,
+   * the tutor's questions): the rewrite would land under it.
+   */
+  const reviseNotes = async (topicId: string, instruction: string): Promise<ReviseNotesResult> => {
+    const topic = sectionsRef.current.find((s) => s.topic.id === topicId)?.topic;
+    if (!topic?.db_id) return { ok: false, refused: false, message: "This section can't be changed here." };
+    if (reviewing != null || notesHandles.current.get(topic.db_id)?.isEditing()) {
+      return { ok: false, refused: false, message: "These notes are open for editing right now." };
+    }
     try {
-      const res = await checkSection(session.id, dbId);
-      if (res.checkedAt) updateTopicByDbId(session.id, dbId, { noteChecks: res.checks, notesCheckedAt: res.checkedAt });
-      if (res.checks.some((c) => c.answer == null)) setReviewing(dbId);
-      else toast({ title: res.message || "Nothing looks wrong in there." });
+      const { notes, noteChecks } = await reviseTopicNotes(session.id, topic.db_id, instruction);
+      updateTopic(session.id, topic.id, { notes });
+      // The rewrite can move or remove the words the tutor asked about; the server
+      // re-placed its questions over the new notes, as it does after a hand edit.
+      if (noteChecks) updateTopicByDbId(session.id, topic.db_id, { noteChecks });
+      patchSession(session.id, { updatedAt: Date.now() });
+      return { ok: true };
     } catch (e) {
-      toast({ title: "Couldn't check these notes", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
-    } finally {
-      setChecking(null);
+      // 422: the guard turned the change down (it would have lost a formula, a table or
+      // a pinned picture), and the message says why. Anything else may work next time.
+      return { ok: false, refused: (e as HttpError).status === 422, message: e instanceof Error ? e.message : "" };
     }
   };
 
@@ -930,36 +1034,43 @@ function FullStudyScreen() {
               <span className="mr-1 hidden text-xs tabular-nums text-muted-foreground sm:inline">
                 {noteWords} word{noteWords === 1 ? "" : "s"}
               </span>
+              {/* A note's only writing tools: talk it in, or put the caret in it
+                  (clicking anywhere in the text does that too). */}
               <DictateButton
                 dictation={dictation}
                 disabled={frozen || !noteTopic?.db_id}
-                onToggle={() => toggleDictation(noteTopic?.db_id ?? undefined)}
+                onToggle={toggleDictation}
                 className="h-8"
               />
               <button
                 type="button"
-                disabled={frozen || flushing || !noteTopic?.db_id || noteWords === 0}
-                onClick={() => noteTopic?.db_id && void startCheck(noteTopic.db_id)}
-                title={noteWords === 0 ? "Write something first" : "Your tutor reads these notes and asks about anything that looks wrong"}
+                disabled={frozen || !noteTopic?.db_id}
+                onClick={() => noteTopic?.db_id && notesHandles.current.get(noteTopic.db_id)?.startEditing()}
+                title={
+                  frozen
+                    ? "Writing pauses while AnotherNotes is going through this note"
+                    : "Put the caret in this note (or just click where you want to write)"
+                }
                 className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-foreground/[0.04] px-3 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {checking != null ? <Loader2 className="size-3.5 animate-spin" /> : <SearchCheck className="size-3.5" />}
-                {checking != null ? "Checking…" : "Check my notes"}
+                <Pencil className="size-3.5" />
+                Write
               </button>
-              <button
-                type="button"
+              {/* A note's header is this bar, so its Quiz and Flashcards are here, once
+                  there is enough in it to be asked about. */}
+              {studySections.length > 0 && (
+                <SessionStudyButtons sections={studySections} onQuiz={() => setQuizOpen(true)} onFlashcards={() => setCardsOpen(true)} tall />
+              )}
+              <TeachMeButton
+                tall
                 disabled={flushing || frozen || noteWords < NOTE_MIN_WORDS}
                 onClick={() => void openTeach()}
                 title={
                   noteWords < NOTE_MIN_WORDS
-                    ? "Write a little more first — Teach mode needs something to explain"
-                    : "Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
+                    ? "Write a little more first — the tutor needs something to explain"
+                    : "Teach me: AnotherNotes AI scrolls, points and explains these notes out loud"
                 }
-                className="flex h-8 items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-              >
-                <GraduationCap className="size-3.5" />
-                Teach mode
-              </button>
+              />
               {guideOpen && (
                 <button
                   type="button"
@@ -1085,7 +1196,7 @@ function FullStudyScreen() {
                     onClick={() => !on && setView(v)}
                     title={
                       v === "pdf"
-                        ? `The ${pdfNoun} you uploaded. Teach mode explains it right on the page.`
+                        ? `The ${pdfNoun} you uploaded. Press Teach me and it's explained right on the page.`
                         : `The notes written from your ${pdfNoun}`
                     }
                     className={cn(
@@ -1100,8 +1211,7 @@ function FullStudyScreen() {
               })}
             </div>
           )}
-          <button
-            type="button"
+          <TeachMeButton
             disabled={!teachReady || flushing}
             onClick={() => void openTeach()}
             title={
@@ -1110,14 +1220,12 @@ function FullStudyScreen() {
                 : flushing
                   ? "Saving your notes first…"
                   : showPdf
-                    ? `Teach mode: AnotherNotes AI goes through your ${pdfNoun} page by page, pointing at each part as it explains it`
-                    : "Teach mode: AnotherNotes AI scrolls, points and explains these notes out loud"
+                    ? `Teach me: AnotherNotes AI goes through your ${pdfNoun} page by page, pointing at each part as it explains it`
+                    : "Teach me: AnotherNotes AI scrolls, points and explains these notes out loud"
             }
-            className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500 to-fuchsia-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-pink-500/30 transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 disabled:hover:scale-100"
-          >
-            <GraduationCap className="size-3.5" />
-            Teach mode
-          </button>
+            // only ever off for a moment here (the PDF opening, the notes saving)
+            className="disabled:cursor-wait"
+          />
           {guideOpen && (
             <button
               type="button"
@@ -1134,6 +1242,11 @@ function FullStudyScreen() {
               <Presentation className="size-3.5" />
               Board
             </button>
+          )}
+          {/* The session's one Quiz (every section in turn) and one deck of flashcards,
+              up here rather than on each section, so the notes read as one document. */}
+          {studySections.length > 0 && (
+            <SessionStudyButtons sections={studySections} onQuiz={() => setQuizOpen(true)} onFlashcards={() => setCardsOpen(true)} />
           )}
           <button
             type="button"
@@ -1232,7 +1345,7 @@ function FullStudyScreen() {
               >
                 <span className="flex min-w-0 items-center gap-2">
                   <NotebookText className="size-3.5 shrink-0" />
-                  Editing, dictation, checks and quizzes are in Notes view
+                  The notes written from your {pdfNoun}, and editing them, are in Notes view
                 </span>
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setView("notes")}>
                   Switch to Notes
@@ -1273,19 +1386,8 @@ function FullStudyScreen() {
                   ? "Start writing, or click Dictate and talk. Type / for headings, lists and more."
                   : `Start writing, or press ${voiceKeyLabel(voiceKey)} and talk. Type / for headings, lists and more.`
               }
-              dictation={dictation}
-              dictating={dictFor != null && dictFor === s.topic.db_id}
-              onDictate={toggleDictation}
-              onCheck={startCheck}
-              checking={checking === s.topic.db_id}
+              interim={dictFor != null && dictFor === s.topic.db_id ? dictation.interim : undefined}
               onResume={resumeReview}
-              onWrong={addWrong}
-              onRight={clearWrong}
-              onNext={() => {
-                const next = sections[s.index]; // index is 1-based → next section
-                if (next) scrollTo(next.topic.id);
-                else document.getElementById("session-end")?.scrollIntoView({ behavior: "smooth" });
-              }}
             />
           ))}
 
@@ -1304,7 +1406,9 @@ function FullStudyScreen() {
                 <p className="text-sm font-semibold">
                   {sections.length - done} section{sections.length - done === 1 ? "" : "s"} to go
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">Read each section's notes, then quiz yourself on it.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Read the notes, then press Quiz at the top of the page: it goes through each section's questions in turn.
+                </p>
               </>
             )}
           </div>
@@ -1355,6 +1459,23 @@ function FullStudyScreen() {
       </div>
 
           <WrongQuestionsDialog open={showWrong} onOpenChange={setShowWrong} entries={wrong} onClear={clearWrong} />
+          <SessionQuizDialog
+            session={session}
+            sections={studySections}
+            open={quizOpen}
+            onOpenChange={setQuizOpen}
+            onWrong={addWrong}
+            onRight={clearWrong}
+          />
+          <SessionFlashcardsDialog session={session} sections={studySections} open={cardsOpen} onOpenChange={setCardsOpen} />
+          <SectionStudyDialog
+            session={session}
+            target={study}
+            onClose={() => setStudy(null)}
+            onWrong={addWrong}
+            onRight={clearWrong}
+            onContinue={scrollPast}
+          />
           <StickySessionDialog open={showStickies} onOpenChange={setShowStickies} sessionId={session.id} />
           {/* highlight anything in the notes → "Save to sticky" */}
           <StickySelection sessionId={session.id} resolve={sectionOfNotes} />
@@ -1379,6 +1500,11 @@ function FullStudyScreen() {
           boardEnabled={boardOn}
           onBoardClose={() => setBoardOn(false)}
           source={showPdf ? "pdf" : "notes"}
+          // The board draws a section's quiz (at the end of the section) and its
+          // flashcards (from the board's footer) with this.
+          renderPanel={renderStudyPanel}
+          // "Make this simpler", asked out loud: the section's notes are rewritten here.
+          reviseNotes={reviseNotes}
         />
       )}
       {reviewing != null && reviewTopic && (
@@ -1428,7 +1554,9 @@ function GoneState({ note }: { note?: boolean }) {
 }
 
 /* --------------------------------------------------------------------------
-   One section: heading · notes · quiz
+   One section: heading · notes. No toolbar and no study tools: the notes are
+   written in by clicking into them, the Quiz and Flashcards are at the top of
+   the page, and Teach mode's mic changes the notes when asked.
 -------------------------------------------------------------------------- */
 function StudySection({
   section,
@@ -1440,88 +1568,38 @@ function StudySection({
   noteMode,
   fresh,
   placeholder,
-  dictation,
-  dictating,
-  onDictate,
-  onCheck,
-  checking,
+  interim,
   onResume,
-  onWrong,
-  onRight,
-  onNext,
 }: {
   section: Section;
   total: number;
   session: StudySession;
   notesLoading: boolean;
-  /** Something is going through these notes (Teach mode, a check): nothing may
-   *  change them or reflow them until it is done, so every tool that writes is
-   *  disabled and the notes are read-only. */
+  /** Something is going through these notes (Teach mode, the tutor's questions):
+   *  nothing may change them or reflow them until it is done, so every tool that
+   *  writes is disabled and the notes are read-only. */
   frozen: boolean;
   /** Tells the page where this section's notes are, so it can save them before
    *  anything locks them. Called with null when they go. */
   registerNotes: (dbId: number, handle: PaperNotesHandle | null) => void;
   /** The student's own note: no section heading (the page title is it), may be
-   *  empty, never written by the AI, and quizzes wait until there is enough in it. */
+   *  empty and is never written by the AI. */
   noteMode: boolean;
   /** A note made on this visit: its title has the caret, so the page waits to be clicked into. */
   fresh: boolean;
   /** What an empty page says. */
   placeholder: string;
-  /** The page's one microphone. */
-  dictation: Dictation;
-  /** Dictation is writing into THIS section. */
-  dictating: boolean;
-  onDictate: (dbId: number) => void;
-  /** The tutor checks this section's notes. */
-  onCheck: (dbId: number) => void;
-  checking: boolean;
+  /** What dictation has heard so far and not yet written, while it writes into THIS section. */
+  interim?: string;
   /** Go through the questions left open from the last check. */
   onResume: (dbId: number) => void;
-  onWrong: (e: WrongEntry) => void;
-  onRight: (key: string) => void;
-  onNext: () => void;
 }) {
   const { toast } = useToast();
   const { topic, index, category } = section;
 
-  const answerQuestion = useAppStore((s) => s.answerQuestion);
-  const completeTopic = useAppStore((s) => s.completeTopic);
-  const setTopicQuestions = useAppStore((s) => s.setTopicQuestions);
   const updateTopic = useAppStore((s) => s.updateTopic);
   const updateTopicByDbId = useAppStore((s) => s.updateTopicByDbId);
   const patchSession = useAppStore((s) => s.patchSession);
-  const reward = useAppStore((s) => (s.lastTopicReward?.topicId === topic.id ? s.lastTopicReward : null));
-
-  const questions = topic.questions ?? [];
-
-  // The phrases the AI marked as this section's point, one click from a sticky note.
-  const keyIdeas = useMemo(() => keyIdeasOf(topic.notes), [topic.notes]);
-  const addSticky = useStickyStore((s) => s.add);
-  const [keeping, setKeeping] = useState(false);
-  const keepKeyIdeas = async () => {
-    if (!keyIdeas.length) return;
-    setKeeping(true);
-    try {
-      for (const text of keyIdeas) {
-        await addSticky({
-          text,
-          source: "key-idea",
-          study_session_id: session.id,
-          topic_id: topic.db_id ?? null,
-          section_title: topic.title,
-        });
-      }
-      toast({
-        title: `Kept ${keyIdeas.length} key idea${keyIdeas.length === 1 ? "" : "s"}`,
-        description: "They're on your dashboard with the rest of your sticky notes.",
-      });
-    } catch (e) {
-      toast({ title: "Couldn't keep those", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
-    } finally {
-      setKeeping(false);
-    }
-  };
 
   // Notes editing
   const notesRef = useRef<PaperNotesHandle | null>(null);
@@ -1536,39 +1614,22 @@ function StudySection({
     },
     [dbId, registerNotes],
   );
-  const [editing, setEditing] = useState<null | "head" | "notes">(null);
+  // The title and summary, edited in place. (The notes are written straight into the
+  // page, through PaperNotes, so they have no draft here.)
+  const [editingHead, setEditingHead] = useState(false);
   const [draftTitle, setDraftTitle] = useState(topic.title);
   const [draftDesc, setDraftDesc] = useState(topic.description ?? "");
-  const [draftNotes, setDraftNotes] = useState(topic.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [writing, setWriting] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [instruction, setInstruction] = useState("");
-  const [revising, setRevising] = useState(false);
-
-  // Quiz runner (one question at a time)
-  const [revealed, setRevealed] = useState(false);
-  const [idx, setIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [showSummary, setShowSummary] = useState(false);
-  const [review, setReview] = useState(false);
-  const [quizLoading, setQuizLoading] = useState(false);
-
-  const answeredCount = Object.keys(answers).length;
-  const correctCount = questions.reduce((n, q, i) => (answers[i] !== undefined && answers[i] === q.correctAnswer ? n + 1 : n), 0);
-
-  const wrongKey = (q: Question, i: number) => `${topic.id}::${q.id ?? i}`;
 
   const save = async () => {
     if (!topic.db_id) return;
     setSaving(true);
     try {
-      const patch = editing === "head" ? { title: draftTitle.trim() || topic.title, description: draftDesc.trim() } : { notes: draftNotes };
-      const res = await updateTopicDetails(session.id, topic.db_id, patch);
-      // Adopt the server's copy so any normalisation it does is visible now
-      // rather than appearing to change the notes on their own at the next fetch.
-      updateTopic(session.id, topic.id, editing === "head" ? patch : { notes: typeof res?.notes === "string" ? res.notes : draftNotes });
-      setEditing(null);
+      const patch = { title: draftTitle.trim() || topic.title, description: draftDesc.trim() };
+      await updateTopicDetails(session.id, topic.db_id, patch);
+      updateTopic(session.id, topic.id, patch);
+      setEditingHead(false);
     } catch (e) {
       toast({ title: "Couldn't save", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     } finally {
@@ -1588,16 +1649,12 @@ function StudySection({
       // re-places its questions and says which are still there.
       if (Array.isArray(res?.noteChecks)) updateTopicByDbId(session.id, topic.db_id, { noteChecks: res.noteChecks });
       patchSession(session.id, { updatedAt: res?.updatedAt ?? Date.now() });
-      setDraftNotes(adopted);
       return adopted;
     },
     [session.id, topic.db_id, topic.id, updateTopic, updateTopicByDbId, patchSession],
   );
 
   const openChecks = (topic.noteChecks ?? []).filter((c) => c.answer == null).length;
-  const words = useMemo(() => wordsIn(topic.notes), [topic.notes]);
-  // A note too short to quiz on doesn't offer it.
-  const studyTools = !noteMode || words >= NOTE_MIN_WORDS;
 
   const writeNotes = async (force = false) => {
     if (!topic.db_id) return;
@@ -1605,80 +1662,12 @@ function StudySection({
     try {
       const notes = await generateTopicNotes(session.id, topic.db_id, force);
       updateTopic(session.id, topic.id, { notes });
-      setDraftNotes(notes);
     } catch (e) {
       toast({ title: "Couldn't write notes", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     } finally {
       setWriting(false);
     }
   };
-
-  // The server wants at least 2 characters; below that, Apply stays disabled
-  // rather than sending something it will refuse.
-  const canRevise = instruction.trim().length >= 2;
-
-  const revise = async () => {
-    if (!topic.db_id || !canRevise || revising || frozen) return;
-    setRevising(true);
-    try {
-      const notes = await reviseTopicNotes(session.id, topic.db_id, instruction.trim());
-      updateTopic(session.id, topic.id, { notes });
-      setDraftNotes(notes);
-      setAsking(false);
-      setInstruction("");
-    } catch (e) {
-      toast({ title: "Couldn't change the notes", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
-    } finally {
-      setRevising(false);
-    }
-  };
-
-  const openQuiz = async (fresh: boolean) => {
-    if (!topic.db_id) return;
-    // Always ask the backend: it reuses this section's grounded questions when
-    // they exist, and regenerates a fresh, correct set when they don't (or when
-    // the section still holds older, less reliable bulk-pipeline questions).
-    setQuizLoading(true);
-    try {
-      const qs = await generateSectionQuiz(session.id, topic.db_id, { count: 8, force: fresh });
-      setTopicQuestions(session.id, topic.id, qs);
-    } catch (e) {
-      toast({ title: "Couldn't build the quiz", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
-      setQuizLoading(false);
-      return;
-    }
-    setQuizLoading(false);
-    setAnswers({});
-    setIdx(0);
-    setShowSummary(false);
-    setReview(false);
-    setRevealed(true);
-  };
-
-  const choose = (ai: number) => {
-    const q = questions[idx];
-    if (!q || answers[idx] !== undefined) return;
-    const { correct } = answerQuestion(session.id, topic.id, ai, idx);
-    setAnswers((a) => ({ ...a, [idx]: ai }));
-    const key = wrongKey(q, idx);
-    if (correct) onRight(key);
-    else onWrong({ key, topicId: topic.id, sectionTitle: topic.title, sectionIndex: index, question: q });
-  };
-
-  const finish = () => {
-    completeTopic(session.id, topic.id);
-    setShowSummary(true);
-    setRevealed(false);
-  };
-
-  const retry = async () => {
-    await openQuiz(false);
-  };
-
-  const isCurrentAnswered = answers[idx] !== undefined;
-  const onLast = idx === questions.length - 1;
-  // The quiz card stays one compact row until the learner starts it.
-  const quizIdle = !quizLoading && !(showSummary && reward) && !review && !(revealed && questions.length > 0) && !topic.completed;
 
   return (
     <section id={`section-${topic.id}`} className="scroll-mt-4">
@@ -1689,7 +1678,7 @@ function StudySection({
           Section {index} of {total}
           {category ? <span className="normal-case tracking-normal"> · {category}</span> : null}
         </p>
-        {editing === "head" ? (
+        {editingHead ? (
           <div className="mt-2 space-y-2">
             <input
               value={draftTitle}
@@ -1703,7 +1692,7 @@ function StudySection({
                 {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                 Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+              <Button size="sm" variant="ghost" onClick={() => setEditingHead(false)}>
                 <X className="size-3.5" />
                 Cancel
               </Button>
@@ -1725,7 +1714,7 @@ function StudySection({
                 onClick={() => {
                   setDraftTitle(topic.title);
                   setDraftDesc(topic.description ?? "");
-                  setEditing("head");
+                  setEditingHead(true);
                 }}
                 // Faint rather than invisible: a control nobody can see is one
                 // nobody finds, and on touch there is no hover to reveal it.
@@ -1747,12 +1736,15 @@ function StudySection({
       )}
 
       {/* Notes — a page, not a card. No border, no radius, no shadow, no
-          toolbar rail AND NO FILL OF ITS OWN: this block used to paint
+          toolbar AND NO FILL OF ITS OWN: this block used to paint
           `bg-[hsl(var(--paper))]`, which punched an opaque rectangle through the
           page's grain and read as a third material. The text now sits directly
           on the chosen sheet, with a real page margin, and the 78ch measure is
-          centred so the slack falls on both sides. */}
-      <div className={cn("group/notes relative px-6 sm:px-12 lg:px-16", noteMode ? "pb-8 pt-3" : "mt-5 py-5 sm:py-8")}>
+          centred so the slack falls on both sides. There is no edit MODE:
+          writing starts wherever the student clicks or taps. (The toolbar that
+          sat above the notes went too; a note keeps Dictate and Write in its
+          top bar, and Teach mode's mic changes study notes when asked.) */}
+      <div className={cn("relative px-6 sm:px-12 lg:px-16", noteMode ? "pb-8 pt-3" : "mt-5 py-5 sm:py-8")}>
         {/* The tutor asked about these notes and not everything is answered yet. */}
         {openChecks > 0 && !frozen && topic.db_id && (
           <div
@@ -1768,107 +1760,6 @@ function StudySection({
             </Button>
           </div>
         )}
-        {topic.db_id && (topic.notes || noteMode) && (
-          /* Always there. It used to be invisible on anything 640px or wider until
-             the pointer was over this exact section, which read as "editing is
-             gone". Muted at rest so it doesn't compete with the notes; full while
-             in use, and always full on touch, where nothing hovers. */
-          <div
-            data-an-chrome=""
-            className={cn(
-              "mx-auto mb-3 flex max-w-[78ch] flex-wrap items-center justify-end gap-1 transition-opacity",
-              asking
-                ? "opacity-100"
-                : "opacity-70 hover:opacity-100 focus-within:opacity-100 group-hover/notes:opacity-100 [@media(pointer:coarse)]:opacity-100",
-            )}
-          >
-            {keyIdeas.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mr-auto h-7 text-xs text-muted-foreground"
-                onClick={keepKeyIdeas}
-                disabled={keeping}
-                title="Put this section's highlighted ideas on sticky notes"
-              >
-                {keeping ? <Loader2 className="size-3.5 animate-spin" /> : <StickyNote className="size-3.5" />}
-                Keep {keyIdeas.length} key idea{keyIdeas.length === 1 ? "" : "s"}
-              </Button>
-            )}
-            {/* In a note these two live in the page's top bar; one of each is enough. */}
-            {!noteMode && (
-              <>
-                <DictateButton
-                  compact
-                  dictation={dictating ? dictation : { ...dictation, state: "off", interim: "" }}
-                  disabled={frozen || (dictation.state !== "off" && !dictating)}
-                  onToggle={() => onDictate(topic.db_id!)}
-                  className="text-muted-foreground"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs text-muted-foreground"
-                  onClick={() => onCheck(topic.db_id!)}
-                  disabled={frozen || checking || !topic.notes?.trim()}
-                  title={frozen ? "Paused while AnotherNotes is going through these notes" : "Your tutor reads these notes and asks about anything that looks wrong"}
-                >
-                  {checking ? <Loader2 className="size-3.5 animate-spin" /> : <SearchCheck className="size-3.5" />}
-                  {checking ? "Checking…" : "Check these notes"}
-                </Button>
-              </>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn("h-7 text-xs", asking ? "text-foreground" : "text-muted-foreground")}
-              onClick={() => { setAsking((a) => !a); setInstruction(""); }}
-              disabled={revising || frozen || !topic.notes?.trim()}
-              // It replaces the whole section, so it waits while anything is
-              // going through these notes.
-              title={frozen ? "Paused while AnotherNotes is going through these notes" : "Tell the AI what to change in this section"}
-            >
-              <Wand2 className="size-3.5" />
-              Ask AI to change
-            </Button>
-            {/* There is no edit MODE any more, so this is not a toggle: writing
-                starts wherever you click or tap, on a mouse and on touch alike.
-                The button stays as the keyboard route in — it just puts the
-                caret at the top of the section. */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground"
-              disabled={frozen}
-              title={frozen ? "Writing pauses while AnotherNotes is going through these notes" : "Put the caret in these notes (or just click where you want to write)"}
-              onClick={() => notesRef.current?.startEditing()}
-            >
-              <Pencil className="size-3.5" />
-              Write
-            </Button>
-          </div>
-        )}
-        {asking && topic.notes && (
-          <div className="mx-auto mb-4 max-w-[78ch]" data-an-chrome="">
-            <div className="flex items-center gap-2">
-              <Wand2 className="size-4 shrink-0 text-chart-1" />
-              <input
-                value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void revise(); if (e.key === "Escape") setAsking(false); }}
-                placeholder="Tell the AI what to change — e.g. “make the example about basketball”, “simplify the second part”"
-                className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-foreground"
-                autoFocus
-                maxLength={600}
-                disabled={revising || frozen}
-              />
-              <Button size="sm" className="h-9" onClick={revise} disabled={revising || frozen || !canRevise}>
-                {revising ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
-                Apply
-              </Button>
-            </div>
-          </div>
-        )}
         {topic.notes || (noteMode && topic.db_id) ? (
           <PaperNotes
             ref={bindNotes}
@@ -1881,7 +1772,7 @@ function StudySection({
             allowEmpty={noteMode}
             placeholder={noteMode ? placeholder : undefined}
             openOnMount={noteMode && !fresh && !topic.notes?.trim()}
-            interim={dictating ? dictation.interim : undefined}
+            interim={interim}
           />
         ) : notesLoading || writing ? (
           <div className="mx-auto max-w-[78ch] space-y-2.5 py-1">
@@ -1920,314 +1811,7 @@ function StudySection({
           </div>
         )}
       </div>
-
-      {studyTools && (
-      <>
-      <SectionFlashcards session={session} topic={topic} />
-
-      {/* Quiz */}
-      <div data-guide-quiz={topic.db_id} className="mt-3 overflow-hidden rounded-2xl border border-border/50 bg-foreground/[0.03]">
-        {!quizIdle && (
-          <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Quiz</p>
-            {(revealed || (topic.completed && !showSummary)) && questions.length > 0 && !review && (
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {revealed ? `${Math.min(idx + 1, questions.length)} / ${questions.length}` : `Score ${Math.round(topic.score ?? 0)}%`}
-              </span>
-            )}
-          </div>
-        )}
-
-        {quizLoading ? (
-          <div className="flex items-center gap-2 px-5 py-8 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Writing challenging questions for this section…
-          </div>
-        ) : showSummary && reward ? (
-          <div className="p-5">
-            <TopicSummary
-              topicTitle={topic.title}
-              score={topic.score ?? 0}
-              totalQuestions={questions.length}
-              onContinue={() => {
-                setShowSummary(false);
-                onNext();
-              }}
-              onRetry={retry}
-              isLastTopic={index === total}
-              xp={reward.breakdown}
-              sessionCompleted={reward.sessionCompleted}
-            />
-          </div>
-        ) : review ? (
-          <div className="divide-y divide-border">
-            {questions.map((q, qi) => (
-              <div key={q.id ?? qi} className="px-5 py-4">
-                <p className="text-sm font-medium">
-                  <span className="mr-2 tabular-nums text-muted-foreground">{qi + 1}.</span>
-                  {q.question}
-                </p>
-                <p className="mt-2 text-xs text-success">
-                  <Check className="mr-1 inline size-3.5 align-[-2px]" />
-                  {String.fromCharCode(65 + q.correctAnswer)}. {q.options[q.correctAnswer]}
-                </p>
-                {q.explanation && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{q.explanation}</p>}
-              </div>
-            ))}
-            <div className="flex justify-end px-5 py-3">
-              <Button size="sm" variant="ghost" onClick={() => setReview(false)}>
-                Done reviewing
-              </Button>
-            </div>
-          </div>
-        ) : revealed && questions.length > 0 ? (
-          <div className="p-5">
-            {/* progress dots */}
-            <div className="mb-4 flex items-center gap-1.5">
-              {questions.map((_, qi) => (
-                <span
-                  key={qi}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all",
-                    qi === idx ? "w-5 bg-chart-1" : answers[qi] !== undefined ? "w-1.5 bg-chart-1/50" : "w-1.5 bg-muted",
-                  )}
-                />
-              ))}
-            </div>
-
-            <QuizQuestion q={questions[idx]} chosen={answers[idx]} onChoose={choose} />
-
-            <div className="mt-5 flex items-center justify-between">
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {answeredCount} answered · {correctCount} right
-              </span>
-              {isCurrentAnswered &&
-                (onLast ? (
-                  <Button size="sm" onClick={finish}>
-                    Finish section
-                    <ArrowRight className="size-3.5" />
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => setIdx((i) => i + 1)}>
-                    Next question
-                    <ChevronRight className="size-3.5" />
-                  </Button>
-                ))}
-            </div>
-          </div>
-        ) : topic.completed ? (
-          // Completed, collapsed
-          <div className="flex flex-col items-start gap-3 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle2 className="size-4 text-success" />
-              <span className="font-medium">Completed</span>
-              <span className="text-muted-foreground">
-                · {Math.round(topic.score ?? 0)}% · {questions.length} question{questions.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setReview(true)}>
-                Review answers
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={retry}>
-                <RotateCcw className="size-3.5" />
-                Retry
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openQuiz(true)}>
-                <Sparkles className="size-3.5" />
-                Fresh questions
-              </Button>
-            </div>
-          </div>
-        ) : (
-          // Idle: one compact row — it only expands once the learner starts the quiz.
-          <div className="flex items-center gap-2.5 px-3.5 py-2">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
-              <ListChecks className="size-3.5 text-chart-1" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold leading-tight">Quiz this section</p>
-              <p className="hidden truncate text-xs text-muted-foreground sm:block">A few challenging questions from these notes, one at a time.</p>
-            </div>
-            <Button size="sm" className="h-8 shrink-0" onClick={() => openQuiz(false)} disabled={!topic.db_id} data-guide-quiz-button>
-              <ListChecks className="size-3.5" />
-              Start
-            </Button>
-          </div>
-        )}
-      </div>
-      </>
-      )}
-
     </section>
-  );
-}
-
-/* --------------------------------------------------------------------------
-   Flashcards — a quick memory check for a section. Tap a card to flip; step
-   through the deck. Cards are written from the section's notes on demand.
--------------------------------------------------------------------------- */
-function SectionFlashcards({ session, topic }: { session: StudySession; topic: Topic }) {
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [cards, setCards] = useState<Flashcard[]>([]);
-  const [idx, setIdx] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-
-  const load = async (force = false) => {
-    if (!topic.db_id) return;
-    setLoading(true);
-    try {
-      const cs = await generateSectionFlashcards(session.id, topic.db_id, { count: 8, force });
-      if (!cs.length) throw new Error("No flashcards came back.");
-      setCards(cs);
-      setIdx(0);
-      setFlipped(false);
-      setOpen(true);
-    } catch (e) {
-      toast({ title: "Couldn't make flashcards", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const go = (delta: number) => {
-    setFlipped(false);
-    setIdx((i) => Math.min(cards.length - 1, Math.max(0, i + delta)));
-  };
-
-  if (!open) {
-    return (
-      <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dashed border-border/50 bg-foreground/[0.02] px-3.5 py-2">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-chart-1/10">
-          <Layers className="size-3.5 text-chart-1" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-tight">Flashcards</p>
-          <p className="hidden truncate text-xs text-muted-foreground sm:block">Check your memory — flip cards drawn from this section.</p>
-        </div>
-        <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => load(false)} disabled={loading || !topic.db_id}>
-          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Layers className="size-3.5" />}
-          {loading ? "Making cards…" : "Flashcards"}
-        </Button>
-      </div>
-    );
-  }
-
-  const card = cards[idx];
-  return (
-    <div className="mt-4 rounded-2xl border border-border/50 bg-foreground/[0.03] p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Flashcards <span className="ml-1 normal-case tracking-normal">· {idx + 1} / {cards.length}</span>
-        </p>
-        <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setOpen(false)}>
-          Done
-        </Button>
-      </div>
-
-      {/* A real 3D flip: two faces on one rotating card (see .fc-* in index.css). */}
-      <button
-        type="button"
-        onClick={() => setFlipped((f) => !f)}
-        aria-label={flipped ? "Show question" : "Reveal answer"}
-        aria-pressed={flipped}
-        className="fc-scene block h-52 w-full text-center"
-      >
-        <div className={cn("fc-card", flipped && "fc-flipped")}>
-          <div className="fc-face rounded-2xl border border-border bg-muted/40 px-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recall</p>
-            <p className="mt-3 text-lg font-medium leading-snug">{card.front}</p>
-            <p className="mt-4 text-xs text-muted-foreground">Tap to flip</p>
-          </div>
-          <div className="fc-face fc-back rounded-2xl border border-chart-1/30 bg-chart-1/5 px-6">
-            <p className="text-[15px] leading-relaxed">{card.back}</p>
-            {card.hint && <p className="mt-3 text-xs text-muted-foreground">Hint: {card.hint}</p>}
-            <p className="mt-4 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Tap to flip back</p>
-          </div>
-        </div>
-      </button>
-
-      <div className="mt-4 flex items-center justify-between">
-        <Button variant="ghost" size="sm" disabled={idx === 0} onClick={() => go(-1)}>
-          <ChevronLeft className="size-3.5" />
-          Back
-        </Button>
-        <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => load(true)} disabled={loading}>
-          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-          New cards
-        </Button>
-        {idx < cards.length - 1 ? (
-          <Button size="sm" onClick={() => go(1)}>
-            Next
-            <ChevronRight className="size-3.5" />
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
-            Finish
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------------------------------------------------------
-   A single question with its options — shared by section quizzes and the
-   wrong-questions retry. Read-only once answered.
--------------------------------------------------------------------------- */
-function QuizQuestion({ q, chosen, onChoose }: { q: Question; chosen: number | undefined; onChoose: (ai: number) => void }) {
-  const answered = chosen !== undefined;
-  return (
-    <div>
-      <p className="text-base font-medium leading-relaxed md:text-[17px]">{q.question}</p>
-      <div className="mt-4 grid gap-2.5">
-        {q.options.map((opt, ai) => {
-          const isCorrect = ai === q.correctAnswer;
-          const isChosen = chosen === ai;
-          return (
-            <button
-              key={ai}
-              type="button"
-              disabled={answered}
-              onClick={() => onChoose(ai)}
-              className={cn(
-                "flex items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors",
-                !answered && "border-border hover:border-chart-1/50 hover:bg-muted",
-                answered && isCorrect && "border-success bg-success/10",
-                answered && isChosen && !isCorrect && "border-destructive bg-destructive/10",
-                answered && !isChosen && !isCorrect && "border-border opacity-60",
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-px flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
-                  answered && isCorrect && "border-success bg-success text-success-foreground",
-                  answered && isChosen && !isCorrect && "border-destructive bg-destructive text-destructive-foreground",
-                  (!answered || (!isCorrect && !isChosen)) && "border-border",
-                )}
-              >
-                {String.fromCharCode(65 + ai)}
-              </span>
-              <span className="pt-0.5">{opt}</span>
-            </button>
-          );
-        })}
-      </div>
-      {answered && (
-        <div
-          className={cn(
-            "mt-4 rounded-xl border p-3 text-sm leading-relaxed",
-            chosen === q.correctAnswer ? "border-success/40 bg-success/10" : "border-amber-500/40 bg-amber-500/10",
-          )}
-        >
-          <p className="font-semibold">
-            {chosen === q.correctAnswer ? "Correct" : `Answer: ${String.fromCharCode(65 + q.correctAnswer)} — ${q.options[q.correctAnswer]}`}
-          </p>
-          {q.explanation && <p className="mt-1 text-muted-foreground">{q.explanation}</p>}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -2279,7 +1863,9 @@ function WrongQuestionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      {/* A study dialog like the Quiz: Teach mode stops talking when it opens, leaves
+          its keys alone in here and lowers the board under it. */}
+      <DialogContent data-study-dialog="" className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="size-4 text-amber-500" />
@@ -2370,7 +1956,7 @@ function SessionPicker({
     <div className="mx-auto w-full max-w-3xl">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Full Study</p>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pick a session to study</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Each session is one scrolling note with a quiz under every section.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Each session is one scrolling note, with one Quiz at the top for all of it.</p>
 
       {sessions.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center">

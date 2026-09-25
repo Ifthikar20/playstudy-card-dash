@@ -78,6 +78,17 @@ export const SITTING_LABEL: Record<SittingMode, string> = {
   wrong: "Questions you got wrong",
 };
 
+/**
+ * The sittings that are a section's study tool, and which one. Their chip opens it
+ * on that section (its quiz, its flashcards) rather than only scrolling there: the
+ * tools live behind the section's header buttons now, not at the foot of its notes,
+ * so scrolling alone would land on a section with nothing to do.
+ */
+export const SITTING_TOOL: Partial<Record<SittingMode, "quiz" | "flashcards">> = {
+  quiz: "quiz",
+  flashcards: "flashcards",
+};
+
 export const DAY_LABEL: Record<PlanDayKind, string> = {
   learn: "New sections",
   revise: "Revision",

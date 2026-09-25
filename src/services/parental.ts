@@ -14,6 +14,7 @@
  * props.
  */
 import { authService } from "./authService";
+import type { QuestionKind } from "@/lib/quiz/types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
@@ -89,8 +90,17 @@ export interface AnswerDetail {
   topicTitle: string | null;
   questionText: string | null;
   options: string[] | null;
+  /** Single choice's right option. Every other kind has only a stand-in here: use answerText. */
   correctAnswer: number | null;
   explanation: string | null;
+  /** The question's kind ("single", "multi", "order", …); missing on older servers. */
+  kind?: QuestionKind | null;
+  /** The right answer in words, whatever the kind ("Sow → Water → Harvest"). */
+  answerText?: string | null;
+  /** What they picked or typed, in words; null for answers logged before this was kept. */
+  pickedText?: string | null;
+  /** A question on a PDF's pages: which ones. */
+  pageRange?: { first: number; last: number } | null;
 }
 
 export interface AnswerPage {

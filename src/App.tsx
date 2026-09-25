@@ -35,8 +35,6 @@ import FullStudyPage from "./pages/FullStudyPage";
 import NewNotePage from "./pages/NewNotePage";
 import NotFound from "./pages/NotFound";
 import DevLoginPage from "./pages/DevLoginPage";
-import DevBoardPage from "./pages/DevBoardPage";
-import DevShellPage from "./pages/DevShellPage";
 
 const queryClient = new QueryClient();
 
@@ -78,10 +76,6 @@ const AppContent = () => {
         <Route path="/contact" element={<ContactPage />} />
         {/* Dev-only: scripted sign-in used by scripts/dev-login.mjs (tree-shaken from prod builds) */}
         {import.meta.env.DEV && <Route path="/dev-login" element={<DevLoginPage />} />}
-        {/* Dev-only: the whiteboard's list looks in light and dark (tree-shaken from prod builds) */}
-        {import.meta.env.DEV && <Route path="/dev-board" element={<DevBoardPage />} />}
-        {/* Dev-only: the app shell around filler content, for checking the sidebar (tree-shaken from prod builds) */}
-        {import.meta.env.DEV && <Route path="/dev-shell" element={<DevShellPage />} />}
 
         {/* Protected routes - require authentication */}
         <Route
@@ -123,7 +117,7 @@ const AppContent = () => {
           />
           <Route path="settings" element={<Navigate to="/dashboard/profile" replace />} />
 
-          {/* Study (the only mode: one scrolling note with a quiz per section) */}
+          {/* Study (the only mode: one scrolling note, one Quiz button at the top for all of it) */}
           <Route path=":sessionId/full-study" element={<FullStudyPage />} />
 
           {/* Session-less entry keeps old links working */}

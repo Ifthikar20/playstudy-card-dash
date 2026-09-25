@@ -54,6 +54,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeKatex from "rehype-katex";
 import { cn } from "@/lib/utils";
 import { BASE_NOTE_COMPONENTS, HEADING_COLORS, headingVars } from "@/lib/notes/render";
+import { NoteParagraph } from "@/lib/notes/formula";
 import {
   HUE_ATTR,
   KIND_ATTR,
@@ -107,6 +108,8 @@ function Heading({ Tag, rest, children }: { Tag: "h2" | "h3"; rest: Record<strin
 
 const READ_COMPONENTS = {
   ...BASE_NOTE_COMPONENTS,
+  // Formulas set as formulas (lib/notes/formula.tsx).
+  p: NoteParagraph,
   h2: ({ node, children, ...rest }: MdComponentProps) => (
     <Heading Tag="h2" rest={rest}>
       {children}

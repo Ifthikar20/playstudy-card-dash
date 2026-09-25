@@ -4,10 +4,13 @@
  * as one of these calls.
  */
 import { authService } from "./authService";
+import { FILL_MAX } from "@/lib/quiz/grade";
+import type { QuestionKind, QuizResponse } from "@/lib/quiz/types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
-export type AnswerMode = "full_study" | "speed_run" | "quiz" | "game" | "mentor";
+/** "pdf_quiz" is a question on a PDF's pages (its question_id is "pdf:{quizId}.{generation}:{n}"). */
+export type AnswerMode = "full_study" | "speed_run" | "quiz" | "game" | "mentor" | "pdf_quiz";
 
 export interface AnswerEventIn {
   session_id?: string | null;
@@ -17,6 +20,10 @@ export interface AnswerEventIn {
   mode: AnswerMode;
   /** ISO timestamp; defaults to now on the server */
   at?: string;
+  /** The question's kind (missing means single choice, as before kinds existed). */
+  kind?: QuestionKind;
+  /** What was picked or typed, so a guardian can see it. The server drops one over 1 KB. */
+  response?: QuizResponse;
 }
 
 export interface ActivitySummary {
@@ -30,6 +37,11 @@ export interface ActivitySummary {
   totalStudyTime: string;
   streakDays: number;
   measured: true;
+}
+
+/** A response as it goes into the answer log: a typed answer cut to what the server keeps. */
+export function loggedResponse(r: QuizResponse): QuizResponse {
+  return r.kind === "fill" && r.text.length > FILL_MAX ? { kind: "fill", text: r.text.slice(0, FILL_MAX) } : r;
 }
 
 function headers(): Record<string, string> {

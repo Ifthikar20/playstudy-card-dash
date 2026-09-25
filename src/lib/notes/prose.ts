@@ -1,0 +1,15 @@
+/*
+  The typography of the notes: the notes card (NOTE_PROSE) and Read mode's book
+  column (READ_PROSE), used by the Full Study page.
+
+  The Key idea callout is a <blockquote>: Tailwind Typography's quote marks are
+  switched off (it adds curly quotes around every blockquote paragraph), and its
+  "Key idea:" lead is set as a small label. It stays a real <blockquote> because
+  Teach mode's block finder recognises quotes by that element.
+*/
+export const NOTE_PROSE =
+  "prose prose-base mx-auto max-w-[78ch] text-[16px] leading-[1.75] text-foreground/90 dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mb-2.5 prose-h2:mt-7 prose-h2:text-[18px] prose-h2:leading-[1.4] prose-h3:mt-5 prose-h3:text-[16px] prose-h3:leading-[1.5] prose-p:my-3 prose-p:leading-[1.75] prose-li:my-1 prose-li:leading-[1.7] prose-strong:font-semibold prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-5 prose-blockquote:bg-chart-1/[0.05] prose-blockquote:text-foreground prose-blockquote:rounded-xl prose-blockquote:border prose-blockquote:border-l prose-blockquote:border-chart-1/25 prose-blockquote:px-5 prose-blockquote:py-3.5 prose-blockquote:font-normal prose-blockquote:not-italic [&_blockquote_p]:!my-0 [&_blockquote_p+p]:!mt-2 [&_blockquote_p]:before:content-none [&_blockquote_p]:after:content-none [&_blockquote>p:first-child>strong:first-child]:mr-1 [&_blockquote>p:first-child>strong:first-child]:text-[0.78em] [&_blockquote>p:first-child>strong:first-child]:font-semibold [&_blockquote>p:first-child>strong:first-child]:uppercase [&_blockquote>p:first-child>strong:first-child]:tracking-[0.08em] [&_blockquote>p:first-child>strong:first-child]:text-chart-1";
+
+// Book-like reading measure for Read mode; `prose`/`prose-invert` is added per theme.
+export const READ_PROSE =
+  "prose prose-lg max-w-none text-[17px] leading-[1.85] prose-headings:font-semibold prose-headings:tracking-tight prose-h2:mt-8 prose-h2:text-xl prose-h3:mt-6 prose-h3:text-lg prose-p:my-4 prose-p:leading-[1.85] prose-li:my-1.5 prose-code:rounded prose-code:bg-black/10 prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-[''] prose-code:after:content-[''] prose-blockquote:my-6 prose-blockquote:bg-chart-1/[0.06] prose-blockquote:rounded-xl prose-blockquote:border prose-blockquote:border-l prose-blockquote:border-chart-1/25 prose-blockquote:px-5 prose-blockquote:py-3.5 prose-blockquote:font-normal prose-blockquote:not-italic [&_blockquote_p]:!my-0 [&_blockquote_p+p]:!mt-2 [&_blockquote_p]:before:content-none [&_blockquote_p]:after:content-none [&_blockquote>p:first-child>strong:first-child]:mr-1 [&_blockquote>p:first-child>strong:first-child]:text-[0.78em] [&_blockquote>p:first-child>strong:first-child]:font-semibold [&_blockquote>p:first-child>strong:first-child]:uppercase [&_blockquote>p:first-child>strong:first-child]:tracking-[0.08em] [&_blockquote>p:first-child>strong:first-child]:text-chart-1";

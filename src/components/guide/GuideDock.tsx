@@ -10,10 +10,11 @@ import type { BotKind, BotMood } from "./GuideBot";
 import { GuideAvatar } from "./GuideAvatar";
 
 /*
-  Teach mode's controls: the tutor standing in the bottom-right corner with one
-  small pill under them — status, play/pause, mic, speed, which tutor is speaking,
-  close. What is being said shows in the speech bubble next to the pointer, not
-  here. The typed-question box opens by itself where there's no microphone.
+  Teach mode's controls: one small pill in the bottom-right corner — status,
+  play/pause, mic, speed, which tutor is speaking (its avatar; tap it for the
+  voice-and-look menu), close. What is being said shows in the speech bubble next
+  to the pointer, not here. The typed-question box opens by itself where there's
+  no microphone.
 */
 
 export type GuidePhase = "loading" | "speaking" | "paused" | "listening" | "thinking" | "answering" | "done" | "error";
@@ -30,19 +31,6 @@ function VoiceAvatar({ kind, mood, size, full, title }: { kind: BotKind; mood: B
   return <GuideAvatar avatar={avatar.id} kind={kind} mood={mood} size={size} full={full} title={title} />;
 }
 
-/** Below this the whiteboard lies across the bottom of the screen, so the tutor stands smaller
- *  (and index.css lifts the board) to leave the board's own buttons clear. */
-function useNarrow() {
-  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches);
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 900px)");
-    const onChange = () => setNarrow(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-  return narrow;
-}
-
 export interface GuideDockProps {
   phase: GuidePhase;
   question: string | null;
@@ -55,8 +43,12 @@ export interface GuideDockProps {
   voices: VoiceOption[];
   voiceId: string | null;
   onVoice: (id: string) => void;
-  /** True while a newly picked voice introduces itself, so the tutor's mouth moves. */
+  /** True while the tutor says a short line with the lesson standing still (a newly
+   *  picked voice introducing itself, a quiz hint), so its mouth moves. */
   greeting?: boolean;
+  /** What the lesson is busy with while it loads, when it isn't just getting ready
+   *  ("Updating the notes…"). */
+  busyLabel?: string | null;
   askOpen: boolean;
   onToggleAsk: () => void;
   onAsk: (text: string) => void;
@@ -66,6 +58,41 @@ export interface GuideDockProps {
   onPlayPause: () => void;
   onMic: () => void;
   onClose: () => void;
+}
+
+/**
+ * Who is teaching: their avatar and name on the glossy pill (.an-glossy), tinted with
+ * their colour by the --guide-accent the dock sets, the same look as the page's "Teach
+ * me". Opens the voice-and-look menu.
+ */
+function VoiceButton({
+  kind,
+  name,
+  talking,
+  open,
+  onClick,
+}: {
+  kind: BotKind;
+  name: string;
+  talking: boolean;
+  open: boolean;
+  onClick: () => void;
+}) {
+  const avatar = useAvatar(kind);
+  return (
+    <button
+      type="button"
+      className="guide-voicebtn an-glossy"
+      onClick={onClick}
+      title={`${name} is reading — change the voice or the look`}
+      aria-label="Voice and look"
+      aria-haspopup="menu"
+      aria-expanded={open}
+    >
+      <GuideAvatar avatar={avatar.id} kind={kind} size={20} mood={talking ? "talking" : "idle"} />
+      <span className="hidden sm:inline">{name}</span>
+    </button>
+  );
 }
 
 function IconButton({ title, onClick, children, active }: { title: string; onClick: () => void; children: ReactNode; active?: boolean }) {
@@ -86,12 +113,11 @@ function IconButton({ title, onClick, children, active }: { title: string; onCli
 }
 
 export function GuideDock(props: GuideDockProps) {
-  const { phase, question, interim, error, progress, rate, voices, voiceId, askOpen, sttMode, greeting } = props;
+  const { phase, question, interim, error, progress, rate, voices, voiceId, askOpen, sttMode, greeting, busyLabel } = props;
   const [draft, setDraft] = useState("");
   const [picking, setPicking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
-  const narrow = useNarrow();
 
   useEffect(() => {
     if (askOpen) inputRef.current?.focus();
@@ -124,7 +150,7 @@ export function GuideDock(props: GuideDockProps) {
   else if (phase === "answering") status = "Answering";
   else if (phase === "thinking") status = question ? `Thinking about “${question.length > 38 ? `${question.slice(0, 38)}…` : question}”` : "Thinking…";
   else if (phase === "listening") status = interim || "Listening…";
-  else if (phase === "loading") status = "Getting ready…";
+  else if (phase === "loading") status = busyLabel || "Getting ready…";
   else if (phase === "paused") status = "Paused";
   else if (phase === "done") status = "Finished";
   else status = "Something went wrong";
@@ -152,24 +178,9 @@ export function GuideDock(props: GuideDockProps) {
         }
       }}
     >
-      {speaker && (
-        <button
-          key={speaker.id}
-          type="button"
-          className="guide-bot-stage"
-          onClick={() => setPicking((p) => !p)}
-          aria-label={`${speaker.name} is reading. Change the voice or the look`}
-        >
-          <GuideAvatar
-            avatar={avatar.id}
-            kind={speakerKind}
-            mood={mood}
-            size={avatar.id === "pixel" ? (narrow ? 50 : 74) : narrow ? 48 : 64}
-            full
-            title={`${speaker.name} — tap to change the voice or the look`}
-          />
-        </button>
-      )}
+      {/* No tutor standing above the controls any more (the user found it a floating
+          distraction): the avatar rides on the pointer and on the voice button in the
+          pill below, which opens this same voice-and-look menu. */}
       {picking && speaker && (
         <div className="guide-voicemenu pointer-events-auto" role="menu" aria-label="Voice and look">
           {voices.length > 1 && <div className="guide-voicemenu-label">Voice</div>}
@@ -313,20 +324,15 @@ export function GuideDock(props: GuideDockProps) {
         </button>
         {/* Who is teaching, by name, next to the mic they're heard through. */}
         {speaker && (
-          <button
-            type="button"
-            className="guide-voicebtn"
+          <VoiceButton
+            kind={speakerKind}
+            name={speaker.name}
+            talking={mood === "talking"}
+            open={picking}
             onClick={() => setPicking((p) => !p)}
-            title={`${speaker.name} is reading — change the voice or the look`}
-            aria-label="Voice and look"
-            aria-haspopup="menu"
-            aria-expanded={picking}
-          >
-            <GuideAvatar avatar={avatar.id} kind={speakerKind} size={20} mood={mood === "talking" ? "talking" : "idle"} />
-            <span className="hidden sm:inline">{speaker.name}</span>
-          </button>
+          />
         )}
-        <IconButton title="Close Teach mode (Esc)" onClick={props.onClose}>
+        <IconButton title="Stop the lesson (Esc)" onClick={props.onClose}>
           <X className="size-4" />
         </IconButton>
       </div>

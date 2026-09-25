@@ -154,7 +154,7 @@ export function ExamPlanDialog({
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Each sitting gets its own job — learn it, quiz yourself on it, then the flashcards.
+              Each sitting gets its own job — learn it, take its quiz, then its flashcards. Each one opens straight from today's plan.
             </p>
           </div>
 

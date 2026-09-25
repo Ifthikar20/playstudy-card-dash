@@ -11,12 +11,15 @@ import { cn } from "@/lib/utils";
  * Answers & notes — deliberately not "Transcripts".
  *
  * What the data supports is which questions were answered and, for the ones
- * that went wrong, the question, the right answer and the explanation. What
- * it does not support is which option the child picked (AnswerEvent stores
- * only a correct/incorrect boolean) or anything they asked the AI (those
- * conversations are never persisted). Naming the tab honestly beats promising
- * a transcript that does not exist.
+ * that went wrong, the question, the right answer, the explanation and (for
+ * answers logged since it was kept) what the child picked or typed. What it
+ * does not support is anything they asked the AI (those conversations are
+ * never persisted). Naming the tab honestly beats promising a transcript that
+ * does not exist.
  */
+
+/** "Pages 3–5" / "Page 3", for a question asked on a PDF. */
+const pagesLabel = (r: { first: number; last: number }) => (r.first === r.last ? `Page ${r.first}` : `Pages ${r.first}–${r.last}`);
 export function AnswerTimeline({ childId }: { childId: string }) {
   const [onlyWrong, setOnlyWrong] = useState(true);
   const { data, isLoading, error } = useQuery({
@@ -66,41 +69,51 @@ export function AnswerTimeline({ childId }: { childId: string }) {
         />
       ) : (
         <ul className="space-y-3">
-          {answers.map((a) => (
-            <li key={a.id} className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex items-start gap-3">
-                <span
-                  className={cn(
-                    "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
-                    a.correct ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
-                  )}
-                >
-                  {a.correct ? <Check className="size-3" /> : <X className="size-3" />}
-                </span>
+          {answers.map((a) => {
+            // In words for every kind; single choice from older servers only has the index.
+            const answer = a.answerText ?? (a.options && a.correctAnswer !== null ? a.options[a.correctAnswer] : null);
+            return (
+              <li key={a.id} className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex items-start gap-3">
+                  <span
+                    className={cn(
+                      "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
+                      a.correct ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
+                    )}
+                  >
+                    {a.correct ? <Check className="size-3" /> : <X className="size-3" />}
+                  </span>
 
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium leading-snug">
-                    {a.questionText ?? <span className="text-muted-foreground">Question no longer available</span>}
-                  </p>
-
-                  {!a.correct && a.options && a.correctAnswer !== null && (
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      Answer: <span className="font-medium text-foreground">{a.options[a.correctAnswer]}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium leading-snug">
+                      {a.questionText ?? <span className="text-muted-foreground">Question no longer available</span>}
                     </p>
-                  )}
-                  {!a.correct && a.explanation && (
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{a.explanation}</p>
-                  )}
 
-                  <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.7rem] text-muted-foreground">
-                    {a.topicTitle && <span>{a.topicTitle}</span>}
-                    {a.sessionTitle && <span>· {a.sessionTitle}</span>}
-                    <span>· {format(new Date(a.at), "d MMM, HH:mm")}</span>
-                  </p>
+                    {!a.correct && a.pickedText && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        They answered: <span className="text-foreground">{a.pickedText}</span>
+                      </p>
+                    )}
+                    {!a.correct && answer && (
+                      <p className={cn("text-xs text-muted-foreground", a.pickedText ? "mt-0.5" : "mt-1.5")}>
+                        Answer: <span className="font-medium text-foreground">{answer}</span>
+                      </p>
+                    )}
+                    {!a.correct && a.explanation && (
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{a.explanation}</p>
+                    )}
+
+                    <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.7rem] text-muted-foreground">
+                      {a.topicTitle && <span>{a.topicTitle}</span>}
+                      {a.pageRange && <span>{a.topicTitle ? "· " : ""}{pagesLabel(a.pageRange)}</span>}
+                      {a.sessionTitle && <span>· {a.sessionTitle}</span>}
+                      <span>· {format(new Date(a.at), "d MMM, HH:mm")}</span>
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 

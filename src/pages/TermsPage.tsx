@@ -106,7 +106,7 @@ const SECTIONS: Section[] = [
         </p>
         <p>
           AnotherNotes is a study tool. You add material, such as PDFs, slides, notes, pasted text or a YouTube link, and
-          it creates written notes for each section, quizzes, flashcards and Teach mode, where a synthetic voice reads a
+          it creates written notes for each section, quizzes, flashcards and Teach me lessons, where a synthetic voice reads a
           section aloud and answers your questions. You can also write your own notes and sticky notes, organise sessions
           into folders, use a calendar and track your progress with XP and streaks.
         </p>
@@ -352,7 +352,7 @@ const SECTIONS: Section[] = [
         <H3>Voice features</H3>
         <List>
           <li>
-            In Teach mode, a synthetic (computer-generated) voice reads a section aloud and points to the line it's on.
+            In a Teach me lesson, a synthetic (computer-generated) voice reads a section aloud and points to the line it's on.
             It isn't a real person and may mispronounce words, so rely on the written notes.
           </li>
           <li>
@@ -431,8 +431,8 @@ const SECTIONS: Section[] = [
         <H3>Linked content and other websites</H3>
         <p>
           Content you link to, such as a YouTube video, belongs to its owners and is governed by the platform's own
-          terms. We can't promise we'll be able to use it: it may be private, removed or otherwise unavailable. Teach
-          mode may also show pictures from other websites to illustrate a lesson, and AnotherNotes may link to other
+          terms. We can't promise we'll be able to use it: it may be private, removed or otherwise unavailable. A Teach
+          me lesson may also show pictures from other websites to illustrate a point, and AnotherNotes may link to other
           sites. We don't control or endorse third-party content, and we aren't responsible for it.
         </p>
         <H3>Service providers, browsers and devices</H3>

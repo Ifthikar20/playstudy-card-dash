@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/appStore";
 import { saveExamPlan, setPlanDayDone } from "@/services/examPlans";
 import {
   SITTING_LABEL,
+  SITTING_TOOL,
   dayFor,
   dayNumber,
   daysBehind,
@@ -16,6 +17,7 @@ import {
   studyDays,
   todayIso,
   type PlanSitting,
+  type SittingMode,
 } from "@/lib/examPlan";
 import { ExamPlanDialog } from "./ExamPlanDialog";
 
@@ -36,7 +38,9 @@ export function ExamPlanStrip({
   sessionTitle?: string;
   /** Every section of this session, so a plan's topic ids can be named. */
   sections: { dbId?: number; title: string }[];
-  onOpenSection?: (dbId: number) => void;
+  /** A sitting's chip was clicked: go to its first section, and open the tool the
+   *  sitting is for (SITTING_TOOL) — its quiz or its flashcards. */
+  onOpenSection?: (dbId: number, mode: SittingMode) => void;
 }) {
   const plan = useAppStore((s) => s.examPlans[sessionId]) ?? null;
   const setExamPlan = useAppStore((s) => s.setExamPlan);
@@ -167,7 +171,16 @@ export function ExamPlanStrip({
                 <button
                   type="button"
                   disabled={!onOpenSection || !sitting.topics.length}
-                  onClick={() => sitting.topics[0] != null && onOpenSection?.(sitting.topics[0])}
+                  onClick={() => sitting.topics[0] != null && onOpenSection?.(sitting.topics[0], sitting.mode)}
+                  title={
+                    !onOpenSection || !sitting.topics.length
+                      ? undefined
+                      : SITTING_TOOL[sitting.mode] === "quiz"
+                        ? `Take the quiz on ${name(sitting.topics[0])}`
+                        : SITTING_TOOL[sitting.mode] === "flashcards"
+                          ? `Open the flashcards for ${name(sitting.topics[0])}`
+                          : `Go to ${name(sitting.topics[0])}`
+                  }
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs transition-colors",
                     day.done ? "border-border text-muted-foreground line-through" : "border-border hover:border-primary hover:text-primary",

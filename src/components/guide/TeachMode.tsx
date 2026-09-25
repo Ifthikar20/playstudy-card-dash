@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useAppStore } from "@/store/appStore";
@@ -65,11 +65,13 @@ import {
   writeStored,
   type VoiceOption,
 } from "@/lib/guide/voice";
-import { GuideBoard, type BoardHandle } from "./GuideBoard";
+import { GuideBoard, type BoardHandle, type BoardPanel } from "./GuideBoard";
+import type { StudyPanel } from "@/components/study/sections";
 import { prefetchGuideImage } from "./GuideImage";
+import { canShowPicture, isPictureBlocked, onBlockedChange } from "@/lib/guide/blocked";
 import { trackAction } from "@/lib/analytics";
 import { matchesVoiceKey, voiceKeyLabel } from "@/lib/voiceKey";
-import { useTalkKey } from "@/lib/useTalkKey";
+import { keyForStudyTool, useTalkKey } from "@/lib/useTalkKey";
 import { visualToMarkdown } from "./GuideVisual";
 import {
   BOARD_IMAGE,
@@ -90,26 +92,61 @@ import {
 /*
   Teach mode — AnotherNotes AI takes the wheel and teaches you your own notes.
 
-  Open it from the "Teach mode" button. For the section you're looking at it
+  Open it from the "Teach me" button (students never see the name "Teach mode"). For the section you're looking at it
   asks the backend for a spoken, step-by-step script (streamed, so it starts
   talking within a second or two). For every step it scrolls the page at a
   human pace, flies the pink pointer to the block being discussed, underlines
   the quoted words and reads the explanation aloud. Scripts occasionally go back
-  to an earlier block to connect ideas, then carry on. When a section is done it
-  points at that section's quiz and pauses so you can take it; press play to
-  move on. Tap the mic (or type) to ask anything: the answer streams back, is
-  spoken as it arrives while the pointer jumps to the relevant part, and then
-  the walkthrough resumes. Click any paragraph to continue from there; scroll
-  yourself and Teach mode yields, then picks the page back up on the next step.
+  to an earlier block to connect ideas, then carry on. Tap the mic (or type) to
+  ask anything: the answer streams back, is spoken as it arrives while the
+  pointer jumps to the relevant part, and then the walkthrough resumes. Click any
+  paragraph to continue from there; scroll yourself and Teach mode yields, then
+  picks the page back up on the next step.
+
+  When a section is done, its quiz comes up on the board: "Quiz time", with Start
+  quiz and Skip for now. The pointer lands on Start quiz, the voice invites it and
+  the lesson pauses. The quiz runs right there on the board (the page draws it,
+  through `renderPanel`), and its Continue, Skip or play carries on with "Next up".
+  A section whose quiz is already done only says so, with Retry, and moves on.
+  With the board off or closed, the lesson points at the page's Quiz button at the
+  top when it's on screen, or else says where it is (it never scrolls the page back
+  up to it: the student would lose their place), and waits. The board's footer also
+  opens the section's flashcards whenever they're wanted; the lesson pauses for them
+  and picks up again when they're closed. While a quiz or cards are up, the keys are
+  theirs (Space, the arrows, Esc, the digits and the talk key), a hint the quiz gives
+  is said by the tutor too, a click in the notes doesn't take a quiz half done away,
+  and a question asked then is answered over the notes, leaving the board as it is.
+  One of the page's own study dialogs opening (its Quiz or Flashcards, an exam plan's,
+  the wrong questions) stops the lesson until play is pressed.
+
+  The mic can change the notes too: "make this simpler", "add an example". The tutor
+  says it will, the section is rewritten through the page (`reviseNotes`, the same
+  revise and structure guard as everywhere else), and the lesson starts that section
+  again from the new notes. A change the guard refuses is explained, and the lesson
+  stays where it was.
 
   (Internally the modules are still called "guide".)
 */
 
-/** Just enough of a topic to find its notes in the store's tree. */
+/** Just enough of a topic to find its notes (and whether its quiz is done) in the store's tree. */
 interface NotedTopic {
   id: string;
   notes?: string | null;
+  completed?: boolean;
   subtopics?: NotedTopic[];
+}
+
+/** The section's topic as the store has it now, found anywhere in the tree. */
+function storeTopic(topicId: string): NotedTopic | null {
+  const find = (list: NotedTopic[]): NotedTopic | null => {
+    for (const t of list) {
+      if (t.id === topicId) return t;
+      const hit = t.subtopics ? find(t.subtopics) : null;
+      if (hit) return hit;
+    }
+    return null;
+  };
+  return find(useAppStore.getState().currentSession?.extractedTopics ?? []);
 }
 
 export interface TeachSection {
@@ -117,6 +154,9 @@ export interface TeachSection {
   dbId: number;
   title: string;
   index: number;
+  /** It has a quiz and flashcards (not a PDF page, nor a note too short to quiz): the
+   *  board offers them, and the section ends with its quiz. */
+  studyTools?: boolean;
 }
 
 /**
@@ -145,8 +185,31 @@ const NOTE_ADDED_LINES = [
   "You'll find it here whenever you come back.",
 ];
 let noteAddedCount = 0;
-const QUIZ_ATTR = "data-guide-quiz";
-const QUIZ_BUTTON_ATTR = "data-guide-quiz-button";
+/** The page's own Quiz button at the top (the whole session's quiz): where the lesson
+ *  sends the student at the end of a section when the board is off. */
+const QUIZ_TOP_ATTR = "data-guide-quiz-top";
+/** Start quiz (or Carry on, for a quiz already done) in the board's invitation. */
+const QUIZ_START_ATTR = "data-guide-quiz-start";
+/** What the voice says as the board invites the quiz. */
+const QUIZ_INVITE_LINE = "That's the end of this section. Try the quiz on the board, or press play to carry on.";
+/** Said at a section's end with the board off, when the page's Quiz button is off screen. */
+const QUIZ_TOP_LINE = "That's the end of this section. Press Quiz at the top of the page whenever you're ready, or press play to carry on.";
+const QUIZ_TOP_LAST_LINE = "That's the end of this section. Press Quiz at the top of the page whenever you're ready.";
+/** The page's study dialogs (its Quiz and Flashcards, an exam plan's, the wrong questions). */
+const STUDY_DIALOG = "[data-study-dialog]";
+/** Said when another change is asked for while the last one is still being made. Short:
+ *  that change's "Done" cuts it off the moment it lands (see changeNotes). */
+const STILL_CHANGING_LINE = "Still on your last change — ask again once it's done.";
+
+/** What the page's `reviseNotes` answers: the notes changed, or why they didn't. */
+export type ReviseNotesResult = { ok: true } | { ok: false; refused: boolean; message: string };
+
+/** A message's first sentence, for saying why a change was refused. */
+function firstSentence(message: string): string {
+  const t = message.replace(/\s+/g, " ").trim();
+  const one = (/^.*?[.!?](?=\s|$)/.exec(t)?.[0] ?? t).slice(0, 180).trim();
+  return one && !/[.!?]$/.test(one) ? `${one}.` : one;
+}
 
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 const blockNum = (id: string | null) => (id ? Number(id.slice(1)) : -1);
@@ -190,6 +253,8 @@ export function TeachMode({
   boardEnabled = true,
   onBoardClose,
   source = "notes",
+  renderPanel,
+  reviseNotes,
 }: {
   sessionId: string;
   sections: TeachSection[];
@@ -198,6 +263,15 @@ export function TeachMode({
   boardEnabled?: boolean;
   onBoardClose?: () => void;
   source?: TeachSource;
+  /** Draws a section's quiz or flashcards on the board. The page does the drawing: the
+   *  quiz belongs to the study store and its wrong-questions list. Without it, the
+   *  section's end sends the student to the page's Quiz button instead. */
+  renderPanel?: (panel: StudyPanel) => ReactNode;
+  /** Rewrites a section's notes as the student asked by voice (`topicId` is
+   *  TeachSection.topicId) and puts them in the store, so the page shows them.
+   *  `refused`: the structure guard said no (HTTP 422), and `message` says why. Without
+   *  it, the tutor says it can't change the notes here. */
+  reviseNotes?: (topicId: string, instruction: string) => Promise<ReviseNotesResult>;
 }) {
   const pdf = source === "pdf";
   const { toast } = useToast();
@@ -208,6 +282,9 @@ export function TeachMode({
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ step: 0, count: 0, title: "" });
   const [askOpen, setAskOpen] = useState(false);
+  // The section being taught, as state as well as secRef (the loop's): the board's
+  // Flashcards button is for this one, so it has to follow along.
+  const [secNow, setSecNow] = useState(0);
   const [rate, setRateState] = useState<number>(() => {
     const r = readStored<number>(RATE_KEY, 1);
     return RATES.includes(r) ? r : 1;
@@ -215,7 +292,11 @@ export function TeachMode({
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [serverVoices, setServerVoices] = useState<GuideVoice[]>([]);
   const [voicesReady, setVoicesReady] = useState(false);
-  const [greeting, setGreeting] = useState(false); // a newly picked tutor saying hello
+  // A short line said with the lesson standing still (a newly picked tutor saying hello,
+  // a quiz hint): the tutor's mouth moves, and nothing carries on after it.
+  const [aside, setAside] = useState(false);
+  // The notes are being rewritten as the student asked (see changeNotes).
+  const [revisingNow, setRevisingNow] = useState(false);
   const [voiceId, setVoiceIdState] = useState<string | null>(() => readVoicePref()?.id ?? null);
   const sttMode = useMemo(() => sttSupport(), []);
   // The student's own talk key (onboarding / Settings) opens the mic, and sends. The
@@ -227,6 +308,14 @@ export function TeachMode({
   // Mutable state for the async flows — refs, so callbacks never go stale.
   const sectionsRef = useRef(sections);
   sectionsRef.current = sections;
+  const renderPanelRef = useRef(renderPanel);
+  renderPanelRef.current = renderPanel;
+  const reviseNotesRef = useRef(reviseNotes);
+  reviseNotesRef.current = reviseNotes;
+  const boardEnabledRef = useRef(boardEnabled);
+  boardEnabledRef.current = boardEnabled;
+  // The lesson was running when the student opened their flashcards: closing them picks it back up.
+  const resumeAfterPanel = useRef(false);
   const voiceKeyRef = useRef(voiceKey);
   voiceKeyRef.current = voiceKey;
   const phaseRef = useRef(phase);
@@ -234,9 +323,20 @@ export function TeachMode({
   const rateRef = useRef(rate);
   rateRef.current = rate;
   const runRef = useRef(0); // bumping this cancels whatever loop is running
+  // The run the walkthrough itself (play) last started: while it's still runRef's, the
+  // lesson is teaching, not answering a question or saying something aside.
+  const lessonRun = useRef(0);
   const secRef = useRef(0);
+  const enterSection = (i: number) => {
+    secRef.current = i;
+    setSecNow(i);
+  };
   const stepRef = useRef(0);
   const scripts = useRef(new Map<number, ScriptEntry>());
+  // The section whose notes were just changed by voice, until its new lesson starts. Its
+  // old script is gone (see forgetScript), and Next would read a missing script as a
+  // section with nothing left in it and skip to the next one.
+  const startOver = useRef<number | null>(null);
   const narrator = useRef<Narrator | null>(null);
   const pointer = useRef<PointerHandle | null>(null);
   const board = useRef<BoardHandle | null>(null);
@@ -257,9 +357,21 @@ export function TeachMode({
 
   const notesRoot = (sec: TeachSection) =>
     hostRef.current?.querySelector<HTMLElement>(`[${BLOCKS_ROOT_ATTR}="${sec.dbId}"]`) ?? null;
-  const quizTarget = (sec: TeachSection): HTMLElement | null => {
-    const card = hostRef.current?.querySelector<HTMLElement>(`[${QUIZ_ATTR}="${sec.dbId}"]`) ?? null;
-    return card?.querySelector<HTMLElement>(`[${QUIZ_BUTTON_ATTR}]`) ?? card;
+  /** The page's Quiz button at the top, for when the board is off (null if it has none). */
+  const quizButton = (): HTMLElement | null => document.querySelector<HTMLElement>(`[${QUIZ_TOP_ATTR}]`);
+  /**
+   * That button, but only while it's on screen and not covered (by the board, say). The
+   * lesson never scrolls the page back up to it: at the end of a section the student is
+   * far down the notes and would lose their place. The header isn't sticky, so this is
+   * usually null there; were it made sticky, the button would be on screen and pointed at.
+   */
+  const quizButtonOnScreen = (): HTMLElement | null => {
+    const el = quizButton();
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || r.top < 0 || r.left < 0 || r.bottom > window.innerHeight || r.right > window.innerWidth) return null;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !hit || el.contains(hit) ? el : null;
   };
   const cancelled = (run: number) => run !== runRef.current;
   const wake = (e: ScriptEntry) => e.waiters.splice(0).forEach((fn) => fn());
@@ -295,7 +407,9 @@ export function TeachMode({
       .catch((err: unknown) => {
         entry.error = err instanceof Error ? err.message : "AnotherNotes AI couldn't prepare this section.";
         entry.done = true;
-        scripts.current.delete(sec.dbId); // so pressing play tries again
+        // So pressing play tries again - unless the notes have changed since and a new
+        // lesson has already been asked for (see forgetScript): that one stays.
+        if (scripts.current.get(sec.dbId) === entry) scripts.current.delete(sec.dbId);
         wake(entry);
       });
     return entry;
@@ -340,11 +454,15 @@ export function TeachMode({
   // for a hook that's only set once the step is already being spoken.
   const captionHook = useRef<((sentence: string) => void) | null>(null);
   const lastCaption = useRef<string | null>(null);
+  // The picture the pointer is on (its picture_id), so a picture taken away while it's
+  // being explained can send the pointer back to the notes.
+  const pictureOnBoard = useRef<string | null>(null);
   const releaseBoard = () => {
     boardSeq.current++;
     boardAnchor.current?.();
     boardAnchor.current = null;
     captionHook.current = null;
+    pictureOnBoard.current = null;
   };
 
   /**
@@ -377,10 +495,21 @@ export function TeachMode({
     cancelAutoScroll();
     p.clearUnderline();
     const seq = boardSeq.current;
-    const live = () => !cancelled(run) && boardSeq.current === seq && el.isConnected;
+    // Still what the pointer is doing on the board: nothing else has taken it since.
+    // Pressing the mic or asking a question ends the run without taking the pointer
+    // away, so while that happens the pointer keeps following the part (stillOnBoard);
+    // only new moves - a part being named, a late region - need the run itself (live).
+    const stillOnBoard = () => boardSeq.current === seq && el.isConnected;
+    const live = () => !cancelled(run) && stillOnBoard();
     const img = el.querySelector<HTMLImageElement>(BOARD_IMAGE);
     const whole: HTMLElement = img ?? el;
-    const wanted = (points ?? []).filter((pt) => pt && typeof pt.label === "string" && pt.label.trim()).slice(0, 3);
+    // The picture's signed id: its parts are looked up by it, and a report of it sends
+    // the pointer away (see the blocked-pictures effect below) - from a card over the
+    // picture too, which goes with it.
+    const pictureId = img ? talk.image?.picture_id || img.dataset.pictureId || "" : "";
+    const under = el.classList.contains("guide-board-overlay") ? el.parentElement?.querySelector<HTMLImageElement>(BOARD_IMAGE) : null;
+    pictureOnBoard.current = pictureId || under?.dataset.pictureId || null;
+    const wanted = (Array.isArray(points) ? points : []).filter((pt) => pt && typeof pt.label === "string" && pt.label.trim()).slice(0, 3);
     // A list's highlighted item is the part being explained, even when the step names none.
     const focusEl = wanted.length ? null : el.querySelector<HTMLElement>("[data-board-focus]");
     const count = wanted.length || (focusEl ? 1 : 0);
@@ -434,13 +563,12 @@ export function TeachMode({
     // as long as this step is being explained.
     let late: Promise<Record<string, GuideRegion>> | null = null;
     if (img && wanted.length) {
-      // The address exactly as the server issued it (the locator only works on those,
-      // and it's what the prefetch asked with), not the browser's normalised img.src.
-      const url = talk.image?.url || img.getAttribute("src") || img.currentSrc;
+      // By the picture's signed id, as the prefetch asked: the server only keeps parts
+      // for pictures it approved, stored by the file's sha.
       const lookup = fetchImageParts(
-        url,
+        pictureId,
         wanted.map((w) => w.label),
-        imagePartsContext({ image: talk.image ?? null, say: talk.say ?? "" }),
+        imagePartsContext({ say: talk.say ?? "" }),
       );
       let got = await Promise.race([lookup, sleep(150).then(() => null)]);
       if (!live()) return;
@@ -487,12 +615,19 @@ export function TeachMode({
       }
     };
     // The voice may already be a sentence or two in (the picture took a moment): start
-    // on the part it has reached, not the first.
+    // on the part it has reached, not the first, and still move to the parts named
+    // later in the sentence it's saying now - its caption has gone by, so onSentence
+    // won't see it. (lastCaption is cleared at every step, so it's this step's.)
     if (plan.length && lastCaption.current) {
-      const idx = sentences.indexOf(lastCaption.current);
-      if (idx > 0) {
+      const now = lastCaption.current;
+      const idx = sentences.indexOf(now);
+      if (idx >= 0) {
         heard = idx;
         for (const e of plan) if (e.sentence < idx || (e.sentence === idx && e.at < 0.12)) want = e.point;
+        for (const e of plan) {
+          if (e.sentence !== idx || e.at < 0.12) continue;
+          timers.push(window.setTimeout(() => moveOn(e.point), e.at * lineMs(now, rateRef.current)));
+        }
       }
     }
     go(want, "arrive");
@@ -507,11 +642,13 @@ export function TeachMode({
 
     // Stay on the part while things move. One re-aim per frame at most, and only when
     // the target really moved - re-sending the same spot would cut a gesture short.
+    // Following needs only the pointer to still be here (stillOnBoard), not the run:
+    // while the student talks or waits for an answer, it stays on the part.
     let raf = 0;
     const reaim = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        if (!live()) return;
+        if (!stillOnBoard()) return;
         const aim = aimFor(want);
         if (!aim || (sentTo && near(sentTo, aim.tip))) return;
         go(want, "follow");
@@ -521,6 +658,10 @@ export function TeachMode({
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(reaim) : null;
     if (boardEl) ro?.observe(boardEl);
     if (img) ro?.observe(img);
+    // Dragging the board (or its own pull back on screen) moves it without resizing it:
+    // no scroll, resize or animation event, only its style changes. Watch for that.
+    const mo = typeof MutationObserver !== "undefined" ? new MutationObserver(reaim) : null;
+    if (boardEl) mo?.observe(boardEl, { attributes: true, attributeFilter: ["style", "class"] });
     window.addEventListener("scroll", reaim, { capture: true, passive: true });
     window.addEventListener("resize", reaim, { passive: true });
     boardEl?.addEventListener("animationend", reaim);
@@ -531,6 +672,7 @@ export function TeachMode({
       boardEl?.removeEventListener("animationend", reaim);
       boardEl?.removeEventListener("transitionend", reaim);
       ro?.disconnect();
+      mo?.disconnect();
       cancelAnimationFrame(raf);
       timers.forEach((t) => window.clearTimeout(t));
     };
@@ -552,12 +694,14 @@ export function TeachMode({
   /**
    * The board element showing `spec` once it's really there and still: after the
    * previous visual has been wiped off, for a picture once it has loaded, and once it
-   * has stopped animating. Null when the board is off or minimized, when no picture
-   * was found, or when it doesn't come in time.
+   * has stopped animating. Null when the board is off or minimized, when the picture
+   * can't be shown (the server no longer vouches for it, or it was reported), or when
+   * it doesn't come in time.
    */
   const boardTarget = async (spec: VisualSpec, run: number): Promise<HTMLElement | null> => {
     const limit = Date.now() + (spec.kind === "image" ? 6000 : 1500);
     while (!cancelled(run) && board.current?.visible()) {
+      if (spec.kind === "image" && !canShowPicture(spec.data)) return null; // taken away while it loaded
       const el = board.current.showing(spec);
       if (el) {
         const img = spec.kind === "image" ? el.querySelector<HTMLImageElement>(BOARD_IMAGE) : null;
@@ -565,7 +709,7 @@ export function TeachMode({
           await settled(el);
           return !cancelled(run) && el.isConnected ? el : null;
         }
-        if (!img && !el.querySelector(".guide-image-spinner")) return null; // no picture found
+        if (!img && !el.querySelector(".guide-image-spinner")) return null; // no picture to show
       }
       if (Date.now() > limit) return null;
       await sleep(120);
@@ -584,6 +728,102 @@ export function TeachMode({
     const around = hostRect(r);
     p.focus(around, color);
     p.moveTo(hostPoint(r.left + Math.min(r.width * 0.5, 60), r.top + r.height * 0.55), { gesture, around });
+  };
+
+  /**
+   * Press a button that's already on screen: Start quiz in the board's panel, or the
+   * page's Quiz button at the top. Ringed tightly, over the board. Unlike pointToElement
+   * it never scrolls the page (the board is fixed to the screen, and the page's button is
+   * only pointed at when it's in view), and it stays on the button while the page scrolls
+   * or the window resizes, until the pointer is sent anywhere else.
+   */
+  const pointToButton = (el: HTMLElement) => {
+    const p = pointer.current;
+    const host = hostRef.current;
+    if (!p || !host) return;
+    releaseBoard();
+    cancelAutoScroll();
+    p.clearUnderline();
+    const seq = boardSeq.current;
+    const boardBox = () => el.closest<HTMLElement>(".guide-board")?.getBoundingClientRect() ?? null;
+    let sentTo: Pt | null = null;
+    const go = (gesture: Gesture, duration?: number) => {
+      const spot = spotOf(el);
+      if (spot) sentTo = pointAtPart(p, host, spot, { gesture, duration, board: boardBox() });
+    };
+    go("press");
+    let raf = 0;
+    const reaim = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (boardSeq.current !== seq || !el.isConnected) return;
+        const spot = spotOf(el);
+        if (!spot || (sentTo && near(sentTo, hostPt(host, aimPoint(spot.box, spot.at, spot.exact))))) return;
+        go("none", 240);
+      });
+    };
+    window.addEventListener("scroll", reaim, { capture: true, passive: true });
+    window.addEventListener("resize", reaim, { passive: true });
+    boardAnchor.current = () => {
+      window.removeEventListener("scroll", reaim, { capture: true });
+      window.removeEventListener("resize", reaim);
+      cancelAnimationFrame(raf);
+    };
+  };
+
+  /**
+   * With the board off (or closed), the end of a section sends the student to the page's
+   * Quiz button: pointed at when it's on screen, otherwise only said where it is - the
+   * page isn't scrolled up to it, and the pointer stays on the notes. What to say, and
+   * the caption to wait on; null when the page has no Quiz button.
+   */
+  const toQuizButton = (last: boolean): { line: string; caption: string } | null => {
+    const top = quizButtonOnScreen();
+    if (top) {
+      pointToButton(top);
+      return {
+        line: `That's the end of this section. When you're ready, try the quiz, it's the Quiz button just here.${last ? "" : " Press play when you want me to carry on."}`,
+        caption: last ? "Take the quiz when you're ready. That was the last section." : "Take the quiz, or press play to carry on.",
+      };
+    }
+    if (!quizButton()) return null;
+    return {
+      line: last ? QUIZ_TOP_LAST_LINE : QUIZ_TOP_LINE,
+      caption: last
+        ? "Press Quiz at the top of the page whenever you're ready. That was the last section."
+        : "Press Quiz at the top of the page whenever you're ready, or press play to carry on.",
+    };
+  };
+
+  /** Once the board's quiz invitation is on screen and still, the pointer presses its Start quiz. */
+  const pointToQuizStart = async (run: number) => {
+    const limit = Date.now() + 2500;
+    while (!cancelled(run)) {
+      const panelEl = board.current?.panelEl();
+      const start = panelEl?.querySelector<HTMLElement>(`[${QUIZ_START_ATTR}]`);
+      if (panelEl && start) {
+        await settled(panelEl); // the board sliding in, the panel fading up
+        if (!cancelled(run) && start.isConnected) pointToButton(start);
+        return;
+      }
+      if (Date.now() > limit) return;
+      await sleep(80);
+    }
+  };
+
+  /** The pointer steps off the board, beside its bottom-left corner, out of the way of a quiz being taken. */
+  const stepAside = () => {
+    releaseBoard();
+    pointer.current?.focus(null);
+    // once the board has drawn the panel: it may only just be opening
+    window.setTimeout(() => {
+      const p = pointer.current;
+      const host = hostRef.current;
+      const boardEl = board.current?.panelEl()?.closest<HTMLElement>(".guide-board");
+      if (!p || !host || !boardEl || !board.current?.panel()) return;
+      const r = boardEl.getBoundingClientRect();
+      p.moveTo(hostPt(host, restSpot(r)), { gesture: "none", precise: true, keepClear: [hostRect(r)] });
+    }, 80);
   };
 
   /** Scroll to, fly the pointer to, and underline `quote` inside a block. */
@@ -670,11 +910,16 @@ export function TeachMode({
   // ---- the walkthrough loop -------------------------------------------------------
   const play = async (fromSection: number, fromStep: number) => {
     const run = ++runRef.current;
+    lessonRun.current = run;
     const n = narrator.current;
     if (!n) return;
     n.cancel();
     askAbort.current?.abort();
-    secRef.current = Math.max(0, fromSection);
+    // Playing takes the board back: a quiz or cards still up there (Skip, play, the
+    // arrows, a paragraph clicked) close, and the board shows the lesson's visual again.
+    board.current?.closePanel();
+    resumeAfterPanel.current = false;
+    enterSection(Math.max(0, fromSection));
     stepRef.current = Math.max(0, fromStep);
     setError(null);
     setQuestion(null);
@@ -714,7 +959,8 @@ export function TeachMode({
         announceNext = true;
         continue;
       }
-      secRef.current = s;
+      enterSection(s);
+      if (startOver.current === sec.dbId) startOver.current = null; // its new lesson has begun
       if (startStep === 0) board.current?.hide();
       if (announceNext) {
         setPhase("speaking");
@@ -733,10 +979,16 @@ export function TeachMode({
         spoke = true;
         setPhase("speaking");
         setProgress({ step: k + 1, count: entry.done ? entry.steps.length : 0, title: sec.title });
+        // The last sentence heard belongs to the step before: if this step happens to say
+        // it too, the board's catch-up (pointToBoard) would think the voice is already there.
+        lastCaption.current = null;
         const b = board.current;
         const visual = visualOf(step);
         let hasVisual = !!visual;
-        const points = step.point ?? [];
+        // A step whose picture can't be shown (not an approved /img/ file, or taken away
+        // since - carried forward from an earlier step, say) has no visual: the parts it
+        // names were the picture's, so it follows the notes instead.
+        const points = !visual && step.image ? [] : Array.isArray(step.point) ? step.point : [];
         // The parts of this step's picture are looked up while the picture itself loads.
         prefetchImageParts(step);
         // Take the pointer to the board's visual once it's really up (a picture once it
@@ -745,12 +997,15 @@ export function TeachMode({
         const pointAtBoard = async (first: boolean) => {
           const el = visual ? await boardTarget(visual, run) : null;
           if (cancelled(run)) return;
-          if (el) await pointToBoard(el, first, points, run, { say: step.say, image: step.image });
+          if (el) await pointToBoard(el, first, points, run, { say: step.say, image: visual?.kind === "image" ? visual.data : null });
           else pointAt(sec, step.block, step.quote, speakMs(step.say, rateRef.current));
         };
         const onBoard = !visual && points.length && b?.visible() ? b.live() : null;
         if (visual && b) {
-          const fresh = b.draw(visual);
+          // A list, facts, a table or a formula after a picture goes on a card over it -
+          // but only while a real picture is up on the board right now (loaded, not
+          // reported), whatever the script assumed. The board ignores `over` for anything else.
+          const fresh = b.draw(visual, { over: !!b.picture() });
           if (visual.kind === "list" && (!fresh || visual.data.auto) && !points.length) {
             // The list is already up and only its highlight moved on - or it's the
             // notes' own bullets, which the voice reads without announcing - so the
@@ -792,23 +1047,51 @@ export function TeachMode({
         setError(entry.error);
         return;
       }
-      // Section finished: hand over to its quiz and wait there.
-      const quiz = played > 0 ? quizTarget(sec) : null;
-      if (quiz) {
+      // Section finished: its quiz. On the board, an invitation the lesson waits at (one
+      // already done only says so, with Retry, and the lesson moves on); with the board
+      // off or closed, the page's Quiz button at the top (see toQuizButton), and it waits.
+      if (played > 0 && sec.studyTools) {
         stepRef.current = entry.steps.length; // "past the end" → play continues with the next section
-        const nextSec = secs[s + 1];
-        pointToElement(quiz, "press", "pink");
-        setPhase("speaking");
+        const last = !secs[s + 1];
+        const done = !!storeTopic(sec.topicId)?.completed;
         setProgress({ step: entry.steps.length, count: entry.steps.length, title: sec.title });
-        const ok = await n.speak(
-          `That's the end of this section. When you're ready, try the quiz for it, it's right here.${
-            nextSec ? " Press play when you want me to continue with the next section." : ""
-          }`,
-        );
-        if (!ok || cancelled(run)) return;
-        setPhase("paused");
-        setCaption(nextSec ? "Take the quiz, or press play to continue." : "Take the quiz when you're ready. That was the last section.");
-        return;
+        const onBoard =
+          !!renderPanelRef.current && !!board.current?.openPanel({ kind: "invite", topicId: sec.topicId, title: sec.title, done });
+        if (onBoard && done) {
+          setPhase("speaking");
+          const ok = await n.speak("You've already done this section's quiz, so let's keep going.");
+          if (!ok || cancelled(run)) return;
+          await sleep(900); // a moment to take a Retry before the board moves on
+          if (cancelled(run)) return;
+        } else if (onBoard) {
+          setPhase("speaking");
+          void pointToQuizStart(run);
+          const ok = await n.speak(QUIZ_INVITE_LINE);
+          if (!ok || cancelled(run)) return;
+          setPhase("paused");
+          if (!board.current?.panel()) {
+            // Closed while the voice was inviting it (its ×, Esc, the board switched off):
+            // the lesson still waits here, as panelClosed has it wait, but not for a quiz
+            // on a board that no longer shows one.
+            releaseBoard();
+            pointer.current?.focus(null);
+            const to = boardEnabledRef.current ? null : toQuizButton(last);
+            setCaption(to ? to.caption : "Press play when you want to carry on.");
+            return;
+          }
+          setCaption(last ? "Take the quiz on the board. That was the last section." : "Take the quiz on the board, or press play to carry on.");
+          return;
+        } else if (!done) {
+          const to = toQuizButton(last);
+          if (to) {
+            setPhase("speaking");
+            const ok = await n.speak(to.line);
+            if (!ok || cancelled(run)) return;
+            setPhase("paused");
+            setCaption(to.caption);
+            return;
+          }
+        }
       }
       announceNext = true;
     }
@@ -838,22 +1121,28 @@ export function TeachMode({
    * still there at the next revision. Maths and tables become ordinary Markdown; the
    * rest ride in a fenced block the notes renderer draws (see GuideVisual).
    */
-  const pinVisual = async (spec: VisualSpec) => {
+  const pinVisual = async (given: VisualSpec) => {
     const sec = sectionsRef.current[secRef.current];
     if (!sec) return;
-    const find = (list: NotedTopic[]): NotedTopic | null => {
-      for (const t of list) {
-        if (t.id === sec.topicId) return t;
-        const hit = t.subtopics ? find(t.subtopics) : null;
-        if (hit) return hit;
+    // A picture is kept as its signed picture_id and its /img/ file, nothing else (the
+    // notes show it only while the server still vouches for it); one that can't be
+    // shown can't be pinned.
+    let spec: VisualSpec = given;
+    if (given.kind === "image") {
+      const d = given.data;
+      if (!canShowPicture(d)) {
+        toast({ title: "Couldn't pin that", description: "That picture isn't available any more." });
+        throw new Error("picture not pinnable"); // the board puts its button back
       }
-      return null;
-    };
-    const store = useAppStore.getState();
-    const before = find(store.currentSession?.extractedTopics ?? [])?.notes ?? "";
+      spec = {
+        kind: "image",
+        data: { query: d.query, caption: d.caption, picture_id: d.picture_id, url: d.url, source: d.source, attribution: d.attribution, licence: d.licence },
+      };
+    }
+    const before = storeTopic(sec.topicId)?.notes ?? "";
     const after = `${before.trimEnd()}
 ${visualToMarkdown(spec)}`.trimStart();
-    store.updateTopic(sessionId, sec.topicId, { notes: after }); // show it straight away
+    useAppStore.getState().updateTopic(sessionId, sec.topicId, { notes: after }); // show it straight away
     try {
       await updateTopicDetails(sessionId, sec.dbId, { notes: after });
       toast({ title: "Pinned to your notes", description: `Saved in “${sec.title}”.` });
@@ -884,6 +1173,9 @@ ${visualToMarkdown(spec)}`.trimStart();
   const next = () => {
     const s = secRef.current;
     const k = stepRef.current;
+    // The notes here were just changed: on to the first step of their new lesson (play
+    // writes its script afresh), never past this section because its old script is gone.
+    if (startOver.current === sectionsRef.current[s]?.dbId) return void play(s, 0);
     const entry = scripts.current.get(sectionsRef.current[s]?.dbId);
     if (entry && (k + 1 < entry.steps.length || !entry.done)) play(s, k + 1);
     else if (s + 1 < sectionsRef.current.length) play(s + 1, 0);
@@ -892,6 +1184,8 @@ ${visualToMarkdown(spec)}`.trimStart();
   const prev = () => {
     const s = secRef.current;
     const k = stepRef.current;
+    // Likewise: the start of this section's new lesson, not the end of the section before.
+    if (startOver.current === sectionsRef.current[s]?.dbId) return void play(s, 0);
     if (k > 0) play(s, k - 1);
     else if (s > 0) {
       const before = scripts.current.get(sectionsRef.current[s - 1].dbId);
@@ -899,11 +1193,117 @@ ${visualToMarkdown(spec)}`.trimStart();
     } else play(s, 0);
   };
 
+  // ---- the board's panel: the section's quiz and flashcards ----------------------
+  const busy = (ph: GuidePhase) => ph === "speaking" || ph === "loading" || ph === "answering" || ph === "thinking";
+
+  // The store's last quiz result as the quiz on the board began. Every finished quiz
+  // leaves a new one (completeTopic), so a new one for that section means it's finished.
+  const quizBegan = useRef<unknown>(null);
+  /** A quiz is being taken on the board: started, not only invited, and not finished yet. */
+  const quizUnderway = (): boolean => {
+    const p = board.current?.panel();
+    if (!p || p.kind !== "quiz") return false;
+    const r = useAppStore.getState().lastTopicReward;
+    return !(r && r !== quizBegan.current && r.topicId === p.topicId);
+  };
+
+  /** Done with the panel: the quiz's Continue, Skip for now, Carry on, or the last card's
+   *  Finish. The quiz carries on with "Next up"; cards go back to the lesson as it was. */
+  const panelDone = (p: BoardPanel) => {
+    const again = p.kind !== "flashcards" || resumeAfterPanel.current;
+    resumeAfterPanel.current = false;
+    board.current?.closePanel();
+    if (again) resume();
+  };
+
+  /** The invitation taken up (Start quiz, or Retry on one already done): the quiz runs on
+   *  the board and the lesson waits for it, with the pointer out of the way. */
+  const panelStart = (p: BoardPanel) => {
+    if (phaseRef.current !== "paused") pause();
+    quizBegan.current = useAppStore.getState().lastTopicReward;
+    board.current?.openPanel({ ...p, kind: "quiz", done: false }, { focus: true });
+    setCaption(null);
+    stepAside();
+  };
+
+  /** Closed from the board (its ×, Esc, the board switched off): the lesson goes back to
+   *  how it was when the panel opened - running again after flashcards, else waiting. */
+  const panelClosed = (p: BoardPanel) => {
+    const again = p.kind === "flashcards" && resumeAfterPanel.current;
+    resumeAfterPanel.current = false;
+    if (again) return void resume();
+    if (phaseRef.current !== "paused") return;
+    releaseBoard();
+    pointer.current?.focus(null);
+    // The board switched off under the quiz: it's still there, behind the page's Quiz button.
+    const last = !sectionsRef.current[secRef.current + 1];
+    const to = p.kind !== "flashcards" && !boardEnabledRef.current ? toQuizButton(last) : null;
+    setCaption(to ? to.caption : "Press play when you want to carry on.");
+  };
+
+  /** The footer's Flashcards: the section's cards on the board. A lesson that was running waits for them. */
+  const openFlashcards = () => {
+    const sec = sectionsRef.current[secRef.current];
+    if (!sec?.studyTools || !renderPanelRef.current) return;
+    const ph = phaseRef.current;
+    if (!board.current?.openPanel({ kind: "flashcards", topicId: sec.topicId, title: sec.title }, { focus: true })) return;
+    if (ph !== "paused" && ph !== "done" && ph !== "error") pause(); // a question being asked too
+    resumeAfterPanel.current = busy(ph);
+    setCaption(null);
+    stepAside();
+  };
+
+  // ---- a hint from the quiz on the board ------------------------------------------
+  const asideSeq = useRef(0);
+  /** Say one short line with the lesson standing still: nothing plays on after it. */
+  const sayAside = (line: string) => {
+    const n = narrator.current;
+    if (!n) return;
+    const seq = ++asideSeq.current;
+    setAside(true);
+    void n.speak(line).finally(() => {
+      if (asideSeq.current === seq) setAside(false);
+    });
+  };
+  const lastHint = useRef<{ text: string; at: number } | null>(null);
+  /**
+   * The quiz on the board showed a hint (a first wrong pick): the tutor says it, in its
+   * bubble and out loud (paced silently with no voice), and the lesson stays where it
+   * is, waiting for the quiz. Not over an answer being spoken, nor into an open mic:
+   * the hint is under the question anyway.
+   */
+  const sayHint = (text: string) => {
+    const hint = text.replace(/\s+/g, " ").trim();
+    if (!hint) return;
+    const now = Date.now();
+    if (lastHint.current?.text === hint && now - lastHint.current.at < 2000) return; // the same one shown twice
+    lastHint.current = { text: hint, at: now };
+    const ph = phaseRef.current;
+    if (ph !== "paused" && ph !== "done" && ph !== "error") return;
+    sayAside(hint);
+  };
+
+  /** What the board draws in its panel: the page's study tool, told what its buttons do here. */
+  const drawPanel = (p: BoardPanel): ReactNode =>
+    renderPanel?.({
+      kind: p.kind,
+      topicId: p.topicId,
+      onDone: () => panelDone(p),
+      onStart: () => panelStart(p),
+      onHint: sayHint,
+    }) ?? null;
+
   /** "Continue from here": the person clicked a paragraph. */
   const continueFrom = async (sectionIndex: number, blockId: string) => {
     const sec = sectionsRef.current[sectionIndex];
     const n = narrator.current;
     if (!sec || !n) return;
+    // A quiz being taken on the board isn't closed by a click in the notes: its answers
+    // would be lost. (Play, Next and Prev still take it down, as they always have.)
+    if (quizUnderway()) {
+      setCaption("Finish the quiz or close it first.");
+      return;
+    }
     const entry = ensureScript(sec);
     const want = blockNum(blockId);
     const current = entry.steps[stepRef.current];
@@ -913,7 +1313,10 @@ ${visualToMarkdown(spec)}`.trimStart();
     askAbort.current?.abort();
     cancelAutoScroll();
     stopListening(false);
-    secRef.current = sectionIndex;
+    // Asking to go on from a paragraph takes the board back too, as play does.
+    board.current?.closePanel();
+    resumeAfterPanel.current = false;
+    enterSection(sectionIndex);
     setPhase("loading");
     setCaption("Continuing from here.");
     pointAt(sec, blockId, ""); // show where we are right away
@@ -947,6 +1350,136 @@ ${visualToMarkdown(spec)}`.trimStart();
     });
   };
 
+  // ---- changing the notes by voice -------------------------------------------------
+  // A rewrite is running: only one at a time (the next waits for the student to ask again).
+  // `run` is the turn it answers to: the question that asked for it, or a later one that
+  // asked for another change meanwhile and was told it's still busy (see changeNotes).
+  const revising = useRef<{ run: number } | null>(null);
+
+  /** A section's lesson is about notes that are gone: the next time it plays, its script is
+   *  written afresh from the new ones (the server's cache follows the notes text), and a
+   *  lesson standing in that section goes back to its start - Next and Prev too. */
+  const forgetScript = (sec: TeachSection) => {
+    scripts.current.delete(sec.dbId);
+    if (sectionsRef.current[secRef.current]?.dbId === sec.dbId) {
+      stepRef.current = 0;
+      startOver.current = sec.dbId;
+    }
+  };
+
+  /** Once the page shows the section's new notes (its text is no longer `before`), or after
+   *  a few seconds: their blocks get fresh ids, so nothing points at the old ones. */
+  const notesRedrawn = async (sec: TeachSection, before: string) => {
+    const limit = Date.now() + 3000;
+    while (Date.now() < limit && (notesRoot(sec)?.textContent ?? before) === before) await sleep(80);
+    // a frame or two for the rest of the notes (maths, pictures) to settle
+    await Promise.race([new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))), sleep(150)]);
+    const root = notesRoot(sec);
+    if (root) indexBlocks(root);
+  };
+
+  /**
+   * The student asked to change the section's notes ("make this simpler", "add an
+   * example") and the tutor has said it will. The page rewrites them (the same revise and
+   * structure guard as the notes page, which keeps formulas, tables and pinned pictures)
+   * and shows them; then the lesson starts that section again from the new notes. A change
+   * the guard refuses is explained, and the lesson stays where it was, paused.
+   *
+   * Asked for another change while one is still being made, the tutor says so in a few
+   * words and hands the turn to the change underway: its "Done" (or why it couldn't) cuts
+   * that line off as soon as it lands, rather than waiting behind it or going unsaid.
+   */
+  const changeNotes = async (si: number, instruction: string, run: number) => {
+    const sec = sectionsRef.current[si];
+    const n = narrator.current;
+    if (!sec || !n) return;
+    // The turn this change answers to; a second change asked for meanwhile moves it on.
+    const job = { run };
+    /** Say why nothing changed; the lesson waits where it was. */
+    const waitWith = async (line: string) => {
+      setPhase("speaking");
+      setProgress({ step: 0, count: 0, title: sec.title });
+      const said = await n.speak(line);
+      if (!said || cancelled(job.run)) return;
+      setPhase("paused");
+      setCaption(line);
+    };
+    const revise = reviseNotesRef.current;
+    if (pdf) return waitWith("I can't change the PDF itself. Switch to Notes and ask me there.");
+    if (!revise) return waitWith("I can't change the notes from here, sorry.");
+    const underway = revising.current;
+    if (underway) {
+      underway.run = run; // its outcome is now this turn's to say
+      setPhase("speaking");
+      setProgress({ step: 0, count: 0, title: sec.title });
+      const said = await n.speak(STILL_CHANGING_LINE);
+      // Cut off by that change landing, or by the student: either has taken over.
+      if (!said || cancelled(run)) return;
+      // Back to waiting for it, as before they asked: "Updating the notes…" in the dock.
+      setPhase(revising.current === underway ? "loading" : "paused");
+      return;
+    }
+    revising.current = job;
+    setRevisingNow(true);
+    setPhase("loading");
+    setCaption("Updating the notes…");
+    pointAt(sec, null, ""); // the section's title: where the change is about to show
+    const before = notesRoot(sec)?.textContent ?? "";
+    let result: ReviseNotesResult;
+    try {
+      result = await revise(sec.topicId, instruction);
+    } catch (e) {
+      result = { ok: false, refused: false, message: e instanceof Error ? e.message : "" };
+    }
+    // Still "updating" until the page shows the new notes.
+    if (result.ok) await notesRedrawn(sec, before);
+    revising.current = null;
+    setRevisingNow(false);
+    // Paused (or stopped) while it was being rewritten: the outcome is only shown, not said.
+    const quiet = () => {
+      const ph = phaseRef.current;
+      return ph === "paused" || ph === "done" || ph === "error";
+    };
+    if (result.ok === false) {
+      const why = result.refused ? firstSentence(result.message) : "";
+      const line = result.refused
+        ? `I couldn't change that safely.${why ? ` ${why}` : ""}`
+        : "I couldn't update the notes just now. Try again in a moment.";
+      if (!cancelled(job.run)) return waitWith(line);
+      if (quiet()) setCaption(line);
+      return;
+    }
+    // Whatever the student did meanwhile, the old lesson is about notes that are gone.
+    // Forgotten only now the page shows the new ones: a lesson asked for before then (the
+    // section before preparing this one, say) would be about the old notes again.
+    forgetScript(sec);
+    if (cancelled(job.run)) {
+      // They moved on while it was being rewritten. A lesson teaching this section right
+      // now is pointing at the old notes: it starts the section again.
+      const now = sectionsRef.current[secRef.current];
+      const teaching = lessonRun.current === runRef.current && busy(phaseRef.current);
+      if (teaching && now?.dbId === sec.dbId) play(secRef.current, 0);
+      else if (quiet()) setCaption("I've updated the notes. Press play to carry on.");
+      return;
+    }
+    setPhase("speaking");
+    setProgress({ step: 0, count: 0, title: sec.title });
+    const said = await n.speak("Done — I've updated the notes.");
+    if (!said || cancelled(job.run)) return;
+    if (board.current?.panel()) {
+      // A quiz or cards up on the board stay there, as after any question: the new
+      // notes are taught from the top when the student presses play.
+      setPhase("paused");
+      setCaption("Press play to go through the new notes.");
+      return;
+    }
+    // From the top of the new notes - unless the student has moved on to another section
+    // since (and asked for a change there, which found this one still underway): then on
+    // from where they are.
+    if (sectionsRef.current[secRef.current]?.dbId === sec.dbId) play(secRef.current, 0);
+    else resume();
+  };
+
   // ---- questions ---------------------------------------------------------------
   const ask = async (raw: string, opts: AskOptions = {}) => {
     const text = raw.trim();
@@ -963,7 +1496,7 @@ ${visualToMarkdown(spec)}`.trimStart();
     const si = opts.sectionIndex ?? secRef.current;
     const sec = sectionsRef.current[si];
     if (!sec) return;
-    secRef.current = si;
+    enterSection(si);
     const entry = ensureScript(sec);
     const root = notesRoot(sec);
     const blocks = entry.blocks.length ? entry.blocks : root ? indexBlocks(root) : [];
@@ -976,6 +1509,9 @@ ${visualToMarkdown(spec)}`.trimStart();
     let spoken = "";
     let chain: Promise<boolean> = Promise.resolve(true);
     const added: { update: { notes: string; addition: string } | null } = { update: null };
+    // A change to the notes the student asked for ("make this simpler"): the answer is
+    // only the tutor saying it will, and this is what to change (see changeNotes).
+    const asked: { change: string | null } = { change: null };
     const enqueue = (chunk: string) => {
       const s = chunk.trim();
       if (!s) return;
@@ -1003,15 +1539,21 @@ ${visualToMarkdown(spec)}`.trimStart();
           signal: abort.signal,
           onTarget: (t) => {
             if (cancelled(run)) return;
+            // A quiz or cards up on the board stay there: the answer points at the notes.
+            if (board.current?.panel()) {
+              pointAt(sec, t.block, t.quote);
+              return;
+            }
             // "Draw me that": the answer may come with a visual. Put it on the board
             // and point at it; if the board is off, fall back to the notes as usual.
-            const points = t.point ?? [];
-            if (t.visual && board.current) {
+            const points = Array.isArray(t.point) ? t.point : [];
+            // (A picture never comes this way: see onTargetImage.)
+            if (t.visual && t.visual.kind !== "image" && board.current) {
               const visual = t.visual;
-              const fresh = board.current.draw(visual);
+              const fresh = board.current.draw(visual, { over: !!board.current.picture() });
               void boardTarget(visual, run).then((el) => {
                 if (cancelled(run)) return;
-                if (el) void pointToBoard(el, fresh, points, run, { image: visual.kind === "image" ? visual.data : null });
+                if (el) void pointToBoard(el, fresh, points, run);
                 else pointAt(sec, t.block, t.quote);
               });
               return;
@@ -1023,6 +1565,16 @@ ${visualToMarkdown(spec)}`.trimStart();
               return;
             }
             pointAt(sec, t.block, t.quote);
+          },
+          // The answer's picture, only once the server approved it (never searched for
+          // here): up on the board, and the pointer moves from the notes to its parts.
+          onTargetImage: ({ visual, point }) => {
+            if (cancelled(run) || !board.current || board.current.panel() || !canShowPicture(visual.data)) return;
+            const fresh = board.current.draw(visual);
+            void boardTarget(visual, run).then((el) => {
+              if (cancelled(run) || !el) return; // no picture after all: the pointer stays on the notes
+              void pointToBoard(el, fresh, point, run, { image: visual.data });
+            });
           },
           onText: (delta) => {
             if (cancelled(run)) return;
@@ -1039,6 +1591,9 @@ ${visualToMarkdown(spec)}`.trimStart();
             // even if the student pauses or clicks elsewhere, the page already has it.
             useAppStore.getState().updateTopic(sessionId, sec.topicId, { notes: u.notes });
           },
+          onChangeNotes: (c) => {
+            asked.change = c.instruction;
+          },
         },
       );
       if (cancelled(run)) return;
@@ -1050,6 +1605,11 @@ ${visualToMarkdown(spec)}`.trimStart();
       }
       const ok = await chain;
       if (!ok || cancelled(run)) return;
+      if (asked.change) {
+        // The tutor has said it will change the notes: now it does.
+        setQuestion(null);
+        return void changeNotes(si, asked.change, run);
+      }
       if (added.update) {
         // The notes didn't have this answer, so the backend appended it to the section
         // (already on the page, see onNotesUpdated). Now take the student to it.
@@ -1074,6 +1634,13 @@ ${visualToMarkdown(spec)}`.trimStart();
       await sleep(700);
       if (cancelled(run)) return;
       setQuestion(null);
+      if (board.current?.panel()) {
+        // Asked over the quiz (or the cards) on the board: back to it, still paused -
+        // carrying on would take it down.
+        setPhase("paused");
+        setCaption("Back to the board whenever you're ready. Press play to carry on.");
+        return;
+      }
       let k: number | null = stepRef.current;
       if (opts.resumeAt) {
         setPhase("loading");
@@ -1266,10 +1833,7 @@ ${visualToMarkdown(spec)}`.trimStart();
 
     // Let the student hear the voice they just picked (the lesson picks it up on its next sentence).
     const p = phaseRef.current;
-    if (p === "paused" || p === "done" || p === "error") {
-      setGreeting(true);
-      void n.speak(`Hi, I'm ${choice.name}. I'll be your tutor. Press play when you're ready.`).finally(() => setGreeting(false));
-    }
+    if (p === "paused" || p === "done" || p === "error") sayAside(`Hi, I'm ${choice.name}. I'll be your tutor. Press play when you're ready.`);
   };
 
   actions.current = { togglePlay, next, prev, mic, cancelListening, close, continueFrom, pause };
@@ -1374,6 +1938,49 @@ ${visualToMarkdown(spec)}`.trimStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A picture taken away while the pointer is on it (the board's "Wrong picture", or the
+  // server no longer vouching for it): the pointer leaves it for the notes the voice is
+  // on, and the lesson carries on. Later steps carrying it forward drop it (visualOf).
+  useEffect(
+    () =>
+      onBlockedChange(() => {
+        const id = pictureOnBoard.current;
+        if (!id || !isPictureBlocked({ picture_id: id })) return;
+        releaseBoard();
+        pointer.current?.focus(null);
+        const sec = sectionsRef.current[secRef.current];
+        const step = sec ? scripts.current.get(sec.dbId)?.steps[stepRef.current] : undefined;
+        const talking = phaseRef.current === "speaking" || phaseRef.current === "answering";
+        if (sec && step && talking) pointAt(sec, step.block, step.quote);
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads refs only; set up once
+    [],
+  );
+
+  // One of the page's study dialogs opening (its Quiz or Flashcards at the top, an exam
+  // plan's, the wrong questions) while the lesson talks: it stops, rather than talk over
+  // the quiz, and stays stopped when the dialog closes - the student presses play. Watched
+  // here, so the page needs no wiring: any element marked data-study-dialog counts, in a
+  // portal or not. Only added nodes are looked at, so the lesson's own busy DOM (the
+  // pointer, the marks, the notes) costs next to nothing.
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return;
+    const opened = (node: Node) => node instanceof Element && (node.matches(STUDY_DIALOG) || !!node.querySelector(STUDY_DIALOG));
+    const mo = new MutationObserver((records) => {
+      if (!records.some((r) => Array.from(r.addedNodes).some(opened))) return;
+      const ph = phaseRef.current;
+      if (ph === "listening") return; // the student is talking: the mic is theirs to close
+      if (ph === "speaking" || ph === "answering" || ph === "loading" || ph === "thinking") {
+        actions.current?.pause();
+        setCaption("Paused while that's open. Press play when you want to carry on.");
+      } else {
+        narrator.current?.cancel(); // a hint or a hello still being said
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, []);
+
   // Click a paragraph → continue the lesson from there.
   useEffect(() => {
     const host = hostRef.current;
@@ -1436,6 +2043,19 @@ ${visualToMarkdown(spec)}`.trimStart();
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
       if (t?.closest?.(".guide-voicemenu")) return; // picking a tutor: let the menu have the keys
+      // The quiz or cards on the board, and the page's Quiz dialog, own their keys - and
+      // while a quiz or cards are being worked on the board, so does a key pressed with
+      // focus nowhere in particular (lib/useTalkKey). The invitation isn't being worked
+      // in yet: Space there is still "press play to carry on". (The digits 1-4 that pick
+      // an answer are never Teach mode's, so they always reach the quiz; nothing here
+      // prevents their default.)
+      const open = board.current?.panel();
+      if (keyForStudyTool(t, !!open && open.kind !== "invite")) {
+        // Except Esc for the microphone, opened over the quiz with focus nowhere in
+        // particular (the talk key still works there): that is still "never mind".
+        const micOpen = e.key === "Escape" && phaseRef.current === "listening" && !keyForStudyTool(t);
+        if (!micOpen) return;
+      }
       const a = actions.current;
       if (!a) return;
       if (matchesVoiceKey(e, voiceKeyRef.current)) return;
@@ -1460,13 +2080,23 @@ ${visualToMarkdown(spec)}`.trimStart();
         <GuidePointer
           ref={pointer}
           host={hostRef.current}
-          speaking={phase === "speaking" || phase === "answering"}
+          speaking={phase === "speaking" || phase === "answering" || aside}
           caption={phase === "listening" || phase === "thinking" ? null : caption}
           speaker={speaker && { name: speaker.name, kind: botKind(speaker) }}
         />
       )}
-      {/* A PDF can't be written into, so there's nothing to pin a drawing to. */}
-      <GuideBoard ref={board} enabled={boardEnabled} title={progress.title} onClose={onBoardClose} onPin={pdf ? undefined : pinVisual} />
+      {/* A PDF can't be written into, so there's nothing to pin a drawing to (and its
+          pages have no quiz or flashcards: studyTools is false for them). */}
+      <GuideBoard
+        ref={board}
+        enabled={boardEnabled}
+        title={progress.title}
+        onClose={onBoardClose}
+        onPin={pdf ? undefined : pinVisual}
+        renderPanel={renderPanel ? drawPanel : undefined}
+        onPanelClose={panelClosed}
+        onFlashcards={renderPanel && sections[secNow]?.studyTools ? openFlashcards : undefined}
+      />
       <GuideDock
         phase={phase}
         question={question}
@@ -1478,7 +2108,8 @@ ${visualToMarkdown(spec)}`.trimStart();
         voices={voiceOptions}
         voiceId={voiceId}
         onVoice={setVoice}
-        greeting={greeting}
+        greeting={aside}
+        busyLabel={revisingNow ? "Updating the notes…" : null}
         askOpen={askOpen}
         onToggleAsk={() => setAskOpen((v) => !v)}
         onAsk={ask}

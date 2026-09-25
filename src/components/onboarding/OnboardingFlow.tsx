@@ -21,7 +21,7 @@ import {
   type TeacherType,
 } from "@/services/authService";
 import { cn } from "@/lib/utils";
-import { VoiceKeyPicker } from "@/components/VoiceKeyPicker";
+import { TeachKeysReference, VoiceKeyPicker, VoiceKeyTester } from "@/components/VoiceKeyPicker";
 import { TutorLookPicker } from "@/components/TutorLookPicker";
 import { avatarFor, avatarsToString, setAvatars, type AvatarChoice } from "@/lib/guide/avatars";
 import { readVoiceKey, voiceKeyToString, writeVoiceKey, type VoiceKey } from "@/lib/voiceKey";
@@ -416,7 +416,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
               Choose how your <em>tutors look</em>
             </h1>
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
-              In Teach mode your tutor points at the notes as it explains them. Pick the face that rides on each
+              When you press Teach me, your tutor points at the notes as it explains them. Pick the face that rides on each
               voice's pointer — it takes that face's colour. You can change it later in Settings.
             </p>
 
@@ -450,6 +450,8 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
             </p>
 
             <VoiceKeyPicker value={voiceKey} onChange={setVoiceKey} tone="editorial" className="mt-8 max-w-xl" />
+            <VoiceKeyTester value={voiceKey} tone="editorial" className="mt-4 max-w-xl" />
+            <TeachKeysReference tone="editorial" className="mt-6 max-w-xl" />
 
             {error && (
               <p className="mt-5 max-w-lg rounded-lg border border-[#c2483d]/30 bg-[#c2483d]/[0.06] px-3 py-2 text-[13px] text-[#a13a31]">

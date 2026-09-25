@@ -96,7 +96,7 @@ const YOU: NavItem[] = [
   { title: "Profile & Settings", to: "/dashboard/profile", icon: Settings, match: "/dashboard/profile" },
 ];
 
-/** Full Study is the one way to study: a scrolling note with a quiz per section.
+/** Full Study is the one way to study: a scrolling note with one Quiz button at the top.
  *  With a session open it deep-links into it, otherwise it opens the picker. */
 const studyPath = (sessionId?: string) => (sessionId ? `/dashboard/${sessionId}/full-study` : "/dashboard/full-study");
 
