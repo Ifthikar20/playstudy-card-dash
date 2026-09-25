@@ -5,6 +5,8 @@
  * or send an Authorization header, so this is a small fetch-based SSE reader).
  */
 import { API_URL, getAuthToken } from "@/services/api";
+import { authFetch } from "@/services/authFetch";
+import { readSSE } from "@/lib/sse";
 
 export interface GuideBlockPayload {
   id: string;
@@ -372,7 +374,7 @@ export interface GuideTurn {
 
 async function post(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
   const token = getAuthToken();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await authFetch(`${API_URL}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -387,34 +389,6 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
     throw new Error(typeof err.detail === "string" ? err.detail : `Request failed (${res.status})`);
   }
   return res;
-}
-
-/** Read an SSE body, calling `onEvent(event, data)` for every `data:` message. */
-async function readSSE(res: Response, onEvent: (event: string, data: string) => void): Promise<void> {
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("Streaming isn't supported in this browser.");
-  const decoder = new TextDecoder();
-  let buf = "";
-  const dispatch = (chunk: string) => {
-    let event = "message";
-    const data: string[] = [];
-    for (const line of chunk.split("\n")) {
-      if (line.startsWith("event:")) event = line.slice(6).trim();
-      else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
-    }
-    if (data.length) onEvent(event, data.join("\n"));
-  };
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-    let i: number;
-    while ((i = buf.indexOf("\n\n")) !== -1) {
-      dispatch(buf.slice(0, i));
-      buf = buf.slice(i + 2);
-    }
-  }
-  if (buf.trim()) dispatch(buf);
 }
 
 /**
@@ -509,7 +483,7 @@ export interface GuideVoices {
 export async function fetchGuideVoices(): Promise<GuideVoices> {
   const token = getAuthToken();
   try {
-    const res = await fetch(`${API_URL}/guide/voices`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+    const res = await authFetch(`${API_URL}/guide/voices`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
     if (!res.ok) throw new Error(String(res.status));
     return (await res.json()) as GuideVoices;
   } catch {
@@ -517,10 +491,14 @@ export async function fetchGuideVoices(): Promise<GuideVoices> {
   }
 }
 
-/** One sentence → an MP3 clip in the chosen natural voice. */
-export async function synthesizeSpeech(text: string, voice: string | null, signal?: AbortSignal): Promise<Blob> {
+/**
+ * One sentence → an MP3 clip in the chosen natural voice. Resolves as soon as the
+ * headers are in: the server sends the audio as it is synthesised, and the narrator
+ * (src/lib/guide/speech.ts) plays the body while it is still arriving.
+ */
+export async function synthesizeSpeech(text: string, voice: string | null, signal?: AbortSignal): Promise<Response> {
   const token = getAuthToken();
-  const res = await fetch(`${API_URL}/guide/tts`, {
+  const res = await authFetch(`${API_URL}/guide/tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ text, voice }),
@@ -530,7 +508,7 @@ export async function synthesizeSpeech(text: string, voice: string | null, signa
     const err = await res.json().catch(() => ({}));
     throw new Error(typeof err.detail === "string" ? err.detail : `Speech failed (${res.status})`);
   }
-  return await res.blob();
+  return res;
 }
 
 /** Short facts about the material being turned into notes, to read while it builds. Never throws. */
@@ -540,7 +518,7 @@ export async function fetchLoadingFacts(
 ): Promise<{ facts: string[]; subject: string }> {
   const token = getAuthToken();
   try {
-    const res = await fetch(`${API_URL}/guide/facts`, {
+    const res = await authFetch(`${API_URL}/guide/facts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(input),
@@ -625,7 +603,7 @@ async function requestParts(url: string, labels: string[], ctx: ImagePartsContex
     const abort = new AbortController();
     const timer = window.setTimeout(() => abort.abort(), PARTS_TIMEOUT_MS);
     try {
-      const res = await fetch(`${API_URL}/guide/image/parts`, {
+      const res = await authFetch(`${API_URL}/guide/image/parts`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ url, labels, ...ctx }),
@@ -706,7 +684,7 @@ export async function transcribeAudio(blob: Blob, language?: string): Promise<st
   const ext = blob.type.includes("ogg") ? "ogg" : blob.type.includes("mp4") ? "m4a" : blob.type.includes("wav") ? "wav" : "webm";
   form.append("audio", blob, `question.${ext}`);
   const qs = language ? `?language=${encodeURIComponent(language)}` : "";
-  const res = await fetch(`${API_URL}/guide/transcribe${qs}`, {
+  const res = await authFetch(`${API_URL}/guide/transcribe${qs}`, {
     method: "POST",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: form,
