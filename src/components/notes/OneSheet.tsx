@@ -199,6 +199,10 @@ export interface OneSheetProps {
   /** Words still being heard by dictation, not yet typed in. Shown on the
    *  status line so the student can see they are being heard. */
   interim?: string;
+  /** Show a badge at the top of the window saying how to stop editing (Full Study, where
+   *  a double-click opened the sheet and the section may be long). Not on the note page,
+   *  where writing is the point. */
+  exitBadge?: boolean;
 }
 
 export interface OneSheetHandle {
@@ -219,7 +223,7 @@ export interface OneSheetHandle {
 }
 
 export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSheet(
-  { initial, caret, guideKey, onCommit, onClose, allowEmpty = false, placeholder, interim },
+  { exitBadge = false, initial, caret, guideKey, onCommit, onClose, allowEmpty = false, placeholder, interim },
   handleRef,
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -1005,6 +1009,19 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
             }}
           >
             Show me the new version
+          </button>
+        </div>
+      )}
+      {exitBadge && (
+        <div className="tutor-highlight-badge" data-kind="editing" data-an-chrome="">
+          Editing · saves itself · click outside or press Esc when you're done
+          <button
+            type="button"
+            className="rounded-full bg-foreground px-2.5 py-0.5 text-[11px] font-semibold text-background transition-opacity hover:opacity-85"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={finish}
+          >
+            Done
           </button>
         </div>
       )}

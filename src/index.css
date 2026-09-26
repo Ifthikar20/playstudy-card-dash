@@ -373,6 +373,7 @@ html:has(.lp) #root {
   animation: guide-pop 0.2s ease-out;
 }
 .tutor-highlight-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+.tutor-highlight-badge[data-kind="editing"]::before { background: #3b82f6; }
 /* ...except an open line of notes, which must keep its I-beam and caret. */
 .guide-driving [data-an-input] { cursor: text !important; }
 .guide-pop { animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1); }

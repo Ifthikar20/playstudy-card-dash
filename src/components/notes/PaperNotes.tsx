@@ -361,6 +361,7 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
           allowEmpty={allowEmpty}
           placeholder={placeholder}
           interim={interim}
+          exitBadge={clickMode === "teach"}
         />
       ) : (
         <>
