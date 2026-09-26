@@ -8,6 +8,7 @@
  * pages hands back the stored set without writing anything.
  */
 import { API_URL, getAuthToken, type HttpError, type Question } from "@/services/api";
+import { authFetch } from "@/services/authFetch";
 import { parseQuestions } from "@/lib/quiz/parse";
 import type { PdfPageBlocks } from "@/lib/pdf/checkpoints";
 
@@ -76,7 +77,7 @@ const base = (sessionId: string) => `${API_URL}/study-sessions/${encodeURICompon
 
 /** Every checkpoint quiz this session has, and how many pages the server counts in its PDF. */
 export async function listPdfQuizzes(sessionId: string): Promise<PdfQuizList> {
-  const res = await fetch(base(sessionId), { headers: headers() });
+  const res = await authFetch(base(sessionId), { headers: headers() });
   if (!res.ok) await fail(res, "Couldn't load the PDF's quizzes");
   const data = await res.json();
   return { pageCount: Number(data?.pageCount) || 0, quizzes: Array.isArray(data?.quizzes) ? data.quizzes : [] };
@@ -95,7 +96,7 @@ export async function getPdfQuiz(
   pages: PdfPageBlocks[] = [],
   opts: { force?: boolean } = {},
 ): Promise<PdfQuizResult> {
-  const res = await fetch(base(sessionId), {
+  const res = await authFetch(base(sessionId), {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ firstPage: range.first, lastPage: range.last, pages, force: opts.force ?? false }),
@@ -126,7 +127,7 @@ export async function completePdfQuiz(
   quizId: number,
   result: { right: number; total: number },
 ): Promise<PdfQuizCompletion> {
-  const res = await fetch(`${base(sessionId)}/${encodeURIComponent(String(quizId))}/complete`, {
+  const res = await authFetch(`${base(sessionId)}/${encodeURIComponent(String(quizId))}/complete`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(result),

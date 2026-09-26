@@ -8,7 +8,6 @@ import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from "rea
 import { useAppData } from "@/hooks/useAppData";
 import { useAppStore } from "@/store/appStore";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { apiClient } from "@/services/apiClient";
 import { migrateLocalKeys } from "@/lib/localData";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
@@ -44,11 +43,6 @@ const queryClient = new QueryClient();
 // so it cannot wait for this call. This is the catch-all for every other key,
 // and the place the migration is visible from the app's entry point.
 migrateLocalKeys();
-
-// Initialize API client on app startup
-apiClient.initialize().catch((error) => {
-  console.error('[App] Failed to initialize API client:', error);
-});
 
 /** One page view per route change (lib/analytics). */
 function PageViews() {

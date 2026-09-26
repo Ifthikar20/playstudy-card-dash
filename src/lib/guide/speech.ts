@@ -120,10 +120,99 @@ export function splitSentences(text: string): string[] {
   });
 }
 
-/** Fetch one sentence as an audio clip in the given server voice. */
-export type SynthFn = (text: string, voice: string, signal?: AbortSignal) => Promise<Blob>;
+/** Fetch one sentence as an audio clip in the given server voice: a Response whose body
+ *  streams the MP3 as the server synthesises it. */
+export type SynthFn = (text: string, voice: string, signal?: AbortSignal) => Promise<Response>;
 
 const CLIP_CACHE_MAX = 80;
+
+/** What `clip()` hands back: the whole clip (for the cache and for replays), plus, when the
+ *  request was made just now and this browser can play MP3 through MediaSource, the live
+ *  byte stream so the sentence can start before it has all arrived. */
+interface ClipRequest {
+  blob: Promise<Blob>;
+  live: Promise<ReadableStream<Uint8Array> | null>;
+}
+
+/** Can this browser play an MP3 that is still arriving? (iOS Safari before 17.1 cannot.) */
+function canStreamMp3(): boolean {
+  try {
+    return typeof MediaSource !== "undefined" && MediaSource.isTypeSupported("audio/mpeg");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Feed a byte stream into a MediaSource as it arrives. Returns a function that stops the
+ * pump (the stream's reader is cancelled; a teed twin keeps filling the cache).
+ */
+function pumpIntoMediaSource(ms: MediaSource, stream: ReadableStream<Uint8Array>): () => void {
+  const reader = stream.getReader();
+  let cancelled = false;
+  const endStream = (error?: EndOfStreamError) => {
+    try {
+      if (ms.readyState === "open") ms.endOfStream(error);
+    } catch {
+      /* already ended */
+    }
+  };
+  ms.addEventListener(
+    "sourceopen",
+    async () => {
+      let sb: SourceBuffer;
+      try {
+        sb = ms.addSourceBuffer("audio/mpeg");
+        try {
+          sb.mode = "sequence"; // MP3 frames carry no timestamps; play them in arrival order
+        } catch {
+          /* the default for this byte-stream format is already sequence */
+        }
+      } catch {
+        endStream("decode");
+        void reader.cancel().catch(() => undefined);
+        return;
+      }
+      const append = (chunk: Uint8Array) =>
+        new Promise<void>((resolve, reject) => {
+          const done = () => {
+            sb.removeEventListener("updateend", done);
+            sb.removeEventListener("error", fail);
+            resolve();
+          };
+          const fail = () => {
+            sb.removeEventListener("updateend", done);
+            sb.removeEventListener("error", fail);
+            reject(new Error("append failed"));
+          };
+          sb.addEventListener("updateend", done);
+          sb.addEventListener("error", fail);
+          try {
+            sb.appendBuffer(chunk);
+          } catch (e) {
+            fail();
+            reject(e);
+          }
+        });
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (cancelled) return;
+          if (done) break;
+          if (value?.byteLength) await append(value);
+        }
+        if (!cancelled) endStream();
+      } catch {
+        if (!cancelled) endStream("network");
+      }
+    },
+    { once: true },
+  );
+  return () => {
+    cancelled = true;
+    void reader.cancel().catch(() => undefined);
+  };
+}
 
 /**
  * A single <audio> element, unlocked on the first user gesture and reused for every
@@ -346,7 +435,7 @@ export class Narrator {
   /** Warm the clip cache for text that will be spoken soon. */
   prefetch(text: string, sentences = 1): void {
     if (!this.serverActive) return;
-    for (const s of splitSentences(text).slice(0, sentences)) void this.clip(s).catch(() => undefined);
+    for (const s of splitSentences(text).slice(0, sentences)) void this.clip(s).blob.catch(() => undefined);
   }
 
   /** Stop speaking immediately; any in-flight `speak()` resolves false. */
@@ -392,7 +481,7 @@ export class Narrator {
     this.active = true;
     try {
       const parts = splitSentences(text);
-      if (this.serverActive) parts.slice(1, 4).forEach((s) => void this.clip(s).catch(() => undefined));
+      if (this.serverActive) parts.slice(1, 4).forEach((s) => void this.clip(s).blob.catch(() => undefined));
       for (const sentence of parts) {
         if (gen !== this.gen) return false;
         this.onCaption?.(sentence);
@@ -430,17 +519,37 @@ export class Narrator {
   private waiting: Array<() => void> = [];
 
   /** Fetch (or reuse) the clip for a sentence. At most two synth requests run at
-   *  once so prefetches never slow down the sentence that's needed right now. */
-  private clip(sentence: string, urgent = false): Promise<Blob> {
+   *  once so prefetches never slow down the sentence that's needed right now.
+   *  For an urgent request the live byte stream is handed back too (see ClipRequest),
+   *  teed off the same response the cache is filled from. */
+  private clip(sentence: string, urgent = false): ClipRequest {
     const voice = this.serverVoice!;
     const key = `${voice}|${sentence}`;
     const hit = this.clips.get(key);
-    if (hit) return hit;
+    if (hit) return { blob: hit, live: Promise.resolve(null) };
+    let resolveLive: (s: ReadableStream<Uint8Array> | null) => void = () => undefined;
+    const live = new Promise<ReadableStream<Uint8Array> | null>((r) => (resolveLive = r));
     const run = async (): Promise<Blob> => {
       if (this.inflight >= 2) await new Promise<void>((r) => (urgent ? this.waiting.unshift(r) : this.waiting.push(r)));
       this.inflight++;
       try {
-        return await this.synth!(sentence, voice);
+        const res = await this.synth!(sentence, voice);
+        const body = res.body;
+        const headers = { "Content-Type": "audio/mpeg" };
+        if (!body) {
+          resolveLive(null);
+          return await res.blob();
+        }
+        if (urgent && canStreamMp3()) {
+          const [forPlayer, forCache] = body.tee();
+          resolveLive(forPlayer);
+          return await new Response(forCache, { headers }).blob();
+        }
+        resolveLive(null);
+        return await new Response(body, { headers }).blob();
+      } catch (e) {
+        resolveLive(null);
+        throw e;
       } finally {
         this.inflight--;
         this.waiting.shift()?.();
@@ -453,41 +562,74 @@ export class Narrator {
       const oldest = this.clips.keys().next().value;
       if (oldest) this.clips.delete(oldest);
     }
-    return p;
+    return { blob: p, live };
   }
 
   private async oneServer(sentence: string, gen: number): Promise<boolean> {
-    const blob = await this.clip(sentence, true);
-    if (gen !== this.gen || this.disposed) return false;
-    const url = URL.createObjectURL(blob);
+    const { blob, live } = this.clip(sentence, true);
+    // Resolves as soon as the response headers are in (a live stream), or once the
+    // whole clip is here (cached, or a browser without MediaSource).
+    let stream = await live;
+    if (gen !== this.gen || this.disposed) {
+      void stream?.cancel().catch(() => undefined);
+      return false;
+    }
+    let url: string;
+    let stopPump: () => void = () => undefined;
+    if (stream) {
+      const ms = new MediaSource();
+      url = URL.createObjectURL(ms);
+      stopPump = pumpIntoMediaSource(ms, stream);
+    } else {
+      const whole = await blob;
+      if (gen !== this.gen || this.disposed) return false;
+      url = URL.createObjectURL(whole);
+    }
     const a = speechAudioElement();
     // This clip owns the element from here on. An earlier clip's guard or finish
     // checks the token and leaves this one alone: before, a cancelled line's
     // guard could pause the NEXT line (or unhook its onended) and freeze the lesson.
     const token = ++clipToken;
-    a.onended = null;
-    a.onerror = null;
-    try {
-      a.pause();
-    } catch {
-      /* ignore */
-    }
-    a.src = url;
-    try {
-      a.currentTime = 0;
-    } catch {
-      /* ignore */
-    }
-    a.muted = false;
-    // A style's pace shows in the natural voice too (a calm line a touch slower,
-    // a surprising one a touch quicker); its pitch only applies to the browser voice.
-    a.playbackRate = this.rateValue * (this.tone?.rate ?? 1);
-    (a as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
+    const load = (src: string) => {
+      a.onended = null;
+      a.onerror = null;
+      try {
+        a.pause();
+      } catch {
+        /* ignore */
+      }
+      a.src = src;
+      try {
+        a.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+      a.muted = false;
+      // A style's pace shows in the natural voice too (a calm line a touch slower,
+      // a surprising one a touch quicker); its pitch only applies to the browser voice.
+      a.playbackRate = this.rateValue * (this.tone?.rate ?? 1);
+      (a as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
+    };
+    load(url);
     try {
       await a.play();
     } catch (e) {
+      stopPump();
       URL.revokeObjectURL(url);
-      throw e; // autoplay blocked or undecodable → browser fallback
+      if (!stream) throw e; // autoplay blocked or undecodable → browser fallback
+      // MediaSource refused (some browsers claim MP3 support they don't have): play
+      // the finished clip the ordinary way before giving up on the natural voice.
+      stream = null;
+      const whole = await blob;
+      if (gen !== this.gen || this.disposed) return false;
+      url = URL.createObjectURL(whole);
+      load(url);
+      try {
+        await a.play();
+      } catch (e2) {
+        URL.revokeObjectURL(url);
+        throw e2;
+      }
     }
     return new Promise<boolean>((resolve) => {
       let settled = false;
@@ -499,6 +641,7 @@ export class Narrator {
           a.onended = null;
           a.onerror = null;
         }
+        stopPump();
         URL.revokeObjectURL(url);
         resolve(ok && gen === this.gen);
       };

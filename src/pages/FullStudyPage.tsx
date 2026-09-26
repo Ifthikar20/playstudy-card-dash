@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import rehypeSanitize from "rehype-sanitize";
+import { KATEX_OPTS, NOTE_SCHEMA } from "@/lib/notes/sanitizeSchema";
 import "katex/dist/katex.min.css";
 import "katex/dist/contrib/mhchem.mjs"; // \ce{...} chemistry in notes
 import {
@@ -123,7 +125,7 @@ function Markdown({ md }: { md: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, [remarkMath, MATH_OPTS]]}
-      rehypePlugins={[rehypeRaw, rehypeKatex]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, NOTE_SCHEMA], [rehypeKatex, KATEX_OPTS]]}
       components={components as Components}
     >
       {sanitizeNotes(md)}

@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import type { GuideGraph as GuideGraphData } from "@/services/guide";
+import { compileExpression } from "@/lib/guide/mathExpr";
 
 /*
-  A y = f(x) function graph for the Teach mode whiteboard. The expression is
-  char-whitelisted on the server; here we allow only known Math functions/constants
-  before evaluating, sample it across the domain, and plot it with light axes.
+  A y = f(x) function graph for the Teach mode whiteboard. The expression is parsed
+  and evaluated by lib/guide/mathExpr (never handed to the JavaScript engine: a
+  pinned graph inside a note is not checked by the server), sampled across the
+  domain, and plotted with light axes.
 
   Everything on top of the curve is computed from the same expression — the shaded
   area under it, the marked roots and turning points, a second curve to compare, the
@@ -17,28 +19,6 @@ const H = 300;
 const PAD = { l: 34, r: 14, t: 14, b: 28 };
 const CURVE = "#ec4899";
 const CURVE2 = "#3b82f6";
-const ALLOWED = new Set([
-  "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh",
-  "sqrt", "cbrt", "exp", "log", "log2", "log10", "abs", "min", "max", "pow",
-  "floor", "ceil", "round", "sign", "PI", "E", "pi", "e", "x",
-]);
-
-function compile(expr: string): ((x: number) => number) | null {
-  let e = expr.replace(/\^/g, "**");
-  const tokens = e.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-  for (const t of tokens) if (!ALLOWED.has(t)) return null;
-  e = e.replace(/\bpi\b/gi, "PI").replace(/\be\b/g, "E");
-  e = e.replace(/\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|cbrt|exp|log|log2|log10|abs|min|max|pow|floor|ceil|round|sign|PI|E)\b/g, "Math.$1");
-  try {
-    // eslint-disable-next-line no-new-func
-    const f = new Function("x", `"use strict"; return (${e});`) as (x: number) => number;
-    if (!Number.isFinite(f(1)) && !Number.isFinite(f(0.5))) return f; // still fine (may be NaN at some x)
-    return f;
-  } catch {
-    return null;
-  }
-}
-
 const fmtTick = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 /** Where the tutor's pointer touches a part (data-part-at), in this SVG's own units. */
 const partAt = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
@@ -53,8 +33,8 @@ const sample = (f: (x: number) => number, x: number): number | null => {
 
 export function GuideGraph({ graph }: { graph: GuideGraphData }) {
   const model = useMemo(() => {
-    const f = compile(graph.fn);
-    const g = graph.fn2 ? compile(graph.fn2) : null;
+    const f = compileExpression(graph.fn);
+    const g = graph.fn2 ? compileExpression(graph.fn2) : null;
     const [x0, x1] = graph.domain && graph.domain.length === 2 ? graph.domain : [-6, 6];
     if (!f) return null;
     const N = 200;

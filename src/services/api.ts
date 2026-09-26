@@ -4,8 +4,11 @@
 import { clearCachedUserData } from '@/lib/localData';
 import { parseQuestions } from '@/lib/quiz/parse';
 import type { QuizItem } from '@/lib/quiz/types';
+import { readSSE } from '@/lib/sse';
 import type { ExamPlan } from '@/lib/examPlan';
 import type { NoteCheck } from '@/services/notes';
+import { authFetch } from '@/services/authFetch';
+import { authService } from '@/services/authService';
 
 // Browser storage keys
 const STORAGE_KEYS = {
@@ -213,78 +216,29 @@ export const removeAuthToken = (): void => {
 };
 
 /**
- * Logout user and clear token
+ * Logout user and clear token (the auth service also retires the refresh cookie).
  */
 export const logout = (): void => {
   removeAuthToken();
   clearCachedUserData();
-  window.location.href = '/auth';
+  void authService.logout();
 };
 
 /**
- * A 401 means the token went stale, not that the student should be thrown out:
- * renew it and report whether the call can be retried. Signs out only when the
- * server rejects the token outright.
- */
-const recoverFromUnauthorized = async (): Promise<boolean> => {
-  const { authService } = await import('./authService');
-  const result = await authService.refreshToken();
-  if (result === 'rejected') authService.logout();
-  return result === 'refreshed';
-};
-
-/**
- * Login user and store token
+ * Login user and store token. Delegates to the auth service, which also receives the
+ * refresh cookie the session lives on.
  */
 export const login = async (email: string, password: string): Promise<{success: boolean; error?: string}> => {
-  try {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Login failed' };
-    }
-
-    const data = await response.json();
-    setAuthToken(data.access_token);
-    return { success: true };
-  } catch (error) {
-    console.error('Login error:', error);
-    return { success: false, error: 'Network error. Please try again.' };
-  }
+  const result = await authService.login({ email, password });
+  return { success: result.success, error: result.error };
 };
 
 /**
  * Register new user and store token
  */
 export const register = async (email: string, name: string, password: string): Promise<{success: boolean; error?: string}> => {
-  try {
-    const response = await fetch(`${API_URL}/auth/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, name, password }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Registration failed' };
-    }
-
-    const data = await response.json();
-    setAuthToken(data.access_token);
-    return { success: true };
-  } catch (error) {
-    console.error('Registration error:', error);
-    return { success: false, error: 'Network error. Please try again.' };
-  }
+  const result = await authService.register({ email, name, password });
+  return { success: result.success, error: result.error };
 };
 
 /**
@@ -309,7 +263,7 @@ export const fetchAppData = async (): Promise<AppData> => {
     }
 
     console.log('[fetchAppData] Fetching app data from API...');
-    const response = await fetch(`${API_URL}/app-data`, {
+    const response = await authFetch(`${API_URL}/app-data`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -350,7 +304,7 @@ export const fetchAppData = async (): Promise<AppData> => {
 // Background fetch to update cache
 async function fetchAndCacheAppData(token: string) {
   try {
-    const response = await fetch(`${API_URL}/app-data`, {
+    const response = await authFetch(`${API_URL}/app-data`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -379,7 +333,7 @@ export const generateQuestions = async (topic: string, numQuestions: number = 5,
       throw new Error('Authentication required');
     }
 
-    const response = await fetch(`${API_URL}/generate-questions`, {
+    const response = await authFetch(`${API_URL}/generate-questions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -424,7 +378,7 @@ export const analyzeContent = async (content: string, retried = false): Promise<
       throw new Error('Authentication required. Please log in again.');
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/analyze-content`, {
+    const response = await authFetch(`${API_URL}/study-sessions/analyze-content`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -435,7 +389,7 @@ export const analyzeContent = async (content: string, retried = false): Promise<
 
     if (!response.ok) {
       if (response.status === 401) {
-        if (!retried && (await recoverFromUnauthorized())) return analyzeContent(content, true);
+        // authFetch already renewed the token and retried once.
         throw new Error('Your session has expired. Please log in again.');
       }
       const errorData = await response.json();
@@ -467,7 +421,7 @@ export const createStudySessionWithAI = async (
       throw new Error('Authentication required. Please log in again.');
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/create-with-ai`, {
+    const response = await authFetch(`${API_URL}/study-sessions/create-with-ai`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -483,9 +437,7 @@ export const createStudySessionWithAI = async (
 
     if (!response.ok) {
       if (response.status === 401) {
-        if (!retried && (await recoverFromUnauthorized())) {
-          return createStudySessionWithAI(title, content, numTopics, questionsPerTopic, true);
-        }
+        // authFetch already renewed the token and retried once.
         throw new Error('Your session has expired. Please log in again.');
       }
       if (response.status === 413) {
@@ -543,7 +495,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
       return cachedSession;
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/${sessionId}`, {
+    const response = await authFetch(`${API_URL}/study-sessions/${sessionId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -601,7 +553,7 @@ export const getStudySession = async (sessionId: string): Promise<StudySession> 
 export const fetchSessionPdf = async (sessionId: string, signal?: AbortSignal): Promise<ArrayBuffer> => {
   const token = getAuthToken();
   if (!token) throw new Error('Authentication required. Please log in again.');
-  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/pdf`, {
+  const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/pdf`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });
@@ -657,7 +609,7 @@ export const createStudySessionFromYouTube = async (
   questionsPerTopic: number = 30,
 ): Promise<StudySession> => {
   const token = getAuthToken();
-  const response = await fetch(`${API_URL}/study-sessions/from-youtube`, {
+  const response = await authFetch(`${API_URL}/study-sessions/from-youtube`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ url, title: title || undefined, num_topics: numTopics, questions_per_topic: questionsPerTopic }),
@@ -703,64 +655,73 @@ export const streamQuestionGeneration = (
   }) => void,
   onError: (error: string) => void
 ): (() => void) => {
-  const token = getAuthToken();
-
-  if (!token) {
+  if (!getAuthToken()) {
     onError('Authentication required');
     return () => {};
   }
 
-  // Create EventSource connection (token passed via query param since EventSource doesn't support headers)
-  const eventSource = new EventSource(
-    `${API_URL}/study-sessions/${sessionId}/generate-more-questions-stream?token=${token}`,
-    { withCredentials: true }
-  );
+  // Streamed over fetch rather than EventSource: the token travels in a header,
+  // never in the URL (EventSource cannot send headers), so it reaches no log.
+  const controller = new AbortController();
+  console.log(`🔌 SSE: Connecting to question generation stream for session ${sessionId}`);
 
-  console.log(`🔌 SSE: Connected to question generation stream for session ${sessionId}`);
-
-  // Handle 'start' event
-  eventSource.addEventListener('start', (event) => {
-    const data = JSON.parse(event.data);
-    console.log(`🚀 SSE: Generation started - ${data.totalRemaining} topics remaining`);
-  });
-
-  // Handle 'batch_start' event
-  eventSource.addEventListener('batch_start', (event) => {
-    const data = JSON.parse(event.data);
-    console.log(`⏳ SSE: Batch ${data.batchNumber} starting - ${data.topicsInBatch} topics in this batch`);
-  });
-
-  // Handle 'progress' event (MAIN EVENT - triggers UI update)
-  eventSource.addEventListener('progress', (event) => {
-    const data = JSON.parse(event.data);
-    console.log(`📊 SSE: Batch ${data.batchNumber} complete - Generated ${data.generated} topics (${data.totalQuestions}Q, ${data.totalFlashcards}F). Remaining: ${data.remaining}`);
-
-    // Call the progress callback with the data
-    onProgress(data);
-
-    console.log('🔄 UI refreshed with new questions from SSE');
-  });
-
-  // Handle 'complete' event
-  eventSource.addEventListener('complete', (event) => {
-    const data = JSON.parse(event.data);
-    console.log(`🎉 SSE: Generation complete! Total: ${data.totalQuestions}Q, ${data.totalFlashcards}F in ${data.batchesCompleted} batches`);
-
-    eventSource.close();
-    onComplete(data);
-  });
-
-  // Handle 'error' event
-  eventSource.addEventListener('error', (event) => {
-    console.error('❌ SSE: Stream connection failed', event);
-    eventSource.close();
-    onError('Stream connection failed');
-  });
+  (async () => {
+    let finished = false;
+    try {
+      const res = await authFetch(`${API_URL}/study-sessions/${sessionId}/generate-more-questions-stream`, {
+        headers: { Accept: 'text/event-stream' },
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        onError(`Stream connection failed (${res.status})`);
+        return;
+      }
+      await readSSE(res, (event, raw) => {
+        if (finished) return;
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          return;
+        }
+        switch (event) {
+          case 'start':
+            console.log(`🚀 SSE: Generation started - ${data.totalRemaining} topics remaining`);
+            break;
+          case 'batch_start':
+            console.log(`⏳ SSE: Batch ${data.batchNumber} starting - ${data.topicsInBatch} topics in this batch`);
+            break;
+          case 'progress':
+            console.log(`📊 SSE: Batch ${data.batchNumber} complete - Generated ${data.generated} topics (${data.totalQuestions}Q, ${data.totalFlashcards}F). Remaining: ${data.remaining}`);
+            onProgress(data as unknown as Parameters<typeof onProgress>[0]);
+            break;
+          case 'complete':
+            console.log(`🎉 SSE: Generation complete! Total: ${data.totalQuestions}Q, ${data.totalFlashcards}F in ${data.batchesCompleted} batches`);
+            finished = true;
+            controller.abort();
+            onComplete(data as unknown as Parameters<typeof onComplete>[0]);
+            break;
+          case 'error':
+            console.error('❌ SSE: Server reported an error', data);
+            finished = true;
+            controller.abort();
+            onError(typeof data?.error === 'string' ? data.error : 'Stream connection failed');
+            break;
+        }
+      });
+      if (!finished && !controller.signal.aborted) onError('Stream ended early');
+    } catch (error) {
+      if (!finished && !controller.signal.aborted) {
+        console.error('❌ SSE: Stream connection failed', error);
+        onError('Stream connection failed');
+      }
+    }
+  })();
 
   // Return cleanup function
   return () => {
     console.log('🔌 SSE: Closing connection');
-    eventSource.close();
+    controller.abort();
   };
 };
 
@@ -785,7 +746,7 @@ export const generateAllRemainingQuestions = async (
     console.log(`🔄 Starting automatic question generation for session ${sessionId}`);
 
     while (hasMore) {
-      const response = await fetch(`${API_URL}/study-sessions/${sessionId}/generate-more-questions`, {
+      const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/generate-more-questions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -843,7 +804,7 @@ export const updateTopicProgress = async (
       return; // Gracefully fail - user can continue working offline
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicId}/progress`, {
+    const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicId}/progress`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -917,7 +878,7 @@ export const updateTopicDetails = async (
   updatedAt?: number | null;
 }> => {
   const token = getAuthToken();
-  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}`, {
+  const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(patch),
@@ -935,7 +896,7 @@ export const updateTopicDetails = async (
  */
 export const generateTopicNotes = async (sessionId: string, topicDbId: number, force = false): Promise<string> => {
   const token = getAuthToken();
-  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes${force ? '?force=1' : ''}`, {
+  const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes${force ? '?force=1' : ''}`, {
     method: 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   });
@@ -957,7 +918,7 @@ export const generateSectionQuiz = async (
   opts: { count?: number; force?: boolean } = {},
 ): Promise<Question[]> => {
   const token = getAuthToken();
-  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/quiz`, {
+  const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/quiz`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ count: opts.count ?? 8, force: opts.force ?? false }),
@@ -989,7 +950,7 @@ const httpError = (message: string, status: number): HttpError => Object.assign(
  */
 export const getQuestionHint = async (sessionId: string, topicDbId: number, questionId: string): Promise<string> => {
   const token = getAuthToken();
-  const response = await fetch(
+  const response = await authFetch(
     `${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/questions/${encodeURIComponent(questionId)}/hint`,
     {
       method: 'POST',
@@ -1020,7 +981,7 @@ export const reviseTopicNotes = async (
   instruction: string,
 ): Promise<{ notes: string; noteChecks: NoteCheck[] | null }> => {
   const token = getAuthToken();
-  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes/revise`, {
+  const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/notes/revise`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ instruction }),
@@ -1051,7 +1012,7 @@ export const generateSectionFlashcards = async (
   opts: { count?: number; force?: boolean } = {},
 ): Promise<Flashcard[]> => {
   const token = getAuthToken();
-  const response = await fetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/flashcards/generate`, {
+  const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/topics/${topicDbId}/flashcards/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ count: opts.count ?? 8, force: opts.force ?? false }),
@@ -1078,7 +1039,7 @@ export const updateUserXP = async (xpToAdd: number): Promise<void> => {
       return; // Gracefully fail
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/user/xp`, {
+    const response = await authFetch(`${API_URL}/study-sessions/user/xp`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -1112,7 +1073,7 @@ export const deleteStudySession = async (sessionId: string): Promise<void> => {
       throw new Error('Authentication required');
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/${sessionId}`, {
+    const response = await authFetch(`${API_URL}/study-sessions/${sessionId}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -1146,7 +1107,7 @@ export const archiveStudySession = async (sessionId: string): Promise<void> => {
       throw new Error('Authentication required');
     }
 
-    const response = await fetch(`${API_URL}/study-sessions/${sessionId}/archive`, {
+    const response = await authFetch(`${API_URL}/study-sessions/${sessionId}/archive`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 /**
  * Folder API functions for organizing study sessions
  */
+import { authFetch } from './authFetch';
 import { Folder } from './api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -21,7 +22,7 @@ export async function createFolder(name: string, color: string = '#3B82F6', icon
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/folders`, {
+  const response = await authFetch(`${API_URL}/folders`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -47,7 +48,7 @@ export async function updateFolder(folderId: number, updates: Partial<Folder>): 
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/folders/${folderId}`, {
+  const response = await authFetch(`${API_URL}/folders/${folderId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -73,7 +74,7 @@ export async function deleteFolder(folderId: number): Promise<void> {
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/folders/${folderId}`, {
+  const response = await authFetch(`${API_URL}/folders/${folderId}`, {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -95,7 +96,7 @@ export async function moveSessionToFolder(sessionId: string, folderId: number): 
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/folders/${folderId}/sessions/${sessionId}`, {
+  const response = await authFetch(`${API_URL}/folders/${folderId}/sessions/${sessionId}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -117,7 +118,7 @@ export async function removeSessionFromFolder(sessionId: string, folderId: numbe
     throw new Error('Not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/folders/${folderId}/sessions/${sessionId}`, {
+  const response = await authFetch(`${API_URL}/folders/${folderId}/sessions/${sessionId}`, {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,

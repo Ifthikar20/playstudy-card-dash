@@ -8,6 +8,7 @@
  *  - checking ANY section's notes for mistakes, and answering or fixing what the tutor
  *    asked about  (/api/study-sessions/{sid}/topics/{tid}/notes/..., app/api/section_checks.py)
  */
+import { authFetch } from "./authFetch";
 import { authService } from "./authService";
 import { forgetCachedSession } from "./api";
 
@@ -62,21 +63,21 @@ async function fail(res: Response, fallback: string): Promise<never> {
 /** A new, empty note: a one-section study session. Returns the same shape as
  *  GET /api/study-sessions/{id}, so it can go straight into the store. */
 export async function createNote(title = ""): Promise<{ id: string; title: string } & Record<string, unknown>> {
-  const res = await fetch(`${API_URL}/notes`, { method: "POST", headers: headers(), body: JSON.stringify({ title }) });
+  const res = await authFetch(`${API_URL}/notes`, { method: "POST", headers: headers(), body: JSON.stringify({ title }) });
   if (!res.ok) await fail(res, "Could not start a new note");
   return await res.json();
 }
 
 /** Rename a note — the session, its chapter and its one section keep the same title. */
 export async function renameNote(id: string, title: string): Promise<{ id: string; title: string; updatedAt: number | null }> {
-  const res = await fetch(`${API_URL}/notes/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify({ title }) });
+  const res = await authFetch(`${API_URL}/notes/${id}`, { method: "PATCH", headers: headers(), body: JSON.stringify({ title }) });
   if (!res.ok) await fail(res, "Could not rename that note");
   forgetCachedSession(id);
   return await res.json();
 }
 
 export async function deleteNote(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/notes/${id}`, { method: "DELETE", headers: headers() });
+  const res = await authFetch(`${API_URL}/notes/${id}`, { method: "DELETE", headers: headers() });
   if (!res.ok && res.status !== 404) await fail(res, "Could not delete that note");
 }
 
@@ -87,14 +88,14 @@ const checksUrl = (sessionId: string, topicDbId: number) =>
 
 /** Read a section back and ask about anything that looks wrong. */
 export async function checkSection(sessionId: string, topicDbId: number): Promise<CheckResult> {
-  const res = await fetch(`${checksUrl(sessionId, topicDbId)}/check`, { method: "POST", headers: headers() });
+  const res = await authFetch(`${checksUrl(sessionId, topicDbId)}/check`, { method: "POST", headers: headers() });
   if (!res.ok) await fail(res, "Couldn't check these notes just now");
   forgetCachedSession(sessionId);
   return await res.json();
 }
 
 export async function getChecks(sessionId: string, topicDbId: number): Promise<NoteCheck[]> {
-  const res = await fetch(`${checksUrl(sessionId, topicDbId)}/checks`, { headers: headers() });
+  const res = await authFetch(`${checksUrl(sessionId, topicDbId)}/checks`, { headers: headers() });
   if (!res.ok) await fail(res, "Couldn't load the questions about these notes");
   const body = await res.json();
   return body.checks ?? [];
@@ -102,7 +103,7 @@ export async function getChecks(sessionId: string, topicDbId: number): Promise<N
 
 /** Record what they said back: kept it, fixed it themselves, or moved on. */
 export async function answerCheck(sessionId: string, topicDbId: number, checkId: string, answer: CheckAnswer): Promise<NoteCheck[]> {
-  const res = await fetch(`${checksUrl(sessionId, topicDbId)}/checks/${checkId}`, {
+  const res = await authFetch(`${checksUrl(sessionId, topicDbId)}/checks/${checkId}`, {
     method: "PATCH",
     headers: headers(),
     body: JSON.stringify({ answer }),
@@ -121,7 +122,7 @@ export async function fixCheck(
   checkId: string,
   replacement?: string,
 ): Promise<{ notes: string; checks: NoteCheck[] }> {
-  const res = await fetch(`${checksUrl(sessionId, topicDbId)}/checks/${checkId}/fix`, {
+  const res = await authFetch(`${checksUrl(sessionId, topicDbId)}/checks/${checkId}/fix`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(replacement == null ? {} : { replacement }),
@@ -133,6 +134,6 @@ export async function fixCheck(
 
 /** Forget every question about a section. */
 export async function clearChecks(sessionId: string, topicDbId: number): Promise<void> {
-  const res = await fetch(`${checksUrl(sessionId, topicDbId)}/checks`, { method: "DELETE", headers: headers() });
+  const res = await authFetch(`${checksUrl(sessionId, topicDbId)}/checks`, { method: "DELETE", headers: headers() });
   if (!res.ok && res.status !== 404) await fail(res, "Couldn't clear those questions");
 }

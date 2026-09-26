@@ -3,6 +3,7 @@
  * Everything the dashboard counts (answers, accuracy, study time, XP) starts
  * as one of these calls.
  */
+import { authFetch } from "./authFetch";
 import { authService } from "./authService";
 import { FILL_MAX } from "@/lib/quiz/grade";
 import type { QuestionKind, QuizResponse } from "@/lib/quiz/types";
@@ -52,7 +53,7 @@ function headers(): Record<string, string> {
 /** Batch-record answered questions. Resolves to the number stored. */
 export async function recordAnswers(answers: AnswerEventIn[]): Promise<number> {
   if (answers.length === 0 || !authService.getToken()) return 0;
-  const res = await fetch(`${API_URL}/activity/answers`, {
+  const res = await authFetch(`${API_URL}/activity/answers`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ answers }),
@@ -93,7 +94,7 @@ export interface ActivityDays {
 async function getOrNull<T>(path: string): Promise<T | null> {
   if (!authService.getToken()) return null;
   try {
-    const res = await fetch(`${API_URL}${path}`, { headers: headers() });
+    const res = await authFetch(`${API_URL}${path}`, { headers: headers() });
     return res.ok ? ((await res.json()) as T) : null;
   } catch {
     return null; // unreachable server: the card shows its empty state instead of an uncaught error
