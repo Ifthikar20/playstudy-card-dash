@@ -1,4 +1,4 @@
-import type { AvatarId } from "./avatars";
+import type { AvatarDef, AvatarId, AvatarShape } from "./avatars";
 
 /*
   The characters drawn on each avatar's badge, as SVG markup in a 64x64 box.
@@ -6,7 +6,8 @@ import type { AvatarId } from "./avatars";
   avatar's palette; the eyes are wrapped in .av-eyes and the mouth in .av-mouth
   so CSS can blink and talk. Everything stays inside the circle r=22 around
   (32, 32), because some badges are hexagons or octagons. Original characters,
-  drawn for AnotherNote in a flat badge style.
+  drawn for AnotherNote in a flat badge style. GuideAvatar draws all this on the page;
+  lib/guide/cursor.ts draws the same into the mouse cursor, so nothing here needs React.
 */
 
 export const AVATAR_ART: Partial<Record<AvatarId, string>> = {
@@ -98,3 +99,25 @@ export const AVATAR_ART: Partial<Record<AvatarId, string>> = {
 <polygon points="39.6,42.1 36.2,42.4 37.9,44.3" fill="WHITE" stroke="none"/>
 </g>`,
 };
+
+/** The badge behind each character. */
+export const BADGE_PATHS: Record<AvatarShape, string> = {
+  // Everything sits in a 64×64 box, with room for the 3px outline.
+  hexagon: "M32 3.5 L56.7 17.75 L56.7 46.25 L32 60.5 L7.3 46.25 L7.3 17.75 Z",
+  circle: "M32 3.5 A28.5 28.5 0 1 1 31.99 3.5 Z",
+  squircle: "M20 4 H44 C54 4 60 10 60 20 V44 C60 54 54 60 44 60 H20 C10 60 4 54 4 44 V20 C4 10 10 4 20 4 Z",
+  octagon: "M21.6 4 H42.4 L60 21.6 V42.4 L42.4 60 H21.6 L4 42.4 V21.6 Z",
+  shield: "M32 3.5 L57 11 V31 C57 46 46 55.5 32 60.5 C18 55.5 7 46 7 31 V11 Z",
+};
+
+/** The pointer's arrow, in a 28×28 box; its tip, at (3, 3), is the point it points with. */
+export const ARROW_PATH = "M3 3 L25 11.4 L14.6 14.6 L11.4 25 Z";
+
+/** The art uses colour tokens; swap in this avatar's palette. */
+export function paint(markup: string, def: AvatarDef): string {
+  return markup
+    .replace(/\bDARK\b/g, def.palette.dark)
+    .replace(/\bBASE\b/g, def.palette.base)
+    .replace(/\bLIGHT\b/g, def.palette.light)
+    .replace(/\bWHITE\b/g, "#ffffff");
+}

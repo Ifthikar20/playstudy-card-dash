@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "build:test": "vite build --mode test",
     "build:off": "vite build --mode off",
-    "check:safety": "node --experimental-strip-types scripts/notes-safety-check.mts"
+    "check:safety": "node --experimental-strip-types scripts/notes-safety-check.mts",
+    "test": "node --test \"scripts/tests/*.test.ts\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
