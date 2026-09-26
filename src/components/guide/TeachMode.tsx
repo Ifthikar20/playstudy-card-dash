@@ -1814,7 +1814,6 @@ ${visualToMarkdown(spec)}`.trimStart();
     cancelAutoScroll();
     releaseBoard();
     stopListening(false);
-    hostRef.current?.classList.remove("guide-driving");
     onClose();
   };
 
@@ -1948,8 +1947,7 @@ ${visualToMarkdown(spec)}`.trimStart();
       recognizer.current?.abort();
       recording.current?.cancel();
       window.clearInterval(presence);
-      hostRef.current?.classList.remove("guide-driving");
-    };
+      };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2021,33 +2019,6 @@ ${visualToMarkdown(spec)}`.trimStart();
     };
     host.addEventListener("click", onClick);
     return () => host.removeEventListener("click", onClick);
-  }, [hostRef]);
-
-  // While the AI is talking and the mouse is still, hide the real cursor so the
-  // pink one reads as "in control". Any movement brings it straight back.
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    let timer: number | undefined;
-    const driving = () => phaseRef.current === "speaking" || phaseRef.current === "answering";
-    const arm = () => {
-      host.classList.remove("guide-driving");
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (driving()) host.classList.add("guide-driving");
-      }, 1800);
-    };
-    arm();
-    window.addEventListener("pointermove", arm, { passive: true });
-    const tick = window.setInterval(() => {
-      if (!driving()) host.classList.remove("guide-driving");
-    }, 500);
-    return () => {
-      window.removeEventListener("pointermove", arm);
-      if (timer) window.clearTimeout(timer);
-      window.clearInterval(tick);
-      host.classList.remove("guide-driving");
-    };
   }, [hostRef]);
 
   // Keyboard: space play/pause · ←/→ steps · Esc cancels the mic, otherwise closes.

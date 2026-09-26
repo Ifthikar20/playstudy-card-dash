@@ -347,18 +347,21 @@ html:has(.lp) #root {
   transform-origin: left center;
   animation: guide-underline 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.guide-driving, .guide-driving * { cursor: none !important; }
+/* (The lesson used to hide the real cursor while the tutor spoke and the mouse was still.
+   It doesn't any more: a cursor that vanishes is the one thing a page must not do.) */
 
 /* The tutor's pointer as the student's own (src/components/guide/IdlePointer.tsx, Full
-   Study). The page hides the system cursor; controls bring it back, so a button still
-   looks like a button and a field like a field. A right-click turns the page into an
-   ordinary one for highlighting (.tutor-highlight): text cursor, selectable notes. */
-.tutor-pointer { cursor: none; }
+   Study): the page's cursor is the tutor's arrow and avatar as a CSS cursor image
+   (--tutor-cursor, set by the component), which the browser draws over everything - so it
+   is never covered by a PDF or a board, and never gone. Controls keep their own cursor, so a
+   button still looks like a button and a field like a field. A right-click turns the page
+   into an ordinary one for highlighting (.tutor-highlight): text cursor, selectable notes. */
+.tutor-pointer { cursor: var(--tutor-cursor, auto); }
 .tutor-pointer :is(a, button, [role="button"], [role="radio"], [role="tab"], [role="menuitem"], summary, label, .sticky-selection) { cursor: pointer; }
 .tutor-pointer :is(input, textarea, select, [contenteditable="true"]) { cursor: auto; }
 .tutor-highlight [data-guide-notes] { cursor: text; user-select: text; }
 .tutor-hint {
-  position: absolute; left: 36px; top: 30px; white-space: nowrap;
+  position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform;
   padding: 6px 11px; border-radius: 9999px;
   border: 1px solid hsl(var(--border)); background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
   font-size: 12px; font-weight: 600; box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
@@ -375,7 +378,6 @@ html:has(.lp) #root {
 .tutor-highlight-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
 .tutor-highlight-badge[data-kind="editing"]::before { background: #3b82f6; }
 /* ...except an open line of notes, which must keep its I-beam and caret. */
-.guide-driving [data-an-input] { cursor: text !important; }
 .guide-pop { animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1); }
 .guide-glow { animation: guide-glow 1.6s ease-in-out infinite; }
 .guide-mic-live { animation: guide-mic 1.2s ease-in-out infinite; }
