@@ -66,17 +66,15 @@ export function readVoicePref(): StoredVoice | null {
   return null;
 }
 
-/** The two voices on offer: the natural ones when the server has them, else the browser's own. */
+/** The two natural voices when the server has them, and none otherwise: the browser's own
+ *  voices are never offered (Speechify is the tutor's only voice; without it the lines are
+ *  captions). `browser` is kept for the stand-in a natural voice's gender is matched to. */
 export function voiceChoices(server: GuideVoice[], browser: SpeechSynthesisVoice[]): VoiceOption[] {
+  void browser;
   if (server.length) {
     return server.map((v) => ({ id: `server:${v.id}`, name: v.name, gender: v.gender ?? null, desc: v.desc }));
   }
-  return browserVoicePair(browser).map((v) => ({
-    id: `browser:${v.name}`,
-    name: browserVoiceName(v.name),
-    gender: voiceGender(v.name),
-    desc: "your device's own voice",
-  }));
+  return [];
 }
 
 /** The browser voice behind a choice. For a natural voice it's the stand-in if that voice

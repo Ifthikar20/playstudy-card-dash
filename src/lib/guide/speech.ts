@@ -4,9 +4,9 @@
  *  - Narrator: text → speech. The preferred path is the backend's natural
  *    neural voice (`/guide/tts`): each sentence is fetched as a small MP3 clip,
  *    upcoming sentences are prefetched so playback has no gaps, and the speed
- *    control is applied client-side. If that voice is unavailable it falls back
- *    to the browser's own speechSynthesis, and with no synthesizer at all it
- *    paces the captions so the walkthrough still works silently.
+ *    control is applied client-side. It is the tutor's only voice: when a clip
+ *    can't be had, that line's caption is paced silently and the next line asks
+ *    the server again. The browser's own voices are never used.
  *  - Speech → text: the on-device recognizer where the browser has one
  *    (Chrome/Edge/Safari), else a short MediaRecorder clip the backend
  *    transcribes with local whisper. `sttSupport()` tells you which.
@@ -368,8 +368,6 @@ export class Narrator {
 
   private rateValue = 1;
   private synth?: SynthFn;
-  /** Set once the natural voice has failed for good; see `one()`. */
-  private serverDown = false;
   private clips = new Map<string, Promise<Blob>>();
   private gen = 0;
   private keep: SpeechSynthesisUtterance[] = []; // Chrome GCs utterances mid-speech otherwise
@@ -424,13 +422,12 @@ export class Narrator {
   }
 
   get serverActive(): boolean {
-    return !!(this.serverVoice && this.synth) && !this.serverDown;
+    return !!(this.serverVoice && this.synth);
   }
 
-  /** Called when the student picks a voice: give the natural one another chance. */
-  resetServer(): void {
-    this.serverDown = false;
-  }
+  /** Kept for callers: a failed line no longer takes the natural voice away, so there is
+   *  nothing to reset when the student picks one. */
+  resetServer(): void {}
 
   /** Warm the clip cache for text that will be spoken soon. */
   prefetch(text: string, sentences = 1): void {
@@ -495,11 +492,11 @@ export class Narrator {
   }
 
   /*
-    One failed clip is usually a blip rather than an outage, so try the sentence
-    again before giving up on the natural voice - and once we have given up, stay
-    on the browser voice for the rest of the lesson instead of flipping back a
-    minute later. A narration that changes voice halfway through is harder to
-    follow than one plain voice all the way.
+    One failed clip is usually a blip rather than an outage, so the sentence is tried
+    again; if it still fails, its caption is paced silently and the next sentence asks
+    the server again. The browser's own voices are never used: Speechify is the tutor's
+    only voice, and a tutor that switches to a Microsoft voice mid-lesson is worse than
+    one that goes quiet for a line.
   */
   private async one(sentence: string, gen: number): Promise<boolean> {
     if (this.serverActive) {
@@ -510,9 +507,8 @@ export class Narrator {
           if (gen !== this.gen) return false;
         }
       }
-      this.serverDown = true;
     }
-    return this.oneBrowser(sentence, gen);
+    return this.paceCaption(sentence, gen);
   }
 
   private inflight = 0;
@@ -662,88 +658,16 @@ export class Narrator {
     });
   }
 
-  private oneBrowser(sentence: string, gen: number): Promise<boolean> {
-    if (!this.available) {
-      // No synthesizer: pace the caption as if it were being read. `cancel()` settles
-      // it (false) - clearing the timer alone left the line waiting forever.
-      return new Promise((resolve) => {
-        const ms = Math.max(1800, (sentence.split(/\s+/).length * 330) / this.rateValue);
-        this.pacedDone = () => resolve(false);
-        this.timer = window.setTimeout(() => {
-          this.pacedDone = undefined;
-          resolve(gen === this.gen);
-        }, ms);
-      });
-    }
-    if (this.disposed) return Promise.resolve(false);
+  /** No clip for this line: pace its caption as if it were being read. `cancel()` settles
+   *  it (false) - clearing the timer alone left the line waiting forever. */
+  private paceCaption(sentence: string, gen: number): Promise<boolean> {
     return new Promise((resolve) => {
-      const synth = window.speechSynthesis;
-      let current: SpeechSynthesisUtterance | null = null;
-      let from = 0; // where in the sentence the current utterance starts
-      let reached = 0; // the last word boundary the voice reported, in the whole sentence
-      let startedAt = Date.now();
-      let settled = false;
-      const finish = (ok: boolean) => {
-        if (settled) return;
-        settled = true;
-        window.clearInterval(guard);
-        if (this.rerate === rerate) this.rerate = undefined;
-        this.keep = this.keep.filter((k) => k !== current);
-        resolve(ok && gen === this.gen);
-      };
-      const say = (start: number) => {
-        const u = new SpeechSynthesisUtterance(sentence.slice(start));
-        u.rate = this.rateValue * (this.tone?.rate ?? 1);
-        u.pitch = this.pitch * (this.tone?.pitch ?? 1);
-        if (this.voice) {
-          u.voice = this.voice;
-          u.lang = this.voice.lang;
-        }
-        // Only the utterance now speaking may end the sentence; one replaced by a speed
-        // change reports "interrupted" as it goes, and that must be ignored.
-        u.onend = () => u === current && finish(true);
-        u.onerror = (e) => u === current && finish(e.error !== "interrupted" && e.error !== "canceled");
-        u.onboundary = (e) => {
-          if (u === current) reached = start + e.charIndex;
-        };
-        this.keep = this.keep.filter((k) => k !== current);
-        this.keep.push(u);
-        current = u;
-        from = start;
-        startedAt = Date.now();
-        if (synth.paused) synth.resume();
-        synth.speak(u);
-      };
-      // New speed mid-sentence: stop, and carry on from the word it was on. A voice that
-      // doesn't report word positions starts the sentence again if it has only just
-      // begun, else the new speed waits for the next sentence.
-      const rerate = () => {
-        if (settled || gen !== this.gen) return;
-        const at = reached > from ? reached : Date.now() - startedAt < 1500 ? from : -1;
-        if (at < 0) return;
-        this.keep = this.keep.filter((k) => k !== current);
-        current = null; // the one being cut off can't finish the sentence now
-        synth.cancel();
-        window.setTimeout(() => {
-          if (settled || gen !== this.gen) return;
-          try {
-            say(at);
-          } catch {
-            finish(true);
-          }
-        }, 60); // Chrome drops a speak() that comes straight after cancel()
-      };
-      this.rerate = rerate;
-      // Chrome occasionally never fires onend; poll so the walkthrough never stalls.
-      const guard = window.setInterval(() => {
-        if (gen !== this.gen) return finish(false);
-        if (current && Date.now() - startedAt > 800 && !synth.speaking && !synth.pending) finish(true);
-      }, 300);
-      try {
-        say(0);
-      } catch {
-        finish(true);
-      }
+      const ms = Math.max(1800, (sentence.split(/\s+/).length * 330) / this.rateValue);
+      this.pacedDone = () => resolve(false);
+      this.timer = window.setTimeout(() => {
+        this.pacedDone = undefined;
+        resolve(gen === this.gen);
+      }, ms);
     });
   }
 }
