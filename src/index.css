@@ -350,23 +350,6 @@ html:has(.lp) #root {
 /* (The lesson used to hide the real cursor while the tutor spoke and the mouse was still.
    It doesn't any more: a cursor that vanishes is the one thing a page must not do.) */
 
-/* The tutor's pointer as the student's own (src/components/guide/IdlePointer.tsx, Full
-   Study): the page's cursor is the tutor's arrow and avatar as a CSS cursor image
-   (--tutor-cursor, set by the component), which the browser draws over everything - so it
-   is never covered by a PDF or a board, and never gone. Controls keep their own cursor, so a
-   button still looks like a button and a field like a field. A right-click turns the page
-   into an ordinary one for highlighting (.tutor-highlight): text cursor, selectable notes. */
-.tutor-pointer { cursor: var(--tutor-cursor, auto); }
-.tutor-pointer :is(a, button, [role="button"], [role="radio"], [role="tab"], [role="menuitem"], summary, label) { cursor: pointer; }
-.tutor-pointer :is(input, textarea, select, [contenteditable="true"]) { cursor: auto; }
-.tutor-highlight [data-guide-notes] { cursor: text; user-select: text; }
-.tutor-hint {
-  position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform;
-  padding: 6px 11px; border-radius: 9999px;
-  border: 1px solid hsl(var(--border)); background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
-  font-size: 12px; font-weight: 600; box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
-  animation: guide-pop 0.2s ease-out;
-}
 .tutor-highlight-badge {
   position: fixed; top: 14px; left: 50%; z-index: 150; transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 9999px;
@@ -2191,7 +2174,7 @@ body:has([data-study-dialog]) [data-guide-layer] { visibility: hidden; }
 /* ---- Glossy pill: "Teach me" and the tutor's voice button -------------------- */
 /* The old "download for Mac" button: a light gradient in one tint, a crisp outline a
    shade darker, a white sheen over the top half and a soft shadow in the tint. It marks
-   the controls that start or steer a lesson (a click on a line; the voice button in the
+   the controls that start or steer a lesson (TeachMeButton; the voice button in the
    lesson's dock). --glossy-tint is an "r, g, b" triple like --guide-accent, so the dock
    can hand it the tutor's colour; the default is the reference's blue, set through
    :where() so any class on the same button can override it. It is a light object on

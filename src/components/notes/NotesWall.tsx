@@ -88,7 +88,7 @@ export function NotesWall() {
           <span className="min-w-0">
             <span className="block text-sm font-medium">Start a note of your own</span>
             <span className="block text-xs text-muted-foreground">
-              Type it or talk it out — then click a line and your tutor teaches it back, or quizzes you from the Quiz button at the top.
+              Type it or talk it out — then press Teach me and your tutor teaches it back, or quizzes you from the Quiz button at the top.
             </span>
           </span>
         </button>

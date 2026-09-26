@@ -7,7 +7,7 @@ import type { AvatarDef, AvatarId, AvatarShape } from "./avatars";
   so CSS can blink and talk. Everything stays inside the circle r=22 around
   (32, 32), because some badges are hexagons or octagons. Original characters,
   drawn for AnotherNote in a flat badge style. GuideAvatar draws all this on the page;
-  lib/guide/cursor.ts draws the same into the mouse cursor, so nothing here needs React.
+  this is plain data with no React in it, so anything else can draw the same.
 */
 
 export const AVATAR_ART: Partial<Record<AvatarId, string>> = {

@@ -16,7 +16,7 @@ import { GuideBot, type BotKind, type BotMood } from "./GuideBot";
   av-mouth classes for that. The "pixel" avatar is the original pixel-art tutor.
 
   The badge shapes, the arrow and the colour painter live in lib/guide/avatarArt.ts,
-  so the mouse cursor (lib/guide/cursor.ts) can draw the same thing without React.
+  plain data with no React in it, so anything else can draw the same thing.
 */
 
 export function GuideAvatar({

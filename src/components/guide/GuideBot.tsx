@@ -15,8 +15,8 @@ import { BOT_PALETTE, botRuns } from "@/lib/guide/botArt";
   it's listening to you and looks away while it thinks. `mood` drives all of it
   from CSS (see .guide-bot in index.css); nothing here runs per frame.
 
-  The pixel rows and palettes live in lib/guide/botArt.ts, so the mouse cursor
-  (lib/guide/cursor.ts) can draw the same figure without React.
+  The pixel rows and palettes live in lib/guide/botArt.ts, plain data with no React
+  in it, so anything else can draw the same figure.
 */
 
 export type BotKind = "female" | "male" | "neutral";

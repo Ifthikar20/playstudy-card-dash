@@ -3,8 +3,8 @@ import type { BotKind } from "../../components/guide/GuideBot";
 /*
   The pixel tutor's art: one string per row of 20 pixels, per character, and the
   colours each letter stands for. GuideBot draws it on the page (and animates it
-  from CSS); lib/guide/cursor.ts draws the same figure into the mouse cursor, so
-  the data lives here, away from React.
+  from CSS); the data lives here, away from React, so anything else can draw the
+  same figure.
 */
 
 /* Each string is one row of 20 pixels:
