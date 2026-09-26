@@ -299,7 +299,9 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
   useEffect(() => () => window.clearTimeout(clickTimer.current), []);
   const onPointerDownCapture = () => {
     const sel = window.getSelection();
-    selectedAtDown.current = !!sel && !sel.isCollapsed;
+    // Spent clicks: one that lets a selection go, and one that closes a writing surface
+    // open elsewhere on the page (the way out of editing is a click outside it).
+    selectedAtDown.current = (!!sel && !sel.isCollapsed) || !!document.querySelector("textarea[data-an-input]");
   };
   const onClick = (e: React.MouseEvent) => {
     const t = e.target as HTMLElement | null;

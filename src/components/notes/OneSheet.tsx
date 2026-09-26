@@ -777,7 +777,7 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
       // Only once the words are saved. If they were refused (half a <mark>) or
       // the request failed, closing would throw them away; the sheet stays, and
       // the status line below already says why.
-      void flushRef.current().then((ok) => ok && onClose());
+      finish();
       return;
     }
     const mod = e.metaKey || e.ctrlKey;
@@ -959,6 +959,28 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
 
   /* No dependency list: `insertText` and `focusAt` close over this render's
      helpers, and the handle is only an object — rebuilding it costs nothing. */
+  /** Back to reading, once the words are saved: a refused (half a <mark>) or failed save
+   *  keeps the sheet, and the status line below already says why. Esc, the Done button and
+   *  a click outside the sheet all come here. */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const finish = () => void flushRef.current().then((ok) => ok && onCloseRef.current());
+  const sheetEl = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The mouse's way out (Esc is the keyboard's). The sheet's own menus and status line
+    // (data-an-chrome), the app's dialogs and pop-ups, the sticky bubble and the tutor's
+    // layer are not "outside": a click on them is part of writing, not leaving it.
+    const onDown = (e: PointerEvent) => {
+      const t = e.target;
+      const root = sheetEl.current;
+      if (!(t instanceof Element) || !root || root.contains(t)) return;
+      if (t.closest("[data-an-chrome],[role='dialog'],[role='status'],[role='region'],[data-radix-popper-content-wrapper],.sticky-selection,[data-guide-layer]")) return;
+      finish();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, []);
+
   useImperativeHandle(handleRef, () => ({
     external,
     flush,
@@ -986,7 +1008,7 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
           </button>
         </div>
       )}
-      <div className="an-sheet relative mx-auto max-w-[78ch]" data-guide-notes={guideKey}>
+      <div ref={sheetEl} className="an-sheet relative mx-auto max-w-[78ch]" data-guide-notes={guideKey}>
         <div ref={inkRef} data-an-ink="" aria-hidden="true" />
         {/* Under the textarea, which is transparent, so it shows through and the
             caret sits on its first letter — the way a native placeholder looks.
@@ -1073,7 +1095,18 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
             </button>
           </span>
         ) : interim ? null : (
-          <span>Writing · type / to add a block · saves itself · Esc to go back to reading</span>
+          <span>Writing · type / to add a block · saves itself · click outside, Done or Esc to go back to reading</span>
+        )}
+        {!busy && (
+          <button
+            type="button"
+            className="ml-auto rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={finish}
+            title="Back to reading (or click outside, or press Esc)"
+          >
+            Done
+          </button>
         )}
       </div>
       {editing && (

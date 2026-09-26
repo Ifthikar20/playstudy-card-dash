@@ -1019,7 +1019,8 @@ function FullStudyScreen() {
     "a,button,input,textarea,select,label,summary,[role='button'],[role='radio'],[role='tab'],[data-an-chrome],.sticky-selection,[data-guide-layer]";
   const onPagePointerDownCapture = () => {
     const sel = window.getSelection();
-    selectionAtDown.current = !!sel && !sel.isCollapsed;
+    // Spent clicks: one that lets a selection go, and one that closes an open writing surface.
+    selectionAtDown.current = (!!sel && !sel.isCollapsed) || !!document.querySelector("textarea[data-an-input]");
   };
   const onPageClick = (e: ReactMouseEvent) => {
     if (guideOpen || highlightMode) return;
