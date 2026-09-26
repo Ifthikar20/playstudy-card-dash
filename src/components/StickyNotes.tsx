@@ -247,6 +247,61 @@ function inkRectOf(input: HTMLTextAreaElement, start: number, end: number): DOMR
   }
 }
 
+/**
+ * The moment a passage is kept: a small sticky lifts off the selection, says it's being
+ * added, and flies to the session's Sticky notes pill (data-sticky-target), which bumps
+ * as it lands. It runs alongside the save, so the page answers at once; a save that fails
+ * still shows its toast. With reduced motion the caption shows in place and nothing flies.
+ */
+export function animateStickyAdd(from: { x: number; y: number }, text: string): Promise<void> {
+  if (typeof document === "undefined") return Promise.resolve();
+  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const target = document.querySelector<HTMLElement>("[data-sticky-target]");
+  const el = document.createElement("div");
+  el.className = "sticky-fly";
+  const card = document.createElement("div");
+  card.className = "sticky-fly-card";
+  card.textContent = text.length > 90 ? `${text.slice(0, 88).trimEnd()}…` : text;
+  const label = document.createElement("div");
+  label.className = "sticky-fly-label";
+  label.textContent = "Adding to your sticky notes…";
+  el.append(card, label);
+  document.body.appendChild(el);
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  const x0 = Math.min(window.innerWidth - w - 8, Math.max(8, from.x - w / 2));
+  const y0 = Math.max(8, from.y - h - 6);
+  el.style.transform = `translate(${x0}px, ${y0}px)`;
+  const bump = () => {
+    if (!target) return;
+    target.classList.remove("sticky-target-bump");
+    void target.offsetWidth; // restart the animation when notes are kept back to back
+    target.classList.add("sticky-target-bump");
+    window.setTimeout(() => target.classList.remove("sticky-target-bump"), 700);
+  };
+  const done = () => {
+    el.remove();
+    bump();
+  };
+  if (reduce || typeof el.animate !== "function") {
+    return new Promise((resolve) => window.setTimeout(() => { done(); resolve(); }, 1300));
+  }
+  const rect = target?.getBoundingClientRect();
+  const x1 = rect ? rect.left + rect.width / 2 - w / 2 : x0;
+  const y1 = rect ? rect.top + rect.height / 2 - h / 2 : y0 - 120;
+  const lift = el.animate(
+    [{ transform: `translate(${x0}px, ${y0 + 14}px) scale(0.7)`, opacity: 0 }, { transform: `translate(${x0}px, ${y0}px) scale(1)`, opacity: 1 }],
+    { duration: 240, easing: "cubic-bezier(0.2, 0.9, 0.3, 1.2)", fill: "forwards" },
+  );
+  return lift.finished
+    .then(() => new Promise<void>((resolve) => window.setTimeout(resolve, 700)))
+    .then(() => el.animate(
+      [{ transform: `translate(${x0}px, ${y0}px) scale(1)`, opacity: 1 }, { transform: `translate(${x1}px, ${y1}px) scale(0.28)`, opacity: 0.15 }],
+      { duration: 640, easing: "cubic-bezier(0.55, 0, 0.25, 1)", fill: "forwards" },
+    ).finished)
+    .then(done, () => el.remove());
+}
+
 export function StickySelection({
   sessionId,
   resolve,
@@ -324,18 +379,20 @@ export function StickySelection({
 
   const keep = async () => {
     const where = resolve(at.notesKey);
+    const { text, x, y } = at;
     setSaving(true);
+    // The bubble goes and the sticky lifts off right away; the save runs underneath it.
+    window.getSelection()?.removeAllRanges();
+    setAt(null);
+    void animateStickyAdd({ x, y }, text);
     try {
       await add({
-        text: at.text,
+        text,
         source: "highlight",
         study_session_id: sessionId,
         topic_id: where?.topicId ?? null,
         section_title: where?.title ?? null,
       });
-      toast({ title: "Kept on a sticky note", description: "It's waiting on your dashboard." });
-      window.getSelection()?.removeAllRanges();
-      setAt(null);
     } catch (e) {
       toast({ title: "Couldn't keep that", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     } finally {

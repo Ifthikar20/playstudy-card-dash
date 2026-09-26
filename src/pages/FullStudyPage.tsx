@@ -1275,12 +1275,13 @@ function FullStudyScreen() {
               <Youtube className="size-4" />
             </a>
           )}
-          {stickyCount > 0 && (
+          {stickyCount > 0 ? (
             <button
               type="button"
+              data-sticky-target
               onClick={() => setShowStickies(true)}
               title="Everything you've kept from this session"
-              className="flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
+              className="sticky-pill-in flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
             >
               <StickyNote className="size-3.5" />
               Sticky notes
@@ -1288,6 +1289,9 @@ function FullStudyScreen() {
                 {stickyCount}
               </span>
             </button>
+          ) : (
+            // Where the pill will appear: the first kept note's sticky flies here.
+            <span data-sticky-target aria-hidden className="h-0 w-0 self-center" />
           )}
           {wrong.length > 0 && (
             <button
