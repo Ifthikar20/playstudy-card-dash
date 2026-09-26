@@ -922,8 +922,10 @@ function FullStudyScreen() {
           index: s.index,
           studyTools: hasStudyTools(s.topic, noteMode),
         }));
-  const pdfLabel = session.fileType === "pptx" ? "Slides" : "PDF";
-  const pdfNoun = pdfLabel === "Slides" ? "slides" : "PDF"; // mid-sentence
+  // A Word or PowerPoint upload is shown as the PDF the server made of it (its own file
+  // isn't something the page can draw), so it is named for what the student uploaded.
+  const pdfLabel = session.fileType === "pptx" ? "Slides" : session.fileType === "docx" ? "Document" : "PDF";
+  const pdfNoun = pdfLabel === "Slides" ? "slides" : pdfLabel === "Document" ? "document" : "PDF"; // mid-sentence
   const teachReady = !showPdf || pdfPages.length > 0;
 
   /** Save every open writing surface. Null when all of it is saved, otherwise a
