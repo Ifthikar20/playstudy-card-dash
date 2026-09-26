@@ -165,12 +165,18 @@ export interface PaperNotesProps {
   /** Open the writing surface as soon as the notes can be written in, with the
    *  caret at the end — a note the student has just made, or come back to. */
   openOnMount?: boolean;
+  /** What a click on the rendered notes does. "edit" (the default): place the caret
+   *  and open the writing surface. "teach": a single click asks the tutor to explain
+   *  from there (onTeach) and a double-click edits there. "select": nothing - the
+   *  student is highlighting, and the clicks are placing a selection. */
+  clickMode?: "edit" | "teach" | "select";
+  onTeach?: (target: HTMLElement) => void;
   /** Words dictation is still hearing, shown on the open sheet's status line. */
   interim?: string;
 }
 
 export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function PaperNotes(
-  { md, guideKey, prose, canEdit, locked, onCommit, allowEmpty = false, placeholder, openOnMount = false, interim },
+  { clickMode = "edit", onTeach, md, guideKey, prose, canEdit, locked, onCommit, allowEmpty = false, placeholder, openOnMount = false, interim },
   handleRef,
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -274,13 +280,10 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     [close, live, open, writing],
   );
 
-  const onClick = (e: React.MouseEvent) => {
+  const IGNORE = "a,button,input,textarea,[data-an-chrome]";
+  /** Open the writing surface at the caret under `t` (the rendered notes' own click). */
+  const editAt = (t: HTMLElement, sel: Selection | null) => {
     if (!live || writing) return;
-    const t = e.target as HTMLElement | null;
-    if (!t || t.closest("a,button,input,textarea,[data-an-chrome]")) return;
-    const sel = window.getSelection();
-    // A drag-select belongs to the sticky-note flow, not to the editor.
-    if (sel && !sel.isCollapsed) return;
     // An empty note has no units to aim at: anywhere in it is the start.
     if (blank) return open(0);
     const el = t.closest<HTMLElement>(`[${UNIT_ATTR}]`);
@@ -288,6 +291,43 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     // No arming, no "Edit notes" gate, no coarse-pointer bail: a tap on a phone
     // places the caret and raises the keyboard, which is what a document does.
     open(sourceOffsetAt(el, sel?.anchorNode ?? null, sel?.anchorOffset ?? 0));
+  };
+  // A single click waits this long for a second one: in "teach" mode one click is a
+  // lesson, two are the caret, and the lesson must not start under a double-click.
+  const clickTimer = useRef<number | undefined>(undefined);
+  const selectedAtDown = useRef(false);
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
+  const onPointerDownCapture = () => {
+    const sel = window.getSelection();
+    selectedAtDown.current = !!sel && !sel.isCollapsed;
+  };
+  const onClick = (e: React.MouseEvent) => {
+    const t = e.target as HTMLElement | null;
+    if (!t || t.closest(IGNORE)) return;
+    const sel = window.getSelection();
+    // A drag-select belongs to the sticky-note flow, not to the editor or the tutor;
+    // nor is the click that lets a selection go asking for anything.
+    if ((sel && !sel.isCollapsed) || selectedAtDown.current) return;
+    if (clickMode === "select") return;
+    if (clickMode === "edit" || !onTeach) return editAt(t, sel);
+    if (e.detail > 1) return; // the second click of a double-click: onDoubleClick's
+    window.clearTimeout(clickTimer.current);
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = undefined;
+      onTeach(t);
+    }, 240);
+  };
+  const onDoubleClick = (e: React.MouseEvent) => {
+    if (clickMode !== "teach") return;
+    window.clearTimeout(clickTimer.current);
+    clickTimer.current = undefined;
+    const t = e.target as HTMLElement | null;
+    if (!t || t.closest(IGNORE)) return;
+    // The double-click's own word selection is not a highlight: the caret goes there.
+    const sel = window.getSelection();
+    const anchor = { node: sel?.anchorNode ?? null, offset: sel?.anchorOffset ?? 0 };
+    sel?.removeAllRanges();
+    editAt(t, anchor.node ? ({ anchorNode: anchor.node, anchorOffset: anchor.offset } as Selection) : null);
   };
 
   const tree = useMemo(
@@ -323,10 +363,12 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
       ) : (
         <>
           <div
-            className={cn(prose, live && "cursor-text")}
+            className={cn(prose, live && clickMode === "edit" && "cursor-text")}
             data-guide-notes={guideKey}
             {...(live ? { "data-an-live": "" } : {})}
+            onPointerDownCapture={onPointerDownCapture}
             onClick={onClick}
+            onDoubleClick={onDoubleClick}
           >
             {tree}
           </div>

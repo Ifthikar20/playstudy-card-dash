@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -68,8 +68,10 @@ import { SessionFlashcardsDialog } from "@/components/study/SessionFlashcardsDia
 import { flattenSections, type Section, type StudyPanel, type WrongEntry } from "@/components/study/sections";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { TeachMode, type ReviseNotesResult, type TeachSection } from "@/components/guide/TeachMode";
-import { TeachMeButton } from "@/components/TeachMeButton";
+import { TeachMode, type ReviseNotesResult, type TeachSection, type TeachStart } from "@/components/guide/TeachMode";
+import { IdlePointer } from "@/components/guide/IdlePointer";
+import type { BotKind } from "@/components/guide/GuideBot";
+import { readVoicePref } from "@/lib/guide/voice";
 import { StickySelection, StickySessionDialog } from "@/components/StickyNotes";
 import { useStickyStore } from "@/store/stickyStore";
 import { LoadingFacts } from "@/components/LoadingFacts";
@@ -87,7 +89,7 @@ import { isNote, isNoteRoute, notePath } from "@/lib/notes/isNote";
 import { joinPhrase, useDictation } from "@/lib/guide/dictation";
 import { useTalkKey } from "@/lib/useTalkKey";
 import { voiceKeyLabel } from "@/lib/voiceKey";
-import { locateQuote } from "@/lib/guide/blocks";
+import { BLOCK_ATTR, BLOCKS_ROOT_ATTR, indexBlocks, locateQuote } from "@/lib/guide/blocks";
 import { DictateButton } from "@/components/notes/DictateButton";
 import { NoteReview } from "@/components/notes/NoteReview";
 import { answerCheck, deleteNote, fixCheck, renameNote, type CheckAnswer, type NoteCheck } from "@/services/notes";
@@ -442,6 +444,33 @@ function FullStudyScreen() {
   const [showStickies, setShowStickies] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [boardOn, setBoardOn] = useState(true);
+  // The tutor's pointer is the student's own on this page (IdlePointer): a click on a
+  // line starts the lesson there; a right-click switches to highlighting until a
+  // selection is made or Escape. `teachStart` is where the lesson a click opens begins.
+  const [highlightMode, setHighlightMode] = useState(false);
+  const [teachStart, setTeachStart] = useState<TeachStart | null>(null);
+  const tutorKind: BotKind = useMemo(() => readVoicePref()?.gender ?? "neutral", []);
+  // Set on the way down, so the click that lets a selection go is never taken for a lesson.
+  const selectionAtDown = useRef(false);
+  useEffect(() => {
+    if (!highlightMode) return;
+    // Highlighting ends with the selection made (the sticky bubble is up by then) or Escape.
+    const onUp = () => {
+      window.setTimeout(() => {
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed && sel.toString().trim().length >= 3) setHighlightMode(false);
+      }, 0);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHighlightMode(false);
+    };
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [highlightMode]);
   const pageRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -940,7 +969,7 @@ function FullStudyScreen() {
     return `${title ? `“${title}”` : "A section"} has changes that aren't saved yet — ${why.charAt(0).toLowerCase()}${why.slice(1)}.`;
   };
 
-  const openTeach = async () => {
+  const openTeach = async (at: TeachStart | null = null) => {
     // Before any await: the audio unlock has to happen inside the click itself.
     primeSpeechAudio();
     setFlushing(true);
@@ -951,12 +980,64 @@ function FullStudyScreen() {
         toast({ title: "The lesson can't start yet", description: problem, variant: "destructive" });
         return;
       }
+      setTeachStart(at);
       setGuideOpen(true);
     } finally {
       setFlushing(false);
     }
   };
 
+  /** A click on a line of the notes, a section's heading, or a page of the PDF: the
+   *  lesson starts there. Once it runs, TeachMode's own click handler continues from
+   *  the clicked paragraph instead. */
+  const teachFromClick = (target: HTMLElement) => {
+    if (guideOpen || highlightMode || flushing || !teachReady) return;
+    const root = target.closest<HTMLElement>(`[${BLOCKS_ROOT_ATTR}]`);
+    const sectionEl = target.closest<HTMLElement>("[data-teach-section]");
+    const raw = root?.getAttribute(BLOCKS_ROOT_ATTR) ?? sectionEl?.getAttribute("data-teach-section");
+    const sectionIndex = raw == null ? -1 : teachSections.findIndex((s) => s.dbId === Number(raw));
+    if (sectionIndex < 0) return;
+    if (noteMode && noteWords < NOTE_MIN_WORDS) {
+      toast({ title: "Write a little more first", description: "The tutor needs something to explain." });
+      return;
+    }
+    let blockId: string | null = null;
+    if (root) {
+      let blockEl = target.closest<HTMLElement>(`[${BLOCK_ATTR}]`);
+      if (!blockEl) {
+        indexBlocks(root); // a section the lesson hasn't reached yet: give its blocks ids now
+        blockEl = target.closest<HTMLElement>(`[${BLOCK_ATTR}]`);
+      }
+      blockId = blockEl?.getAttribute(BLOCK_ATTR) ?? null;
+    }
+    void openTeach({ sectionIndex, blockId });
+  };
+
+  // Clicks the rendered notes don't handle themselves: a section's heading and summary,
+  // and the PDF's pages. Controls, and the click that lets a selection go, are left alone.
+  const PAGE_CONTROLS =
+    "a,button,input,textarea,select,label,summary,[role='button'],[role='radio'],[role='tab'],[data-an-chrome],.sticky-selection,[data-guide-layer]";
+  const onPagePointerDownCapture = () => {
+    const sel = window.getSelection();
+    selectionAtDown.current = !!sel && !sel.isCollapsed;
+  };
+  const onPageClick = (e: ReactMouseEvent) => {
+    if (guideOpen || highlightMode) return;
+    const t = e.target as HTMLElement | null;
+    if (!t || t.closest(PAGE_CONTROLS) || selectionAtDown.current) return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    if (!showPdf && t.closest(`[${BLOCKS_ROOT_ATTR}]`)) return; // the notes' own click handler
+    if (!t.closest(`[data-teach-section],[${BLOCKS_ROOT_ATTR}]`)) return;
+    teachFromClick(t);
+  };
+  const onPageContextMenu = (e: ReactMouseEvent) => {
+    if (guideOpen) return;
+    const t = e.target as HTMLElement | null;
+    if (!t || t.closest("a,button,input,textarea,select,[data-an-chrome]")) return;
+    e.preventDefault();
+    setHighlightMode((v) => !v);
+  };
   /** Save what is typed, then lock the notes. False (after saying why) when it can't be saved. */
   const saveThenLock = async (what: string): Promise<boolean> => {
     if (dictation.state !== "off") dictation.stop();
@@ -1011,7 +1092,13 @@ function FullStudyScreen() {
   const bareTalkKey = !voiceKey.alt && !voiceKey.ctrl && !voiceKey.meta;
 
   return (
-    <div ref={pageRef} className="relative -m-4 min-h-full md:-m-6">
+    <div
+      ref={pageRef}
+      className={cn("relative -m-4 min-h-full md:-m-6", !guideOpen && !highlightMode && "tutor-pointer", highlightMode && "tutor-highlight")}
+      onPointerDownCapture={onPagePointerDownCapture}
+      onClick={onPageClick}
+      onContextMenu={onPageContextMenu}
+    >
       {/* Grain only — the colour is the sheet, which reaches the top of the
           content card and the overscroll beyond it. */}
       <div aria-hidden className="an-sheet-grain pointer-events-none absolute inset-0" />
@@ -1065,16 +1152,6 @@ function FullStudyScreen() {
               {studySections.length > 0 && (
                 <SessionStudyButtons sections={studySections} onQuiz={() => setQuizOpen(true)} onFlashcards={() => setCardsOpen(true)} tall />
               )}
-              <TeachMeButton
-                tall
-                disabled={flushing || frozen || noteWords < NOTE_MIN_WORDS}
-                onClick={() => void openTeach()}
-                title={
-                  noteWords < NOTE_MIN_WORDS
-                    ? "Write a little more first — the tutor needs something to explain"
-                    : "Teach me: AnotherNotes AI scrolls, points and explains these notes out loud"
-                }
-              />
               {guideOpen && (
                 <button
                   type="button"
@@ -1215,21 +1292,18 @@ function FullStudyScreen() {
               })}
             </div>
           )}
-          <TeachMeButton
-            disabled={!teachReady || flushing}
-            onClick={() => void openTeach()}
-            title={
-              !teachReady
-                ? `Opening the ${pdfNoun}…`
-                : flushing
-                  ? "Saving your notes first…"
-                  : showPdf
-                    ? `Teach me: AnotherNotes AI goes through your ${pdfNoun} page by page, pointing at each part as it explains it`
-                    : "Teach me: AnotherNotes AI scrolls, points and explains these notes out loud"
-            }
-            // only ever off for a moment here (the PDF opening, the notes saving)
-            className="disabled:cursor-wait"
-          />
+          {!guideOpen && (
+            <span
+              className="hidden items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground md:inline-flex"
+              title={
+                showPdf
+                  ? `Click anywhere on a page and the tutor explains it · right-click to highlight`
+                  : "Click any line and the tutor explains it · double-click to edit · right-click to highlight"
+              }
+            >
+              Click a line to be taught
+            </span>
+          )}
           {guideOpen && (
             <button
               type="button"
@@ -1396,6 +1470,8 @@ function FullStudyScreen() {
               }
               interim={dictFor != null && dictFor === s.topic.db_id ? dictation.interim : undefined}
               onResume={resumeReview}
+              clickMode={highlightMode ? "select" : "teach"}
+              onTeach={teachFromClick}
             />
           ))}
 
@@ -1504,6 +1580,7 @@ function FullStudyScreen() {
           sessionId={session.id}
           sections={teachSections}
           hostRef={pageRef}
+          startAt={teachStart}
           onClose={() => setGuideOpen(false)}
           boardEnabled={boardOn}
           onBoardClose={() => setBoardOn(false)}
@@ -1514,6 +1591,10 @@ function FullStudyScreen() {
           // "Make this simpler", asked out loud: the section's notes are rewritten here.
           reviseNotes={reviseNotes}
         />
+      )}
+      <IdlePointer host={pageRef} hidden={guideOpen || highlightMode} kind={tutorKind} />
+      {highlightMode && !guideOpen && (
+        <div className="tutor-highlight-badge">Highlighting · drag over words to keep them · right-click or Esc to stop</div>
       )}
       {reviewing != null && reviewTopic && (
         <NoteReview
@@ -1578,6 +1659,8 @@ function StudySection({
   placeholder,
   interim,
   onResume,
+  clickMode,
+  onTeach,
 }: {
   section: Section;
   total: number;
@@ -1597,6 +1680,9 @@ function StudySection({
   fresh: boolean;
   /** What an empty page says. */
   placeholder: string;
+  /** What a click on the notes does (PaperNotes): teach from there, or place a selection. */
+  clickMode: "edit" | "teach" | "select";
+  onTeach: (target: HTMLElement) => void;
   /** What dictation has heard so far and not yet written, while it writes into THIS section. */
   interim?: string;
   /** Go through the questions left open from the last check. */
@@ -1678,7 +1764,7 @@ function StudySection({
   };
 
   return (
-    <section id={`section-${topic.id}`} className="scroll-mt-4">
+    <section id={`section-${topic.id}`} className="scroll-mt-4" data-teach-section={topic.db_id ?? undefined}>
       {/* Heading — a note's is the page title above it */}
       {!noteMode && (
       <div className="group">
@@ -1781,6 +1867,8 @@ function StudySection({
             placeholder={noteMode ? placeholder : undefined}
             openOnMount={noteMode && !fresh && !topic.notes?.trim()}
             interim={interim}
+            clickMode={clickMode}
+            onTeach={onTeach}
           />
         ) : notesLoading || writing ? (
           <div className="mx-auto max-w-[78ch] space-y-2.5 py-1">

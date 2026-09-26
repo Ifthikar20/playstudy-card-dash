@@ -348,6 +348,31 @@ html:has(.lp) #root {
   animation: guide-underline 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .guide-driving, .guide-driving * { cursor: none !important; }
+
+/* The tutor's pointer as the student's own (src/components/guide/IdlePointer.tsx, Full
+   Study). The page hides the system cursor; controls bring it back, so a button still
+   looks like a button and a field like a field. A right-click turns the page into an
+   ordinary one for highlighting (.tutor-highlight): text cursor, selectable notes. */
+.tutor-pointer { cursor: none; }
+.tutor-pointer :is(a, button, [role="button"], [role="radio"], [role="tab"], [role="menuitem"], summary, label, .sticky-selection) { cursor: pointer; }
+.tutor-pointer :is(input, textarea, select, [contenteditable="true"]) { cursor: auto; }
+.tutor-highlight [data-guide-notes] { cursor: text; user-select: text; }
+.tutor-hint {
+  position: absolute; left: 36px; top: 30px; white-space: nowrap;
+  padding: 6px 11px; border-radius: 9999px;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
+  font-size: 12px; font-weight: 600; box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
+  animation: guide-pop 0.2s ease-out;
+}
+.tutor-highlight-badge {
+  position: fixed; top: 14px; left: 50%; z-index: 150; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 9999px;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
+  animation: guide-pop 0.2s ease-out;
+}
+.tutor-highlight-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
 /* ...except an open line of notes, which must keep its I-beam and caret. */
 .guide-driving [data-an-input] { cursor: text !important; }
 .guide-pop { animation: guide-pop 0.28s cubic-bezier(0.23, 1, 0.32, 1); }
@@ -2205,7 +2230,7 @@ body:has([data-study-dialog]) [data-guide-layer] { visibility: hidden; }
 /* ---- Glossy pill: "Teach me" and the tutor's voice button -------------------- */
 /* The old "download for Mac" button: a light gradient in one tint, a crisp outline a
    shade darker, a white sheen over the top half and a soft shadow in the tint. It marks
-   the controls that start or steer a lesson (TeachMeButton; the voice button in the
+   the controls that start or steer a lesson (a click on a line; the voice button in the
    lesson's dock). --glossy-tint is an "r, g, b" triple like --guide-accent, so the dock
    can hand it the tutor's colour; the default is the reference's blue, set through
    :where() so any class on the same button can override it. It is a light object on

@@ -149,6 +149,13 @@ function storeTopic(topicId: string): NotedTopic | null {
   return find(useAppStore.getState().currentSession?.extractedTopics ?? []);
 }
 
+/** Where a lesson opened by a click on the page begins: that section, and the block
+ *  under the click when there was one (null: the section's start). */
+export interface TeachStart {
+  sectionIndex: number;
+  blockId: string | null;
+}
+
 export interface TeachSection {
   topicId: string;
   dbId: number;
@@ -250,6 +257,7 @@ export function TeachMode({
   sections,
   hostRef,
   onClose,
+  startAt = null,
   boardEnabled = true,
   onBoardClose,
   source = "notes",
@@ -260,6 +268,8 @@ export function TeachMode({
   sections: TeachSection[];
   hostRef: RefObject<HTMLDivElement>;
   onClose: () => void;
+  /** Begin here rather than with the section on screen (a click on the page opened the lesson). */
+  startAt?: TeachStart | null;
   boardEnabled?: boolean;
   onBoardClose?: () => void;
   source?: TeachSource;
@@ -1839,6 +1849,9 @@ ${visualToMarkdown(spec)}`.trimStart();
   actions.current = { togglePlay, next, prev, mic, cancelListening, close, continueFrom, pause };
 
   // ---- lifecycle -----------------------------------------------------------------
+  const startAtRef = useRef(startAt);
+  startAtRef.current = startAt;
+
   useEffect(() => {
     // Set when this Teach mode closes. The first lesson only starts once the voice
     // list arrives (up to 6 s); a Teach mode closed and reopened in that window used
@@ -1911,7 +1924,9 @@ ${visualToMarkdown(spec)}`.trimStart();
       const vs = await browserReady;
       if (disposed) return;
       applyVoices(sv, vs);
-      play(start, 0);
+      const at = startAtRef.current;
+      if (at?.blockId) actions.current?.continueFrom(at.sectionIndex, at.blockId);
+      else play(at ? at.sectionIndex : start, 0);
     })();
 
     const uninstallScroll = installScrollTakeover();
