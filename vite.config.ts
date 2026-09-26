@@ -29,6 +29,16 @@ export default defineConfig(({ mode }) => ({
       "/img": { target: backendOrigin(mode), changeOrigin: true },
     },
   },
+  // `npm run preview` serves the production bundle, whose API base is the relative
+  // /api (nginx's job on the box). Hand /api and /img to the local backend so a
+  // preview behaves like the deployed site without a web server in front of it.
+  preview: {
+    port: 4173,
+    proxy: {
+      "/api": { target: backendOrigin(mode), changeOrigin: true },
+      "/img": { target: backendOrigin(mode), changeOrigin: true },
+    },
+  },
   plugins: [
     react(),
     mode === 'development' && componentTagger(),

@@ -1268,7 +1268,7 @@ function FullStudyScreen() {
                     onClick={() => !on && setView(v)}
                     title={
                       v === "pdf"
-                        ? `The ${pdfNoun} you uploaded. Press Teach me and it's explained right on the page.`
+                        ? `The ${pdfNoun} you uploaded. Click a line and your tutor explains it right on the page.`
                         : `The notes written from your ${pdfNoun}`
                     }
                     className={cn(

@@ -416,7 +416,7 @@ export function OnboardingFlow({ onComplete }: { onComplete?: () => void }) {
               Choose how your <em>tutors look</em>
             </h1>
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[var(--muted)]">
-              When you press Teach me, your tutor points at the notes as it explains them. Pick the face that rides on each
+              Click a line of your notes and your tutor points along as it explains. Pick the face that rides on each
               voice's pointer — it takes that face's colour. You can change it later in Settings.
             </p>
 
