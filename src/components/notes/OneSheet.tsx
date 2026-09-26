@@ -972,13 +972,13 @@ export const OneSheet = forwardRef<OneSheetHandle, OneSheetProps>(function OneSh
   const sheetEl = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // The mouse's way out (Esc is the keyboard's). The sheet's own menus and status line
-    // (data-an-chrome), the app's dialogs and pop-ups, the sticky bubble and the tutor's
-    // layer are not "outside": a click on them is part of writing, not leaving it.
+    // (data-an-chrome), the app's dialogs and pop-ups and the tutor's layer are not
+    // "outside": a click on them is part of writing, not leaving it.
     const onDown = (e: PointerEvent) => {
       const t = e.target;
       const root = sheetEl.current;
       if (!(t instanceof Element) || !root || root.contains(t)) return;
-      if (t.closest("[data-an-chrome],[role='dialog'],[role='status'],[role='region'],[data-radix-popper-content-wrapper],.sticky-selection,[data-guide-layer]")) return;
+      if (t.closest("[data-an-chrome],[role='dialog'],[role='status'],[role='region'],[data-radix-popper-content-wrapper],[data-guide-layer]")) return;
       finish();
     };
     document.addEventListener("pointerdown", onDown, true);

@@ -360,7 +360,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           md the DOCUMENT scrolls, and this strip carries the only route into
           navigation (and therefore into search) — so there it sticks. z-30 sits
           under every floating layer already in the app: toasts z-100, ReadMode
-          z-120, GuideDock z-130, the sticky-selection bubble z-140. */}
+          z-120, GuideDock z-130. */}
       <SidebarInset
         data-an-sheet={bare ? sheet : undefined}
         className={cn(

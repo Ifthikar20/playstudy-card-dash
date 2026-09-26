@@ -357,7 +357,7 @@ html:has(.lp) #root {
    button still looks like a button and a field like a field. A right-click turns the page
    into an ordinary one for highlighting (.tutor-highlight): text cursor, selectable notes. */
 .tutor-pointer { cursor: var(--tutor-cursor, auto); }
-.tutor-pointer :is(a, button, [role="button"], [role="radio"], [role="tab"], [role="menuitem"], summary, label, .sticky-selection) { cursor: pointer; }
+.tutor-pointer :is(a, button, [role="button"], [role="radio"], [role="tab"], [role="menuitem"], summary, label) { cursor: pointer; }
 .tutor-pointer :is(input, textarea, select, [contenteditable="true"]) { cursor: auto; }
 .tutor-highlight [data-guide-notes] { cursor: text; user-select: text; }
 .tutor-hint {
@@ -1543,48 +1543,6 @@ html:has(.lp) #root {
   .sticky-note, .sticky-note:hover, .sticky-note:focus-within { transform: none; transition: none; }
 }
 /* The button that floats over a phrase you've just highlighted in your notes. */
-.sticky-selection {
-  position: fixed; z-index: 140; transform: translate(-50%, -100%);
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 11px; border-radius: 9999px;
-  border: 1px solid hsl(var(--border));
-  background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
-  font-size: 12px; font-weight: 600; white-space: nowrap;
-  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
-  animation: guide-pop 0.16s ease-out;
-}
-.sticky-selection:hover { background: hsl(var(--muted)); }
-.sticky-selection:disabled { opacity: 0.7; }
-/* Keeping a passage (animateStickyAdd): a small sticky lifts off the selection with a
-   caption, flies to the session's Sticky notes pill (data-sticky-target) and the pill bumps
-   as it lands. The card borrows the wall's amber paper; the caption is the selection bubble. */
-.sticky-fly { position: fixed; left: 0; top: 0; z-index: 150; pointer-events: none; will-change: transform, opacity; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.sticky-fly-card {
-  --sticky-paper: #fef3c7; --sticky-edge: #fcd77f; --sticky-ink: #432c07;
-  width: 172px; padding: 10px 12px 12px; border-radius: 10px;
-  border: 1px solid var(--sticky-edge); border-top-width: 4px;
-  background: var(--sticky-paper); color: var(--sticky-ink);
-  font-family: "Patrick Hand", ui-rounded, cursive; font-size: 14px; line-height: 1.3;
-  box-shadow: 0 2px 4px rgba(23, 18, 5, 0.07), 0 18px 30px -16px rgba(23, 18, 5, 0.6);
-  transform: rotate(-2.5deg);
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-}
-.dark .sticky-fly-card { --sticky-paper: #2f2610; --sticky-edge: #57451a; --sticky-ink: #fde3a7; }
-.sticky-fly-label {
-  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 9999px;
-  border: 1px solid hsl(var(--border)); background: hsl(var(--popover)); color: hsl(var(--popover-foreground));
-  font-size: 12px; font-weight: 600; white-space: nowrap;
-  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.45);
-}
-.sticky-fly-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; animation: presence-ping 1s ease-out infinite; }
-.sticky-target-bump { animation: sticky-target-bump 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
-@keyframes sticky-target-bump {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5); }
-  35% { transform: scale(1.14); box-shadow: 0 0 0 8px rgba(251, 191, 36, 0.28); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
-}
-.sticky-pill-in { animation: guide-pop 0.35s ease-out; }
-@media (prefers-reduced-motion: reduce) { .sticky-target-bump, .sticky-pill-in, .sticky-fly-label::before { animation: none; } }
 /* Arriving from a sticky note: show which passage it was kept from. */
 .sticky-jump { animation: sticky-jump 1.8s ease-out; border-radius: 12px; }
 @keyframes sticky-jump {

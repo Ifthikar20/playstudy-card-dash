@@ -307,7 +307,7 @@ export const PaperNotes = forwardRef<PaperNotesHandle, PaperNotesProps>(function
     const t = e.target as HTMLElement | null;
     if (!t || t.closest(IGNORE)) return;
     const sel = window.getSelection();
-    // A drag-select belongs to the sticky-note flow, not to the editor or the tutor;
+    // A drag-select is the student highlighting, not a click for the editor or the tutor;
     // nor is the click that lets a selection go asking for anything.
     if ((sel && !sel.isCollapsed) || selectedAtDown.current) return;
     if (clickMode === "select") return;

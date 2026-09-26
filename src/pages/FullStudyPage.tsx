@@ -72,7 +72,7 @@ import { TeachMode, type ReviseNotesResult, type TeachSection, type TeachStart }
 import { IdlePointer } from "@/components/guide/IdlePointer";
 import type { BotKind } from "@/components/guide/GuideBot";
 import { readVoicePref } from "@/lib/guide/voice";
-import { StickySelection, StickySessionDialog } from "@/components/StickyNotes";
+import { StickySessionDialog } from "@/components/StickyNotes";
 import { useStickyStore } from "@/store/stickyStore";
 import { LoadingFacts } from "@/components/LoadingFacts";
 import { BASE_NOTE_COMPONENTS, headingFactory, sanitizeNotes } from "@/lib/notes/render";
@@ -454,7 +454,7 @@ function FullStudyScreen() {
   const selectionAtDown = useRef(false);
   useEffect(() => {
     if (!highlightMode) return;
-    // Highlighting ends with the selection made (the sticky bubble is up by then) or Escape.
+    // Highlighting ends with the selection made, or with Escape.
     const onUp = () => {
       window.setTimeout(() => {
         const sel = window.getSelection();
@@ -632,16 +632,6 @@ function FullStudyScreen() {
     return () => window.clearInterval(timer);
   }, [focusTopic]);
 
-  /** Which section a highlighted phrase came from, by the id on its notes block. */
-  const sectionOfNotes = useCallback(
-    (notesKey: string) => {
-      const page = Number(notesKey);
-      if (page < 0) return { topicId: null, title: `Page ${-page}` }; // kept from the PDF itself
-      const hit = sections.find((s) => String(s.topic.db_id) === notesKey);
-      return hit?.topic.db_id ? { topicId: hit.topic.db_id, title: hit.topic.title } : null;
-    },
-    [sections],
-  );
 
   // ---- auto-write notes for every section that doesn't have them yet --------
   // Sequential (one at a time) so we never overwhelm the single-worker dev API;
@@ -1016,7 +1006,7 @@ function FullStudyScreen() {
   // Clicks the rendered notes don't handle themselves: a section's heading and summary,
   // and the PDF's pages. Controls, and the click that lets a selection go, are left alone.
   const PAGE_CONTROLS =
-    "a,button,input,textarea,select,label,summary,[role='button'],[role='radio'],[role='tab'],[data-an-chrome],.sticky-selection,[data-guide-layer]";
+    "a,button,input,textarea,select,label,summary,[role='button'],[role='radio'],[role='tab'],[data-an-chrome],[data-guide-layer]";
   const onPagePointerDownCapture = () => {
     const sel = window.getSelection();
     // Spent clicks: one that lets a selection go, and one that closes an open writing surface.
@@ -1353,10 +1343,9 @@ function FullStudyScreen() {
           {stickyCount > 0 ? (
             <button
               type="button"
-              data-sticky-target
               onClick={() => setShowStickies(true)}
               title="Everything you've kept from this session"
-              className="sticky-pill-in flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
+              className="flex items-center gap-2 rounded-full border border-border bg-foreground/[0.04] px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-foreground/[0.08]"
             >
               <StickyNote className="size-3.5" />
               Sticky notes
@@ -1364,10 +1353,7 @@ function FullStudyScreen() {
                 {stickyCount}
               </span>
             </button>
-          ) : (
-            // Where the pill will appear: the first kept note's sticky flies here.
-            <span data-sticky-target aria-hidden className="h-0 w-0 self-center" />
-          )}
+          ) : null}
           {wrong.length > 0 && (
             <button
               type="button"
@@ -1563,7 +1549,6 @@ function FullStudyScreen() {
           />
           <StickySessionDialog open={showStickies} onOpenChange={setShowStickies} sessionId={session.id} />
           {/* highlight anything in the notes → "Save to sticky" */}
-          <StickySelection sessionId={session.id} resolve={sectionOfNotes} />
         </div>
       </div>
       {readMode && (
@@ -1595,7 +1580,7 @@ function FullStudyScreen() {
       )}
       <IdlePointer host={pageRef} hidden={guideOpen || highlightMode} kind={tutorKind} />
       {highlightMode && !guideOpen && (
-        <div className="tutor-highlight-badge">Highlighting · drag over words to keep them · right-click or Esc to stop</div>
+        <div className="tutor-highlight-badge">Highlighting · select any text · right-click or Esc to stop</div>
       )}
       {reviewing != null && reviewTopic && (
         <NoteReview
