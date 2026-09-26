@@ -19,6 +19,7 @@ import {
   type GuideStep,
   type GuideTurn,
   type GuideVoice,
+  type GuideLanguage,
   type GuideVoices,
   type VisualSpec,
 } from "@/services/guide";
@@ -33,9 +34,11 @@ import {
   type GuideBlock,
 } from "@/lib/guide/blocks";
 import { bringIntoView, cancelAutoScroll, installScrollTakeover } from "@/lib/guide/scroll";
+import { detectLang } from "@/lib/guide/lang";
 import {
   Narrator,
   splitSentences,
+  type SpokenBy,
   browserVoiceName,
   browserVoicePair,
   createNativeRecognizer,
@@ -184,6 +187,10 @@ interface ScriptEntry {
 }
 
 const NOT_READY = new Set(["notes-missing", "notes-empty"]);
+/** The server explains at most this many blocks in one request (MAX_BLOCKS in
+ *  app/api/guide.py); a longer section is asked for in consecutive parts of this size,
+ *  so a very long note is taught to its end rather than only up to block 80. */
+const SCRIPT_PART_BLOCKS = 80;
 /** Said while the pointer lands on a note the answer just added; taking turns, so it never sounds canned. */
 const NOTE_ADDED_LINES = [
   "Right here, in your notes.",
@@ -295,6 +302,10 @@ export function TeachMode({
   // The section being taught, as state as well as secRef (the loop's): the board's
   // Flashcards button is for this one, so it has to follow along.
   const [secNow, setSecNow] = useState(0);
+  /** Who is reading right now and in which language, from the server (Ismail, "ar"). */
+  const [reading, setReading] = useState<SpokenBy | null>(null);
+  /** The languages the voice reads, by base code, for naming them ("Arabic"). */
+  const [languages, setLanguages] = useState<Record<string, GuideLanguage>>({});
   const [rate, setRateState] = useState<number>(() => {
     const r = readStored<number>(RATE_KEY, 1);
     return RATES.includes(r) ? r : 1;
@@ -337,9 +348,23 @@ export function TeachMode({
   // lesson is teaching, not answering a question or saying something aside.
   const lessonRun = useRef(0);
   const secRef = useRef(0);
+  /** The language each section's notes are in, judged once from their text: the hint the
+   *  narrator cuts every sentence's runs against (an Arabic section's lines go to the
+   *  Arabic voice; an English name inside them is still one run of Arabic). */
+  const sectionLangs = useRef(new Map<number, string>());
+  const sectionLang = (sec: TeachSection): string => {
+    const have = sectionLangs.current.get(sec.dbId);
+    if (have) return have;
+    const text = notesRoot(sec)?.textContent?.trim() ?? "";
+    const lang = text ? detectLang(text.slice(0, 6000)).lang : "en";
+    sectionLangs.current.set(sec.dbId, lang);
+    return lang;
+  };
   const enterSection = (i: number) => {
     secRef.current = i;
     setSecNow(i);
+    const sec = sectionsRef.current[i];
+    if (sec && narrator.current) narrator.current.lang = sectionLang(sec);
   };
   const stepRef = useRef(0);
   const scripts = useRef(new Map<number, ScriptEntry>());
@@ -398,18 +423,36 @@ export function TeachMode({
     const entry: ScriptEntry = { steps: [], done: false, error: null, blocks, waiters: [] };
     scripts.current.set(sec.dbId, entry);
     const outline = sectionsRef.current.filter((s) => s.dbId !== sec.dbId).map((s) => s.title);
-    streamGuideScript(
-      sessionId,
-      sec.dbId,
-      { title: sec.title, blocks: blocks.map(({ id, kind, text }) => ({ id, kind, text })), outline },
-      {
-        onStep: (step) => {
-          entry.steps.push(step);
-          if (entry.steps.length <= 2) narrator.current?.prefetch(step.say, 1); // first words ready before we get there
-          wake(entry);
-        },
-      },
-    )
+    const payload = blocks.map(({ id, kind, text }) => ({ id, kind, text }));
+    // A long section is written in parts of SCRIPT_PART_BLOCKS blocks, one request after
+    // another: a part is asked for once the one before it is written (the model writes
+    // far faster than the voice reads), and its steps join the same list, so the lesson
+    // never waits and never stops short of the section's end.
+    const parts: (typeof payload)[] = [];
+    for (let at = 0; at < payload.length; at += SCRIPT_PART_BLOCKS) parts.push(payload.slice(at, at + SCRIPT_PART_BLOCKS));
+    const onStep = (step: GuideStep) => {
+      entry.steps.push(step);
+      if (entry.steps.length <= 2) narrator.current?.prefetch(step.say, 1); // first words ready before we get there
+      wake(entry);
+    };
+    (async () => {
+      for (let part = 0; part < parts.length; part++) {
+        try {
+          await streamGuideScript(
+            sessionId,
+            sec.dbId,
+            { title: sec.title, blocks: parts[part], outline, part, parts: parts.length },
+            { onStep },
+          );
+        } catch (err) {
+          if (!entry.steps.length) throw err;
+          // A later part couldn't be written: what was written is taught, and the lesson
+          // moves on from there rather than fail a section it is halfway through.
+          console.warn(`[Teach] part ${part + 1} of ${parts.length} of "${sec.title}" couldn't be prepared`, err);
+          break;
+        }
+      }
+    })()
       .then(() => {
         entry.done = true;
         wake(entry);
@@ -1371,6 +1414,7 @@ ${visualToMarkdown(spec)}`.trimStart();
    *  lesson standing in that section goes back to its start - Next and Prev too. */
   const forgetScript = (sec: TeachSection) => {
     scripts.current.delete(sec.dbId);
+    sectionLangs.current.delete(sec.dbId); // new notes may be in another language
     if (sectionsRef.current[secRef.current]?.dbId === sec.dbId) {
       stepRef.current = 0;
       startOver.current = sec.dbId;
@@ -1872,6 +1916,9 @@ ${visualToMarkdown(spec)}`.trimStart();
     n.onPreempted = () => {
       if (!disposed) actions.current?.pause();
     };
+    n.onVoice = (v) => {
+      if (!disposed) setReading(v);
+    };
     narrator.current = n;
     if (import.meta.env.DEV) (window as unknown as { __gb?: unknown }).__gb = board;
     const stored = readVoicePref();
@@ -1906,6 +1953,7 @@ ${visualToMarkdown(spec)}`.trimStart();
       if (server.length) {
         setServerVoices(server);
         n.useServer(synthesizeSpeech);
+        setLanguages(sv?.languages ?? {});
       }
       setVoicesReady(true);
       const choices = voiceChoices(server, vs);
@@ -2094,6 +2142,8 @@ ${visualToMarkdown(spec)}`.trimStart();
         voices={voiceOptions}
         voiceId={voiceId}
         onVoice={setVoice}
+        reading={reading}
+        languages={languages}
         greeting={aside}
         busyLabel={revisingNow ? "Updating the notes…" : null}
         askOpen={askOpen}

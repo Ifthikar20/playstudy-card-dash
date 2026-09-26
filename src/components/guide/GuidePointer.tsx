@@ -499,7 +499,8 @@ export const GuidePointer = forwardRef<
                     </span>
                   )}
                 </div>
-                {caption}
+                {/* dir="auto": an Arabic or Hebrew line reads right to left, an English one left to right */}
+                <div dir="auto">{caption}</div>
               </div>
             ) : (
               <div ref={bubbleRef} className={cn("guide-chip", speaker && "guide-chip-speaker")} style={bubbleStyle}>

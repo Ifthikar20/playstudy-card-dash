@@ -417,7 +417,7 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
 export async function streamGuideScript(
   sessionId: string,
   topicDbId: number,
-  body: { title: string; blocks: GuideBlockPayload[]; outline: string[]; force?: boolean },
+  body: { title: string; blocks: GuideBlockPayload[]; outline: string[]; force?: boolean; part?: number; parts?: number },
   handlers: { onStep: (step: GuideStep) => void; signal?: AbortSignal },
 ): Promise<{ steps: GuideStep[]; cached: boolean }> {
   const res = await post(`/study-sessions/${sessionId}/topics/${topicDbId}/guide/script`, body, handlers.signal);
@@ -575,42 +575,99 @@ export interface GuideVoice {
   gender?: "female" | "male" | null;
 }
 
+/** A language with a voice of its own (the server's app/data/voices.json). */
+export interface GuideLanguage {
+  name: string;
+  native: string;
+  /** What to call it when that differs from its name (Latin is "Latina"). */
+  label?: string;
+  locale: string;
+  dir: "ltr" | "rtl";
+  /** The names of the voices that read it for each persona. */
+  male: string;
+  female: string;
+}
+
 export interface GuideVoices {
-  /** "speechify" | "elevenlabs" | "edge" | "openai", or "browser" when no natural voice is available. */
+  /** "speechify", or "browser" when no natural voice is available. */
   provider: string;
   default: string | null;
   /** The two voices on offer: a woman's and a man's, the default first. */
   voices: GuideVoice[];
+  /** Every language with a voice, by base code ("ar"); a language missing here is captions only. */
+  languages?: Record<string, GuideLanguage>;
 }
 
-/** The natural voice serving Teach mode right now. Never throws. */
-export async function fetchGuideVoices(): Promise<GuideVoices> {
+// The voice list barely changes (the server refreshes it hourly), so a lesson doesn't wait
+// a round trip for it: the last answer is kept for the tab, used at once, and refreshed
+// behind it. Only a real answer is kept, never the no-voice fallback.
+const VOICES_CACHE_KEY = "an-guide-voices-v1";
+const VOICES_CACHE_MS = 30 * 60_000;
+
+function readVoicesCache(): GuideVoices | null {
+  try {
+    const raw = sessionStorage.getItem(VOICES_CACHE_KEY);
+    if (!raw) return null;
+    const { at, voices } = JSON.parse(raw) as { at: number; voices: GuideVoices };
+    return Date.now() - at < VOICES_CACHE_MS && voices?.provider && voices.provider !== "browser" ? voices : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeVoicesCache(voices: GuideVoices): void {
+  try {
+    if (voices.provider !== "browser") sessionStorage.setItem(VOICES_CACHE_KEY, JSON.stringify({ at: Date.now(), voices }));
+  } catch {
+    /* private mode */
+  }
+}
+
+async function loadGuideVoices(): Promise<GuideVoices> {
   const token = getAuthToken();
   try {
     const res = await authFetch(`${API_URL}/guide/voices`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
     if (!res.ok) throw new Error(String(res.status));
-    return (await res.json()) as GuideVoices;
+    const voices = (await res.json()) as GuideVoices;
+    writeVoicesCache(voices);
+    return voices;
   } catch {
     return { provider: "browser", default: null, voices: [] };
   }
 }
 
+/** The natural voice serving Teach mode right now, and the languages it reads. Never throws. */
+export async function fetchGuideVoices(): Promise<GuideVoices> {
+  const cached = readVoicesCache();
+  const fresh = loadGuideVoices();
+  if (cached) {
+    void fresh; // refreshes the cache for next time
+    return cached;
+  }
+  return fresh;
+}
+
 /**
- * One sentence → an MP3 clip in the chosen natural voice. Resolves as soon as the
- * headers are in: the server sends the audio as it is synthesised, and the narrator
- * (src/lib/guide/speech.ts) plays the body while it is still arriving.
+ * One run of text → an MP3 clip in the chosen natural voice, read in `lang` (a base code
+ * such as "ar"; the server picks that language's voice of the persona's gender). Resolves
+ * as soon as the headers are in: the server streams the audio as Speechify synthesises
+ * it, and the narrator (src/lib/guide/speech.ts) plays the body while it is still
+ * arriving. A language without a voice is a 422 thrown as an Error named "NoVoiceError".
  */
-export async function synthesizeSpeech(text: string, voice: string | null, signal?: AbortSignal): Promise<Response> {
+export async function synthesizeSpeech(text: string, voice: string | null, lang?: string | null, signal?: AbortSignal): Promise<Response> {
   const token = getAuthToken();
   const res = await authFetch(`${API_URL}/guide/tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ text, voice }),
+    body: JSON.stringify({ text, voice, lang: lang || undefined }),
     signal,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(typeof err.detail === "string" ? err.detail : `Speech failed (${res.status})`);
+    const detail = typeof err.detail === "string" ? err.detail : `Speech failed (${res.status})`;
+    const error = new Error(detail);
+    if (res.status === 422 && detail.startsWith("no voice for")) error.name = "NoVoiceError";
+    throw error;
   }
   return res;
 }

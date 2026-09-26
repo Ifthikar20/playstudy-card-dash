@@ -1,18 +1,30 @@
 /**
  * Speech in and out for Teach mode, all driven from the browser.
  *
- *  - Narrator: text → speech. The preferred path is the backend's natural
- *    neural voice (`/guide/tts`): each sentence is fetched as a small MP3 clip,
- *    upcoming sentences are prefetched so playback has no gaps, and the speed
- *    control is applied client-side. It is the tutor's only voice: when a clip
- *    can't be had, that line's caption is paced silently and the next line asks
- *    the server again. The browser's own voices are never used.
+ *  - Narrator: text → speech through the backend's natural voice (`/guide/tts`):
+ *    each sentence is fetched as a small MP3 clip that starts playing while it is
+ *    still arriving (the server streams it as Speechify synthesises it), upcoming
+ *    sentences are prefetched so playback has no gaps, and the speed control is
+ *    applied client-side. Every sentence is cut into runs by language
+ *    (src/lib/guide/lang.ts) and each run is asked for in its own language, so
+ *    Arabic notes are read by the Arabic voice and a French quote by the French
+ *    one; the server says who read it (X-Voice-Name / X-Voice-Lang) and the
+ *    narrator passes that on (`onVoice`). It is the tutor's only voice: when a
+ *    clip can't be had, that line's caption is paced silently and the next line
+ *    asks the server again. The browser's own voices are never used.
  *  - Speech → text: the on-device recognizer where the browser has one
  *    (Chrome/Edge/Safari), else a short MediaRecorder clip the backend
  *    transcribes with local whisper. `sttSupport()` tells you which.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { speechRuns } from "./lang";
+import { splitSentences } from "./sentences";
+
+// The sentence cutter lives in ./sentences (pure, tested under Node); re-exported for
+// the callers that always took it from here.
+export { splitSentences };
 
 export function ttsAvailable(): boolean {
   return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
@@ -97,32 +109,31 @@ export function browserVoicePair(voices: SpeechSynthesisVoice[]): SpeechSynthesi
   return pair;
 }
 
-/** Split spoken text into sentence-sized utterances; very long ones break at clauses. */
-export function splitSentences(text: string): string[] {
-  const clean = text.replace(/\s+/g, " ").trim();
-  if (!clean) return [];
-  const parts = clean.split(/(?<=[.!?…]["”’)]?)\s+(?=[^a-z])/);
-  const out: string[] = [];
-  for (const raw of parts) {
-    const s = raw.trim();
-    if (!s) continue;
-    if (out.length && (s.length < 14 || /^[a-z]/.test(s))) out[out.length - 1] += ` ${s}`;
-    else out.push(s);
-  }
-  return out.flatMap((s) => {
-    if (s.length <= 220) return [s];
-    return s.split(/(?<=[;:,])\s+/).reduce<string[]>((acc, piece) => {
-      const last = acc[acc.length - 1];
-      if (last && last.length + piece.length < 180) acc[acc.length - 1] = `${last} ${piece}`;
-      else acc.push(piece);
-      return acc;
-    }, []);
-  });
+/** Fetch one run of text, in `lang` (a base code such as "ar"), as an audio clip in the
+ *  given server voice: a Response whose body streams the MP3 as the server synthesises
+ *  it. A 422 for a language without a voice is thrown as an Error named "NoVoiceError". */
+export type SynthFn = (text: string, voice: string, lang: string, signal?: AbortSignal) => Promise<Response>;
+
+/** Who read a clip and in which language (a base code), from the server's headers. */
+export interface SpokenBy {
+  name: string;
+  lang: string;
 }
 
-/** Fetch one sentence as an audio clip in the given server voice: a Response whose body
- *  streams the MP3 as the server synthesises it. */
-export type SynthFn = (text: string, voice: string, signal?: AbortSignal) => Promise<Response>;
+/** The X-Voice-Name / X-Voice-Lang headers of a clip (the name is percent-encoded when it
+ *  isn't ASCII); null when the response doesn't say. */
+function spokenBy(res: Response): SpokenBy | null {
+  const raw = res.headers.get("x-voice-name");
+  const lang = res.headers.get("x-voice-lang");
+  if (!raw || !lang) return null;
+  let name = raw;
+  try {
+    name = decodeURIComponent(raw);
+  } catch {
+    /* the plain header */
+  }
+  return { name, lang };
+}
 
 const CLIP_CACHE_MAX = 80;
 
@@ -132,6 +143,8 @@ const CLIP_CACHE_MAX = 80;
 interface ClipRequest {
   blob: Promise<Blob>;
   live: Promise<ReadableStream<Uint8Array> | null>;
+  /** Who read it, once the response headers are in. */
+  spoken: Promise<SpokenBy | null>;
 }
 
 /** Can this browser play an MP3 that is still arriving? (iOS Safari before 17.1 cannot.) */
@@ -366,9 +379,18 @@ export class Narrator {
   /** False when there's no synthesizer (or it has no voices): captions are paced instead. */
   available = ttsAvailable();
 
+  /** The language the lesson is in (a base code such as "en" or "ar"): the hint each
+   *  sentence's runs are judged against. Set by whoever knows the notes (Teach mode, per
+   *  section); "en" until then. */
+  lang = "en";
+  /** Called with who is reading and in which language, from the server's headers, each
+   *  time that changes (the dock shows "in Arabic as Ismail"). */
+  onVoice?: (voice: SpokenBy) => void;
+  private lastSpoken = "";
+
   private rateValue = 1;
   private synth?: SynthFn;
-  private clips = new Map<string, Promise<Blob>>();
+  private clips = new Map<string, { blob: Promise<Blob>; spoken: Promise<SpokenBy | null> }>();
   private gen = 0;
   private keep: SpeechSynthesisUtterance[] = []; // Chrome GCs utterances mid-speech otherwise
   private timer: number | undefined;
@@ -432,7 +454,19 @@ export class Narrator {
   /** Warm the clip cache for text that will be spoken soon. */
   prefetch(text: string, sentences = 1): void {
     if (!this.serverActive) return;
-    for (const s of splitSentences(text).slice(0, sentences)) void this.clip(s).blob.catch(() => undefined);
+    for (const s of splitSentences(text).slice(0, sentences)) this.prefetchSentence(s);
+  }
+
+  private prefetchSentence(sentence: string): void {
+    for (const run of speechRuns(sentence, this.lang)) void this.clip(run.text, run.lang).blob.catch(() => undefined);
+  }
+
+  /** Tell the page who is reading, once per change of voice. */
+  private announce(v: SpokenBy): void {
+    const key = `${v.name}|${v.lang}`;
+    if (key === this.lastSpoken) return;
+    this.lastSpoken = key;
+    this.onVoice?.(v);
   }
 
   /** Stop speaking immediately; any in-flight `speak()` resolves false. */
@@ -478,7 +512,7 @@ export class Narrator {
     this.active = true;
     try {
       const parts = splitSentences(text);
-      if (this.serverActive) parts.slice(1, 4).forEach((s) => void this.clip(s).blob.catch(() => undefined));
+      if (this.serverActive) parts.slice(1, 4).forEach((s) => this.prefetchSentence(s));
       for (const sentence of parts) {
         if (gen !== this.gen) return false;
         this.onCaption?.(sentence);
@@ -492,44 +526,58 @@ export class Narrator {
   }
 
   /*
-    One failed clip is usually a blip rather than an outage, so the sentence is tried
-    again; if it still fails, its caption is paced silently and the next sentence asks
-    the server again. The browser's own voices are never used: Speechify is the tutor's
-    only voice, and a tutor that switches to a Microsoft voice mid-lesson is worse than
-    one that goes quiet for a line.
+    A sentence is read run by run, each run in its own language's voice (an Arabic
+    sentence is one run; "the French call it liberté" is two). One failed clip is
+    usually a blip rather than an outage, so a run is tried again; if it still fails, or
+    the server has no voice for that language (a 422 that says so - not worth a retry),
+    its words are paced silently and the next run asks the server again. The browser's
+    own voices are never used: Speechify is the tutor's only voice, and a tutor that
+    switches to a Microsoft voice mid-lesson is worse than one that goes quiet for a
+    line.
   */
   private async one(sentence: string, gen: number): Promise<boolean> {
-    if (this.serverActive) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          return await this.oneServer(sentence, gen);
-        } catch {
-          if (gen !== this.gen) return false;
-        }
+    if (!this.serverActive) return this.paceCaption(sentence, gen);
+    for (const run of speechRuns(sentence, this.lang)) {
+      if (gen !== this.gen) return false;
+      if (!(await this.oneRun(run.text, run.lang, gen))) return false;
+    }
+    return gen === this.gen;
+  }
+
+  private async oneRun(text: string, lang: string, gen: number): Promise<boolean> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await this.oneServer(text, lang, gen);
+      } catch (e) {
+        if (gen !== this.gen) return false;
+        if ((e as Error)?.name === "NoVoiceError") break;
       }
     }
-    return this.paceCaption(sentence, gen);
+    return this.paceCaption(text, gen);
   }
 
   private inflight = 0;
   private waiting: Array<() => void> = [];
 
-  /** Fetch (or reuse) the clip for a sentence. At most two synth requests run at
-   *  once so prefetches never slow down the sentence that's needed right now.
+  /** Fetch (or reuse) the clip for one run of text in `lang`. At most two synth requests
+   *  run at once so prefetches never slow down the sentence that's needed right now.
    *  For an urgent request the live byte stream is handed back too (see ClipRequest),
    *  teed off the same response the cache is filled from. */
-  private clip(sentence: string, urgent = false): ClipRequest {
+  private clip(sentence: string, lang: string, urgent = false): ClipRequest {
     const voice = this.serverVoice!;
-    const key = `${voice}|${sentence}`;
+    const key = `${voice}|${lang}|${sentence}`;
     const hit = this.clips.get(key);
-    if (hit) return { blob: hit, live: Promise.resolve(null) };
+    if (hit) return { blob: hit.blob, live: Promise.resolve(null), spoken: hit.spoken };
     let resolveLive: (s: ReadableStream<Uint8Array> | null) => void = () => undefined;
     const live = new Promise<ReadableStream<Uint8Array> | null>((r) => (resolveLive = r));
+    let resolveSpoken: (v: SpokenBy | null) => void = () => undefined;
+    const spoken = new Promise<SpokenBy | null>((r) => (resolveSpoken = r));
     const run = async (): Promise<Blob> => {
       if (this.inflight >= 2) await new Promise<void>((r) => (urgent ? this.waiting.unshift(r) : this.waiting.push(r)));
       this.inflight++;
       try {
-        const res = await this.synth!(sentence, voice);
+        const res = await this.synth!(sentence, voice, lang);
+        resolveSpoken(spokenBy(res));
         const body = res.body;
         const headers = { "Content-Type": "audio/mpeg" };
         if (!body) {
@@ -545,6 +593,7 @@ export class Narrator {
         return await new Response(body, { headers }).blob();
       } catch (e) {
         resolveLive(null);
+        resolveSpoken(null);
         throw e;
       } finally {
         this.inflight--;
@@ -552,17 +601,20 @@ export class Narrator {
       }
     };
     const p = run();
-    this.clips.set(key, p);
+    this.clips.set(key, { blob: p, spoken });
     p.catch(() => this.clips.delete(key));
     if (this.clips.size > CLIP_CACHE_MAX) {
       const oldest = this.clips.keys().next().value;
       if (oldest) this.clips.delete(oldest);
     }
-    return { blob: p, live };
+    return { blob: p, live, spoken };
   }
 
-  private async oneServer(sentence: string, gen: number): Promise<boolean> {
-    const { blob, live } = this.clip(sentence, true);
+  private async oneServer(text: string, lang: string, gen: number): Promise<boolean> {
+    const { blob, live, spoken } = this.clip(text, lang, true);
+    void spoken.then((v) => {
+      if (v && gen === this.gen) this.announce(v);
+    });
     // Resolves as soon as the response headers are in (a live stream), or once the
     // whole clip is here (cached, or a browser without MediaSource).
     let stream = await live;

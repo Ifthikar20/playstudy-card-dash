@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { Check, Loader2, Mic, Pause, Play, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVoiceKey, voiceKeyBadge, voiceKeyLabel } from "@/lib/voiceKey";
-import type { SttMode } from "@/lib/guide/speech";
+import type { SpokenBy, SttMode } from "@/lib/guide/speech";
+import type { GuideLanguage } from "@/services/guide";
 import type { VoiceOption } from "@/lib/guide/voice";
 import { AVATARS, accentVars, setAvatar, useAvatar } from "@/lib/guide/avatars";
 import type { BotKind, BotMood } from "./GuideBot";
@@ -43,6 +44,12 @@ export interface GuideDockProps {
   voices: VoiceOption[];
   voiceId: string | null;
   onVoice: (id: string) => void;
+  /** Who is actually reading, and in which language (base code), when the server has
+   *  said: in another language than English the persona's voice is that language's
+   *  (Alec's Arabic is read by Ismail), and the status line says so. */
+  reading?: SpokenBy | null;
+  /** The languages the voice reads, by base code, for naming them. */
+  languages?: Record<string, GuideLanguage>;
   /** True while the tutor says a short line with the lesson standing still (a newly
    *  picked voice introducing itself, a quiz hint), so its mouth moves. */
   greeting?: boolean;
@@ -113,7 +120,7 @@ function IconButton({ title, onClick, children, active }: { title: string; onCli
 }
 
 export function GuideDock(props: GuideDockProps) {
-  const { phase, question, interim, error, progress, rate, voices, voiceId, askOpen, sttMode, greeting, busyLabel } = props;
+  const { phase, question, interim, error, progress, rate, voices, voiceId, askOpen, sttMode, greeting, busyLabel, reading, languages } = props;
   const [draft, setDraft] = useState("");
   const [picking, setPicking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -154,6 +161,12 @@ export function GuideDock(props: GuideDockProps) {
   else if (phase === "paused") status = "Paused";
   else if (phase === "done") status = "Finished";
   else status = "Something went wrong";
+  // Reading in another language: say which, and who (the persona keeps the character,
+  // the voice is that language's own).
+  if (reading && reading.lang !== "en" && (phase === "speaking" || phase === "answering" || phase === "paused")) {
+    const language = languages?.[reading.lang];
+    status += ` · in ${language?.label ?? language?.name ?? reading.lang} as ${reading.name}`;
+  }
 
   const submit = () => {
     const t = draft.trim();
